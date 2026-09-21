@@ -1,1 +1,18 @@
-{"name":"Thanaweya OS","short_name":"Thanaweya OS","start_url":"/","display":"standalone","background_color":"#0B0F14","theme_color":"#0B0F14","lang":"ar","dir":"rtl","icons":[]}
+{
+  "name": "Thanaweya OS",
+  "short_name": "Thanaweya OS",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0B0F14",
+  "theme_color": "#0B0F14",
+  "lang": "ar",
+  "dir": "rtl",
+  "icons": [
+    {
+      "src": "/thanaweya-logo.svg",
+      "sizes": "128x128",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
