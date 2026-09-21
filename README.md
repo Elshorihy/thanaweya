@@ -19,3 +19,6 @@ The app is client-side and stores user data locally in the browser.
 ## No AI
 
 This project intentionally contains no AI APIs, AI tutor, AI generation, or AI recommendations.
+
+
+Build validation has been fixed and runs through GitHub Actions.
