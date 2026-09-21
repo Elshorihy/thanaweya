@@ -1,0 +1,53 @@
+name: Extract Thanaweya OS
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  extract:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Extract project ZIP
+        shell: bash
+        run: |
+          set -e
+          ZIP="$(find . -maxdepth 1 -type f -name '*.zip' | head -n 1)"
+          if [ -z "$ZIP" ]; then
+            echo "No root ZIP found. Nothing to extract."
+            exit 0
+          fi
+          TMP="$(mktemp -d)"
+          unzip -q "$ZIP" -d "$TMP"
+          if [ -f "$TMP/package.json" ]; then
+            SRC="$TMP"
+          else
+            SRC="$(find "$TMP" -maxdepth 2 -type f -name package.json -print -quit | xargs -r dirname)"
+          fi
+          if [ -z "$SRC" ] || [ ! -f "$SRC/package.json" ]; then
+            echo "Could not locate package.json after extraction."
+            exit 1
+          fi
+          find "$SRC" -mindepth 1 -maxdepth 1 -exec cp -a {} . \;
+          rm -f "$ZIP"
+
+      - name: Commit extracted project
+        shell: bash
+        run: |
+          set -e
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+            exit 0
+          fi
+          git commit -m "Extract Thanaweya OS project"
+          git push
