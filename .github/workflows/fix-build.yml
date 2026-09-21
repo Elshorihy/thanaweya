@@ -1,0 +1,48 @@
+name: Fix TypeScript build
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    if: contains(github.event.head_commit.message, 'Fix TypeScript build') == false
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Patch source
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path("src/main.tsx")
+          s=p.read_text()
+          if "import type {LucideIcon}" not in s:
+              s=s.replace("import {Home,", "import type {LucideIcon} from 'lucide-react';\nimport {Home,", 1)
+          s=s.replace(
+              "const nav:any[]=[['home','الرئيسية',Home],['curriculum','المنهج',BookOpen],['plan','الخطة',CalendarDays],['tasks','المهام',CheckSquare],['review','المراجعة',Brain],['questions','بنك الأسئلة',FileQuestion],['mistakes','دفتر الأخطاء',AlertTriangle],['calendar','التقويم',Calendar],['focus','Focus',Timer],['stats','الإحصائيات',BarChart3],['achievements','الإنجازات',Trophy],['settings','الإعدادات',Settings]];",
+              "const nav:Array<[string,string,LucideIcon]>=[['home','الرئيسية',Home],['curriculum','المنهج',BookOpen],['plan','الخطة',CalendarDays],['tasks','المهام',CheckSquare],['review','المراجعة',Brain],['questions','بنك الأسئلة',FileQuestion],['mistakes','دفتر الأخطاء',AlertTriangle],['calendar','التقويم',Calendar],['focus','Focus',Timer],['stats','الإحصائيات',BarChart3],['achievements','الإنجازات',Trophy],['settings','الإعدادات',Settings]];"
+          )
+          old="<div className=\"bottomNav\">{[['home','الرئيسية',Home],['plan','الخطة',CalendarDays],['focus','Focus',Timer],['stats','الإحصائيات',BarChart3],['settings','المزيد',Settings]].map(([k,n,I])=><button className={page===k?'active':''} onClick={()=>go(k as string)} key={k as string}><I size={19}/><span>{n}</span></button>)}</div>"
+          new="<div className=\"bottomNav\">{([['home','الرئيسية',Home],['plan','الخطة',CalendarDays],['focus','Focus',Timer],['stats','الإحصائيات',BarChart3],['settings','المزيد',Settings]] as Array<[string,string,LucideIcon]>).map(([k,n,I])=><button className={page===k?'active':''} onClick={()=>go(k)} key={k}><I size={19}/><span>{n}</span></button>)}</div>"
+          if old not in s:
+              raise SystemExit("bottom navigation pattern not found")
+          s=s.replace(old,new,1)
+          p.write_text(s)
+          Path("src/vite-env.d.ts").write_text('declare module "*.css";\n')
+          PY
+      - name: Commit fixes
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/main.tsx src/vite-env.d.ts
+          git commit -m "Fix TypeScript build" || exit 0
+          git push
