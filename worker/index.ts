@@ -114,6 +114,6 @@ export default {
         return json({error:"حدث خطأ في الخادم",detail:message.slice(0,240)},500);
       }
     }
-    return env.ASSETS.fetch(request);
+    if(url.pathname === "/" || url.pathname.includes(".")) return env.ASSETS.fetch(request);\n    return new Response("الصفحة غير موجودة", {status:404, headers:{"content-type":"text/plain; charset=utf-8","cache-control":"no-store"}});
   }
 };
