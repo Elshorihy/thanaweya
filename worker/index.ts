@@ -3,6 +3,17 @@ interface Env {
   ASSETS: Fetcher;
 }
 
+let schemaReady:Promise<void>|null=null;
+async function ensureSchema(env:Env){
+  if(!schemaReady) schemaReady=env.DB.batch([
+    env.DB.prepare("CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY,email TEXT NOT NULL UNIQUE,name TEXT NOT NULL,password_hash TEXT NOT NULL,password_salt TEXT NOT NULL,created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL)"),
+    env.DB.prepare("CREATE TABLE IF NOT EXISTS sessions (id TEXT PRIMARY KEY,user_id TEXT NOT NULL,token_hash TEXT NOT NULL UNIQUE,expires_at INTEGER NOT NULL,created_at INTEGER NOT NULL,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE)"),
+    env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token_hash)"),
+    env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_sessions_expiry ON sessions(expires_at)"),
+    env.DB.prepare("CREATE TABLE IF NOT EXISTS user_data (user_id TEXT PRIMARY KEY,data_json TEXT NOT NULL DEFAULT '',updated_at INTEGER NOT NULL,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE)")
+  ]).then(()=>undefined).catch(e=>{schemaReady=null;throw e});
+  await schemaReady;
+}
 const COOKIE = "thanaweya_session";
 const SESSION_DAYS = 30;
 
@@ -51,6 +62,7 @@ export default {
     const url=new URL(request.url);
     if(url.pathname.startsWith("/api/")) {
       try {
+        if(url.pathname!=="/api/health") await ensureSchema(env);
         if(request.method==="OPTIONS") return new Response(null,{status:204,headers:{"access-control-allow-origin":url.origin,"access-control-allow-credentials":"true","access-control-allow-methods":"GET,POST,PUT,OPTIONS","access-control-allow-headers":"content-type"}});
         if(url.pathname==="/api/health") return json({ok:true});
         if(url.pathname==="/api/auth/register" && request.method==="POST") {
