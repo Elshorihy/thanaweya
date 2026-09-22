@@ -62,9 +62,12 @@ export default {
     const url=new URL(request.url);
     if(url.pathname.startsWith("/api/")) {
       try {
-        if(url.pathname!=="/api/health") await ensureSchema(env);
         if(request.method==="OPTIONS") return new Response(null,{status:204,headers:{"access-control-allow-origin":url.origin,"access-control-allow-credentials":"true","access-control-allow-methods":"GET,POST,PUT,OPTIONS","access-control-allow-headers":"content-type"}});
-        if(url.pathname==="/api/health") return json({ok:true});
+        if(url.pathname==="/api/health") {
+          try { await ensureSchema(env); await env.DB.prepare("SELECT 1 AS ok").first(); return json({ok:true,db:true}); }
+          catch(e) { console.error("D1 health check failed",e); return json({ok:false,db:false,error:"D1 binding/database is not available. Check the DB binding in Cloudflare."},503); }
+        }
+        await ensureSchema(env);
         if(url.pathname==="/api/auth/register" && request.method==="POST") {
           const b=await body(request), email=cleanEmail(b?.email), name=cleanName(b?.name), password=String(b?.password||"");
           if(!name||!email||password.length<8) return json({error:"الاسم والإيميل وكلمة السر (8 أحرف على الأقل) مطلوبة"},400);
