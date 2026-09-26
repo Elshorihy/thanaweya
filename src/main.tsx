@@ -155,7 +155,7 @@ function Dashboard(){const due=s.lessons.filter(l=>l.nextReviewAt&&l.nextReviewA
   const enterFullscreen=()=>{
    const el=focusRef.current;
    if(!el?.requestFullscreen)return;
-   el.requestFullscreen({navigationUI:'hide'}).catch(()=>{});
+   el.requestFullscreen().catch(()=>{});
   };
   const exitFullscreen=()=>{if(document.fullscreenElement)document.exitFullscreen?.().catch(()=>{})};
   const focusLessons=s.lessons.filter(l=>s.units.find(u=>u.id===l.unitId)?.subjectId===focusSubjectId);
