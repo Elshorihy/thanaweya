@@ -87,3 +87,5 @@ body.light{--bg:#F3F6FB;--surface:#FFFFFF;--surface2:#FFFFFF;--border:#D9E1EC;--
 .focuspage:fullscreen .focusTopbar{position:absolute;top:22px;left:24px;right:24px;width:auto}
 .focuspage:fullscreen h1{margin-top:40px}
 @media(max-width:620px){.focuspage.runningFocus{min-height:calc(100vh - 20px);padding:28px 14px;border-radius:18px}.focuspage:fullscreen{padding:22px 12px}.focuspage:fullscreen .focusTopbar{top:12px;left:12px;right:12px}.focuspage.runningFocus .focuscontext{padding:12px}.focusBlessing{margin-top:6px}}
+
+.quickDurations{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}.quickDurations button{border:1px solid #334155;background:#111827;justify-content:center;min-width:78px}.quickDurations button.selected{background:#7C3AED;border-color:#7C3AED;color:#fff}.quickDurations button:disabled{opacity:.55;cursor:not-allowed}.light .quickDurations button{background:#fff;border-color:#C4CFDC;color:#172033}.light .quickDurations button.selected{background:#7C3AED;border-color:#7C3AED;color:#fff}@media(max-width:620px){.quickDurations{display:grid;grid-template-columns:repeat(3,1fr)}.quickDurations button{min-width:0;padding:10px 6px}}
