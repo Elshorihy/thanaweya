@@ -185,8 +185,9 @@ function Dashboard(){const due=s.lessons.filter(l=>l.nextReviewAt&&l.nextReviewA
    const end=Date.now()+seconds*1000;
    setFocusLeft(seconds);setFocusEnd(end);
    try{localStorage.setItem('thanaweya_focus_end',String(end))}catch{}
+   // Fullscreen must be requested directly inside the Start button's user gesture.
+   enterFullscreen();
    notify((s.settings.language==='ar'?'⏱️ بدأت جلسة ':'⏱️ Started a ')+selectedSubject+' session.');setRunning(true);
-   requestAnimationFrame(()=>enterFullscreen());
   };
   const reset=()=>{setRunning(false);setFocusEnd(null);try{localStorage.removeItem('thanaweya_focus_end')}catch{};if(document.fullscreenElement)exitFullscreen();setFocusLeft(focusMinutes*60);setFocusTotalSeconds(focusMinutes*60)};
   const mm=String(Math.floor(focusLeft/60)).padStart(2,'0'),ss=String(focusLeft%60).padStart(2,'0');
@@ -195,7 +196,7 @@ function Dashboard(){const due=s.lessons.filter(l=>l.nextReviewAt&&l.nextReviewA
    {running&&<div className="focusBlessing">صل على النبي ﷺ</div>}
    <div className="focusTopbar">
     <span className="eyebrow">FOCUS MODE</span>
-    {running&&<button className="focusFullscreenBtn" onClick={isFullscreen?exitFullscreen:enterFullscreen}>{isFullscreen?'↙ خروج من ملء الشاشة':'↗ ملء الشاشة'}</button>}
+    {running&&<button className="focusFullscreenBtn" onClick={()=>document.fullscreenElement?exitFullscreen():enterFullscreen()}>{document.fullscreenElement?'↙ خروج من ملء الشاشة':'↗ ملء الشاشة'}</button>}
    </div>
    <h1>{mm}:{ss}</h1>
    <div className="focuscontext card">
