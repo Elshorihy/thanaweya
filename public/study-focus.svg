@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800">
+<defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#101827"/><stop offset="1" stop-color="#24143f"/></linearGradient><linearGradient id="shirt" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#7c3aed"/><stop offset="1" stop-color="#2563eb"/></linearGradient></defs>
+<rect width="1200" height="800" fill="url(#bg)"/>
+<circle cx="980" cy="150" r="180" fill="#7c3aed" opacity=".12"/><circle cx="180" cy="680" r="240" fill="#2563eb" opacity=".10"/>
+<rect x="105" y="120" width="990" height="560" rx="34" fill="#0b0f14" opacity=".28"/>
+<rect x="180" y="470" width="840" height="24" rx="12" fill="#334155"/>
+<rect x="230" y="494" width="740" height="24" rx="12" fill="#1f2937"/>
+<rect x="480" y="355" width="250" height="145" rx="14" fill="#111827" stroke="#64748b" stroke-width="7"/>
+<rect x="500" y="375" width="210" height="105" rx="7" fill="#172554"/>
+<circle cx="605" cy="425" r="28" fill="#7c3aed" opacity=".35"/>
+<path d="M570 425h70M605 390v70" stroke="#a78bfa" stroke-width="5" opacity=".8"/>
+<path d="M550 500h110l28 28H522z" fill="#475569"/>
+<circle cx="405" cy="260" r="72" fill="#d8a27a"/>
+<path d="M338 255c8-82 142-100 151 4-24-23-48-34-74-34-27 0-51 10-77 30z" fill="#172033"/>
+<path d="M350 330c42-24 93-24 137 0l52 140H300z" fill="url(#shirt)"/>
+<path d="M395 337l-18 113M447 337l22 113" stroke="#d8a27a" stroke-width="22" stroke-linecap="round"/>
+<path d="M376 448l-75 42M468 448l95 34" stroke="#d8a27a" stroke-width="24" stroke-linecap="round"/>
+<path d="M300 490l-80 25M565 482l70 10" stroke="#d8a27a" stroke-width="22" stroke-linecap="round"/>
+<rect x="705" y="430" width="150" height="28" rx="8" fill="#7c3aed" opacity=".75" transform="rotate(-8 705 430)"/>
+<rect x="735" y="462" width="130" height="18" rx="6" fill="#f59e0b" opacity=".65" transform="rotate(-8 735 462)"/>
+<rect x="850" y="390" width="70" height="85" rx="7" fill="#ef4444" opacity=".7" transform="rotate(10 850 390)"/>
+<path d="M790 520c35 8 70 8 105 0" stroke="#94a3b8" stroke-width="5" opacity=".5"/>
+<text x="600" y="150" text-anchor="middle" fill="#fff" font-family="Arial,sans-serif" font-size="42" font-weight="700" opacity=".9">FOCUS MODE</text>
+<text x="600" y="205" text-anchor="middle" fill="#c4b5fd" font-family="Arial,sans-serif" font-size="25">Study • Focus • Progress</text>
+</svg>
