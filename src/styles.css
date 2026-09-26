@@ -70,22 +70,22 @@ body.light{--bg:#F3F6FB;--surface:#FFFFFF;--surface2:#FFFFFF;--border:#D9E1EC;--
 @media(max-width:700px){.sourceStats,.sourceGrid,.memoryGrid,.rpgWorlds{grid-template-columns:1fr}.missionHero{flex-direction:column;align-items:flex-start}.hourGrid{overflow:auto;grid-template-columns:repeat(24,28px);gap:4px}.hourGrid>div{width:28px}}
 
 
-/* Focus Mode fullscreen + study atmosphere */
+/* Focus Mode study atmosphere */
 .focuspage{position:relative;overflow:hidden}
 .focuspage.runningFocus{min-height:calc(100vh - 40px);max-width:none;margin:0;padding:38px 24px;display:flex;flex-direction:column;align-items:center;justify-content:center;border-radius:24px;background:#090b12 url('/study-focus.svg') center/cover no-repeat;box-shadow:0 18px 60px rgba(0,0,0,.35)}
 .focuspage.runningFocus::before{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(5,7,13,.52),rgba(5,7,13,.72));z-index:0}
 .focuspage.runningFocus>*:not(.focusBackgroundOverlay){position:relative;z-index:1}
 .focusBackgroundOverlay{position:absolute;inset:0;background:radial-gradient(circle at 50% 40%,rgba(124,58,237,.16),transparent 45%);z-index:0;pointer-events:none}
 .focusTopbar{width:min(900px,100%);display:flex;align-items:center;justify-content:space-between;gap:12px}
-.focusFullscreenBtn{border:1px solid rgba(255,255,255,.22);background:rgba(8,12,20,.58);backdrop-filter:blur(10px);color:#fff}
 .focusBlessing{font-size:clamp(20px,3vw,34px);font-weight:900;color:#f8fafc;text-shadow:0 3px 18px rgba(0,0,0,.7);margin:12px 0 0}
 .focuspage.runningFocus h1{font-size:clamp(76px,12vw,150px);line-height:1;margin:14px 0;text-shadow:0 8px 35px rgba(0,0,0,.6)}
 .focuspage.runningFocus .focuscontext{background:rgba(10,15,25,.58);border-color:rgba(255,255,255,.14);backdrop-filter:blur(12px);width:min(760px,100%)}
 .focuspage.runningFocus .focusring{border-color:rgba(167,139,250,.6);background:rgba(5,8,15,.35);box-shadow:0 0 50px rgba(124,58,237,.22)}
 .focuspage.runningFocus .muted{color:#d1d5db}
-.focuspage:fullscreen{width:100vw;height:100vh;max-width:none;margin:0;padding:32px 24px;border-radius:0;overflow:auto;background:#090b12 url('/study-focus.svg') center/cover no-repeat}
-.focuspage:fullscreen .focusTopbar{position:absolute;top:22px;left:24px;right:24px;width:auto}
-.focuspage:fullscreen h1{margin-top:40px}
-@media(max-width:620px){.focuspage.runningFocus{min-height:calc(100vh - 20px);padding:28px 14px;border-radius:18px}.focuspage:fullscreen{padding:22px 12px}.focuspage:fullscreen .focusTopbar{top:12px;left:12px;right:12px}.focuspage.runningFocus .focuscontext{padding:12px}.focusBlessing{margin-top:6px}}
+@media(max-width:620px){.focuspage.runningFocus{min-height:calc(100vh - 20px);padding:28px 14px;border-radius:18px}.focuspage.runningFocus .focuscontext{padding:12px}.focusBlessing{margin-top:6px}}
 
 .quickDurations{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}.quickDurations button{border:1px solid #334155;background:#111827;justify-content:center;min-width:78px}.quickDurations button.selected{background:#7C3AED;border-color:#7C3AED;color:#fff}.quickDurations button:disabled{opacity:.55;cursor:not-allowed}.light .quickDurations button{background:#fff;border-color:#C4CFDC;color:#172033}.light .quickDurations button.selected{background:#7C3AED;border-color:#7C3AED;color:#fff}@media(max-width:620px){.quickDurations{display:grid;grid-template-columns:repeat(3,1fr)}.quickDurations button{min-width:0;padding:10px 6px}}
+.smartAction{display:flex;align-items:center;justify-content:space-between;gap:18px;margin:15px 0}
+.smartAction h2{margin:6px 0 4px;font-size:20px}
+.smartAction .primary{flex:0 0 auto}
+@media(max-width:620px){.smartAction{align-items:stretch;flex-direction:column}.smartAction .primary{width:100%;justify-content:center}}
