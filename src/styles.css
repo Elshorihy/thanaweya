@@ -8,3 +8,57 @@
 .brandLogo{width:48px;height:48px;border-radius:14px;object-fit:cover;display:block;flex:0 0 48px;box-shadow:0 6px 18px rgba(0,0,0,.22)}
 
 .accountBox{display:flex;align-items:center;justify-content:space-between;gap:18px;flex-wrap:wrap}.accountBox>div:first-child{display:flex;flex-direction:column;gap:5px}.accountBox span,.accountBox small{color:var(--muted)}.authError{margin:8px 0;padding:10px;border-radius:10px;background:rgba(220,38,38,.12);color:#ef4444}.accountBox button:disabled{opacity:.6;cursor:not-allowed}
+
+/* Safe visual system for the light theme + hierarchical curriculum */
+:root{--bg:#0B0F14;--surface:#111827;--surface2:#0d121a;--border:#202938;--border2:#334155;--text:#F8FAFC;--muted:#94A3B8;--accent:#7C3AED;--input:#0b0f14}
+body{background:var(--bg);color:var(--text);transition:background .18s ease,color .18s ease}
+body.light{--bg:#F3F6FB;--surface:#FFFFFF;--surface2:#FFFFFF;--border:#D9E1EC;--border2:#C4CFDC;--text:#172033;--muted:#5E6B7D;--input:#F8FAFC;background:var(--bg);color:var(--text)}
+.light aside,.light .card,.light .search,.light .oncard,.light .modal,.light .daycard{background:var(--surface);border-color:var(--border)}
+.light aside{box-shadow:0 0 24px rgba(15,23,42,.05)}
+.light .search{background:var(--surface)}
+.light .search input,.light input,.light select,.light textarea{color:var(--text);background:var(--input);border-color:var(--border2)}
+.light .search input::placeholder,.light input::placeholder,.light textarea::placeholder{color:#8A96A6}
+.light nav button{color:#64748B}
+.light nav button.active,.light nav button:hover{background:#EEF2FF;color:#172033}
+.light .headActions button,.light .actions button,.light .quick button,.light .daychips button,.light .choices button{border-color:var(--border2)}
+.light .taskrow,.light .reviewrow,.light .listrow,.light .mini{border-color:var(--border)}
+.light .progress,.light .vbar{background:#E7ECF3}
+.light .iconbox{background:#F0ECFF}
+.light .taskstatus{background:#F8FAFC;color:var(--text);border-color:var(--border2)}
+.light .bottomNav{background:#fff;border-color:var(--border)}
+.light .bottomNav button{color:#64748B}
+.light .bottomNav button.active{color:#172033}
+.light .calday{border-color:var(--border)}
+.light .treeEmpty{color:#778397}
+.light .unitTree{background:#F8FAFC;border-color:var(--border)}
+.light .lessonTreeRow{background:#fff;border-color:var(--border)}
+.light .subjectTree{box-shadow:0 5px 18px rgba(15,23,42,.035)}
+.light .siteFooter{border-color:var(--border)}
+.light .footerContact a{color:var(--text);border-color:var(--border)}
+.light .muted{color:var(--muted)}
+.curriculumTree{display:grid;gap:16px}
+.subjectTree{overflow:hidden}
+.subjectTreeHead{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}
+.subjectTitle{display:flex;align-items:center;gap:10px;min-width:0;flex:1}
+.subjectTitle .subjectedit{flex:1}
+.unitsTree{display:grid;gap:10px;margin-top:14px}
+.unitTree{border:1px solid var(--border);border-radius:13px;background:rgba(255,255,255,.025);overflow:hidden}
+.unitHead{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:11px 13px;border-bottom:1px solid var(--border)}
+.unitHead>div:first-child{display:flex;align-items:center;gap:8px;min-width:0;flex:1}
+.unitHead input{background:transparent;border:0;outline:0;color:var(--text);font-weight:800;padding:5px 2px;min-width:0}
+.treeIcon{font-size:16px}
+.lessonTree{padding:6px 10px}
+.lessonTreeRow{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:8px;align-items:center;padding:8px 4px;border-bottom:1px solid var(--border)}
+.lessonTreeRow:last-child{border-bottom:0}
+.lessonTreeRow>div{display:flex;align-items:center;gap:8px;min-width:0}
+.lessonTreeRow input{background:transparent;border:0;outline:0;color:var(--text);padding:5px 2px;min-width:0}
+.lessonTreeRow small{color:var(--muted);white-space:nowrap}
+.treeEmpty{padding:13px;color:var(--muted);font-size:13px;text-align:center}
+.subjectTree>.taskstatus,.subjectTree>select{max-width:180px}
+@media(max-width:620px){
+ .subjectTreeHead,.unitHead{align-items:flex-start}
+ .subjectTreeHead .actions,.unitHead .actions{flex-wrap:wrap;justify-content:flex-end}
+ .lessonTreeRow{grid-template-columns:minmax(0,1fr) auto}
+ .lessonTreeRow .dangerlink{grid-column:2}
+ .lessonTreeRow>div{grid-column:1/3}
+}
