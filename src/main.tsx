@@ -1,4 +1,4 @@
-import React,{useEffect,useMemo,useState} from 'react';
+import React,{useEffect,useMemo,useRef,useState} from 'react';
 import {createRoot} from 'react-dom/client';
 import type {LucideIcon} from 'lucide-react';
 import {Home,BookOpen,CalendarDays,CheckSquare,Brain,Timer,BarChart3,Trophy,Bell,Settings,Plus,Search,Trash2,Play,Pause,RotateCcw,Download,Upload,Sun,Moon,Globe2,AlertCircle,X,Save,FileQuestion,NotebookPen,Calendar,AlertTriangle,Check,RefreshCw,ChevronLeft,ChevronRight,Smartphone,Clock,UserRound,Filter} from 'lucide-react';
@@ -144,6 +144,20 @@ function Dashboard(){const due=s.lessons.filter(l=>l.nextReviewAt&&l.nextReviewA
  function Mistakes(){let list=s.mistakes.filter(x=>(!q||x.question.includes(q))&&(!filter.subject||x.subjectId===filter.subject));return <section><Title title="دفتر الأخطاء" sub="سجل أخطاءك وسببها والإجابة الصحيحة." action={<button className="primary" onClick={()=>setModal('mistake')}><Plus/> تسجيل خطأ</button>}/><div className="filterrow"><FilterBar subject={filter.subject} onSubject={v=>setFilter({...filter,subject:v})}/></div><div className="card">{list.length?list.map(x=><div className="listrow" key={x.id}><div><b>{x.question}</b><span>{subMap[x.subjectId]?.name||''} • {x.reason} • {(x.status||'needs_review')==='fixed'?'تم الإصلاح':'يحتاج مراجعة'}</span><small>الإجابة الصحيحة: {x.correctAnswer}</small>{x.notes&&<small>{x.notes}</small>}</div><div className='actions'><button onClick={()=>update({mistakes:s.mistakes.map(y=>y.id===x.id?{...y,status:(y.status||'needs_review')==='fixed'?'needs_review':'fixed'}:y)})}>{(x.status||'needs_review')==='fixed'?'إرجاع للمراجعة':'تم الإصلاح'}</button><button onClick={()=>update({mistakes:s.mistakes.filter(y=>y.id!==x.id)})}><Trash2/></button></div></div>):<Empty text="دفتر الأخطاء فاضي." action="سجل أول خطأ" onClick={()=>setModal('mistake')}/>}</div></section>}
  function CalendarPage(){const y=calendarDate.getFullYear(),m=calendarDate.getMonth(),first=new Date(y,m,1),offset=first.getDay(),daysIn=new Date(y,m+1,0).getDate(),cells:Array<number|null>=Array.from({length:offset+daysIn},(_,i):number|null=>i<offset?null:i-offset+1);return <section><Title title="التقويم" sub="عدد المهام ووقت المذاكرة وحالة كل يوم." action={<div className="actions"><button onClick={()=>setCalendarDate(new Date(y,m-1,1))}><ChevronRight/></button><b>{calendarDate.toLocaleDateString(s.settings.language==='ar'?'ar-EG':'en',{month:'long',year:'numeric'})}</b><button onClick={()=>setCalendarDate(new Date(y,m+1,1))}><ChevronLeft/></button></div>}/><div className="calendar card">{['أحد','اثن','ثلا','أرب','خمي','جمع','سبت'].map(x=><b key={x}>{x}</b>)}{cells.map((day,i)=>{if(day===null)return <div key={'e'+i}/>;const ds=`${y}-${String(m+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`,ts=s.tasks.filter(t=>t.date===ds),done=ts.filter(t=>t.status==='completed').length,time=s.sessions.filter(a=>a.date===ds).reduce((a,z)=>a+z.duration,0);return <button className={'calday '+(ds===today()?'today':'')} key={ds} onClick={()=>setNotice(`${ds}: ${done}/${ts.length} مهام • ${time} دقيقة مذاكرة`)}><b>{day}</b><span>{ts.length} مهام</span><small>{time}د • {ts.length?Math.round(done/ts.length*100):0}%</small></button>})}</div></section>}
  function Focus(){
+  const focusRef=useRef<HTMLElement|null>(null);
+  const [isFullscreen,setIsFullscreen]=useState(false);
+  useEffect(()=>{
+   const sync=()=>setIsFullscreen(document.fullscreenElement===focusRef.current);
+   document.addEventListener('fullscreenchange',sync);
+   sync();
+   return()=>document.removeEventListener('fullscreenchange',sync);
+  },[]);
+  const enterFullscreen=()=>{
+   const el=focusRef.current;
+   if(!el?.requestFullscreen)return;
+   el.requestFullscreen({navigationUI:'hide'}).catch(()=>{});
+  };
+  const exitFullscreen=()=>{if(document.fullscreenElement)document.exitFullscreen?.().catch(()=>{})};
   const focusLessons=s.lessons.filter(l=>s.units.find(u=>u.id===l.unitId)?.subjectId===focusSubjectId);
   const selectedSubject=subMap[focusSubjectId]?.name||'';
   const selectedLesson=focusLessonId?lessonMap[focusLessonId]?.name||'':'';
@@ -172,11 +186,17 @@ function Dashboard(){const due=s.lessons.filter(l=>l.nextReviewAt&&l.nextReviewA
    setFocusLeft(seconds);setFocusEnd(end);
    try{localStorage.setItem('thanaweya_focus_end',String(end))}catch{}
    notify((s.settings.language==='ar'?'⏱️ بدأت جلسة ':'⏱️ Started a ')+selectedSubject+' session.');setRunning(true);
+   requestAnimationFrame(()=>enterFullscreen());
   };
-  const reset=()=>{setRunning(false);setFocusEnd(null);try{localStorage.removeItem('thanaweya_focus_end')}catch{};setFocusLeft(focusMinutes*60);setFocusTotalSeconds(focusMinutes*60)};
+  const reset=()=>{setRunning(false);setFocusEnd(null);try{localStorage.removeItem('thanaweya_focus_end')}catch{};if(document.fullscreenElement)exitFullscreen();setFocusLeft(focusMinutes*60);setFocusTotalSeconds(focusMinutes*60)};
   const mm=String(Math.floor(focusLeft/60)).padStart(2,'0'),ss=String(focusLeft%60).padStart(2,'0');
-  return <section className="focuspage">
-   <span className="eyebrow">FOCUS MODE</span>
+  return <section ref={focusRef} className={'focuspage '+(running?'runningFocus ':'')+(isFullscreen?'isFullscreen':'')}>
+   {running&&<div className="focusBackgroundOverlay" aria-hidden="true"/>}
+   {running&&<div className="focusBlessing">صل على النبي ﷺ</div>}
+   <div className="focusTopbar">
+    <span className="eyebrow">FOCUS MODE</span>
+    {running&&<button className="focusFullscreenBtn" onClick={isFullscreen?exitFullscreen:enterFullscreen}>{isFullscreen?'↙ خروج من ملء الشاشة':'↗ ملء الشاشة'}</button>}
+   </div>
    <h1>{mm}:{ss}</h1>
    <div className="focuscontext card">
     <label>المادة <select value={focusSubjectId} disabled={running} onChange={e=>{setFocusSubjectId(e.target.value);setFocusLessonId('')}}>
