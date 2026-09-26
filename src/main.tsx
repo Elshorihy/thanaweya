@@ -174,7 +174,8 @@ function Dashboard(){const due=s.lessons.filter(l=>l.nextReviewAt&&l.nextReviewA
    try{localStorage.setItem('thanaweya_focus_end',String(end))}catch{}
    notify((s.settings.language==='ar'?'⏱️ بدأت جلسة ':'⏱️ Started a ')+selectedSubject+' session.');setRunning(true);
   };
-  const reset=()=>{setRunning(false);setFocusEnd(null);try{localStorage.removeItem('thanaweya_focus_end')}catch{};if(document.fullscreenElement)exitFullscreen();setFocusLeft(focusMinutes*60);setFocusTotalSeconds(focusMinutes*60)};
+  const reset=()=>{setRunning(false);setFocusEnd(null);try{localStorage.removeItem('thanaweya_focus_end')}catch{};setFocusLeft(focusMinutes*60);setFocusTotalSeconds(focusMinutes*60)};
+  const quickDurations=[25,50,60,90,120];
   const mm=String(Math.floor(focusLeft/60)).padStart(2,'0'),ss=String(focusLeft%60).padStart(2,'0');
   return <section className={'focuspage '+(running?'runningFocus ':'')}>
    {running&&<div className="focusBackgroundOverlay" aria-hidden="true"/>}
@@ -189,8 +190,11 @@ function Dashboard(){const due=s.lessons.filter(l=>l.nextReviewAt&&l.nextReviewA
       <option value="">بدون درس محدد</option>{focusLessons.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}
     </select></label>
     <label>مدة الجلسة: {focusMinutes} دقيقة
+      <div className="quickDurations" aria-label="اختيارات مدة سريعة">
+        {quickDurations.map(m=><button type="button" key={m} className={focusMinutes===m?'selected':''} disabled={running} onClick={()=>setDuration(m)}>{m} دقيقة</button>)}
+      </div>
       <input type="number" min="1" max="180" step="1" value={focusMinutes} disabled={running} onChange={e=>setDuration(+e.target.value)} />
-      <small className="muted">من 1 إلى 180 دقيقة — اختار الوقت اللي يناسبك.</small>
+      <small className="muted">اختار مدة جاهزة بضغطة واحدة، أو اكتب مدة مخصصة لو محتاج.</small>
     </label>
    </div>
    <p>{selectedSubject?selectedSubject:'لا توجد مادة محددة'}{selectedLesson?' • '+selectedLesson:''}</p>
