@@ -1,0 +1,76 @@
+Build and deploy	Deploy to Cloudflare Workers	﻿2026-09-27T18:35:53.0975551Z ##[group]Run set +e
+Build and deploy	Deploy to Cloudflare Workers	2026-09-27T18:35:53.0975787Z ^[[36;1mset +e^[[0m
+Build and deploy	Deploy to Cloudflare Workers	2026-09-27T18:35:53.0976162Z ^[[36;1mnpx wrangler deploy worker/index.ts --config wrangler.jsonc --log-level debug 2>&1 | tee /tmp/deploy.log^[[0m
+Build and deploy	Deploy to Cloudflare Workers	2026-09-27T18:35:53.0976583Z ^[[36;1mcode=${PIPESTATUS[0]}^[[0m
+Build and deploy	Deploy to Cloudflare Workers	2026-09-27T18:35:53.0976839Z ^[[36;1mif [ "$code" -ne 0 ]; then exit "$code"; fi^[[0m
+Build and deploy	Deploy to Cloudflare Workers	2026-09-27T18:35:53.1034868Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+Build and deploy	Deploy to Cloudflare Workers	2026-09-27T18:35:53.1035154Z env:
+Build and deploy	Deploy to Cloudflare Workers	2026-09-27T18:35:53.1035318Z   CLOUDFLARE_API_TOKEN: 
+Build and deploy	Deploy to Cloudflare Workers	2026-09-27T18:35:53.1035514Z   CLOUDFLARE_ACCOUNT_ID: 
+Build and deploy	Deploy to Cloudflare Workers	2026-09-27T18:35:53.1035701Z ##[endgroup]
+Build and deploy	Deploy to Cloudflare Workers	2026-09-27T18:35:54.1289570Z 🪵  Writing logs to "/home/runner/.config/.wrangler/logs/wrangler-2026-09-27_18-35-53_931.log"
+Build and deploy	Deploy to Cloudflare Workers	2026-09-27T18:35:54.1290170Z 
+Build and deploy	Deploy to Cloudflare Workers	2026-09-27T18:35:54.1687280Z ^[[31m✘ ^[[41;31m[^[[41;97mERROR^[[41;31m]^[[0m ^[[1mUnknown arguments: log-level, logLevel^[[0m
+Build and deploy	Deploy to Cloudflare Workers	2026-09-27T18:35:54.1687670Z 
+Build and deploy	Deploy to Cloudflare Workers	2026-09-27T18:35:54.1687680Z 
+Build and deploy	Deploy to Cloudflare Workers	2026-09-27T18:35:54.1998859Z wrangler deploy [path]
+Build and deploy	Deploy to Cloudflare Workers	2026-09-27T18:35:54.2004163Z 
+Build and deploy	Deploy to Cloudflare Workers	2026-09-27T18:35:54.2034266Z 🆙 Deploy a Worker to Cloudflare
+Build and deploy	Deploy to Cloudflare Workers	2026-09-27T18:35:54.2043898Z 
+Build and deploy	Deploy to Cloudflare Workers	2026-09-27T18:35:54.2044064Z POSITIONALS
+Build and deploy	Deploy to Cloudflare Workers	2026-09-27T18:35:54.2044525Z   path  The path to an entry point for your Worker or a directory of static assets  [string]
+Build and deploy	Deploy to Cloudflare Workers	2026-09-27T18:35:54.2045129Z 
+Build and deploy	Deploy to Cloudflare Workers	2026-09-27T18:35:54.2045239Z GLOBAL FLAGS
+Build and deploy	Deploy to Cloudflare Workers	2026-09-27T18:35:54.2045589Z   -c, --config          Path to Wrangler configuration file  [string]
+Build and deploy	Deploy to Cloudflare Workers	2026-09-27T18:35:54.2046212Z       --cwd             Run as if Wrangler was started in the specified directory instead of the current working directory  [string]
+Build and deploy	Deploy to Cloudflare Workers	2026-09-27T18:35:54.2046861Z   -e, --env             Environment to use for operations, and for selecting .env and .dev.vars files  [string]
+Build and deploy	Deploy to Cloudflare Workers	2026-09-27T18:35:54.2047623Z       --env-file        Path to an .env file to load - can be specified multiple times - values from earlier files are overridden by values in later files  [array]
+Build and deploy	Deploy to Cloudflare Workers	2026-09-27T18:35:54.2048183Z   -h, --help            Show help  [boolean]
+Build and deploy	Deploy to Cloudflare Workers	2026-09-27T18:35:54.2048742Z       --install-skills  Install Cloudflare skills for detected AI coding agents before running the command  [boolean] [default: false]
+Build and deploy	Deploy to Cloudflare Workers	2026-09-27T18:35:54.2049281Z       --profile         Use a specific auth profile  [string]
+Build and deploy	Deploy to Cloudflare Workers	2026-09-27T18:35:54.2049660Z   -v, --version         Show version number  [boolean]
+Build and deploy	Deploy to Cloudflare Workers	2026-09-27T18:35:54.2049853Z 
+Build and deploy	Deploy to Cloudflare Workers	2026-09-27T18:35:54.2049948Z OPTIONS
+Build and deploy	Deploy to Cloudflare Workers	2026-09-27T18:35:54.2050518Z       --name                                       Name of the Worker  [string]
+Build and deploy	Deploy to Cloudflare Workers	2026-09-27T18:35:54.2050972Z       --tag                                        A tag for this Worker Version  [string]
+Build and deploy	Deploy to Cloudflare Workers	2026-09-27T18:35:54.2051424Z       --message                                    A descriptive message for this Worker Version  [string]
+Build and deploy	Deploy to Cloudflare Workers	2026-09-27T18:35:54.2051996Z       --no-bundle                                  Skip internal build steps and directly upload Worker  [boolean] [default: false]
+Build and deploy	Deploy to Cloudflare Workers	2026-09-27T18:35:54.2052529Z       --outdir                                     Output directory for the bundled Worker  [string]
+Build and deploy	Deploy to Cloudflare Workers	2026-09-27T18:35:54.2052972Z       --outfile                                    Output file for the bundled worker  [string]
+Build and deploy	Deploy to Cloudflare Workers	2026-09-27T18:35:54.2053539Z       --compatibility-date                         Date to use for compatibility checks  [string]
+Build and deploy	Deploy to Cloudflare Workers	2026-09-27T18:35:54.2054084Z       --compatibility-flags, --compatibility-flag  Flags to use for compatibility checks  [array]
+Build and deploy	Deploy to Cloudflare Workers	2026-09-27T18:35:54.2054736Z       --latest                                     Use the latest compatibility date supported by this version of Wrangler  [boolean] [default: false]
+Build and deploy	Deploy to Cloudflare Workers	2026-09-27T18:35:54.2055346Z       --assets                                     Static assets to be served. Replaces Workers Sites.  [string]
+Build and deploy	Deploy to Cloudflare Workers	2026-09-27T18:35:54.2055882Z       --var                                        A key-value pair to be injected into the script as a variable  [array]
+Build and deploy	Deploy to Cloudflare Workers	2026-09-27T18:35:54.2056404Z       --define                                     A key-value pair to be substituted in the script  [array]
+Build and deploy	Deploy to Cloudflare Workers	2026-09-27T18:35:54.2057327Z       --alias                                      A module pair to be substituted in the script  [array]
+Build and deploy	Deploy to Cloudflare Workers	2026-09-27T18:35:54.2058071Z       --jsx-factory                                The function that is called for each JSX element  [string]
+Build and deploy	Deploy to Cloudflare Workers	2026-09-27T18:35:54.2058831Z       --jsx-fragment                               The function that is called for each JSX fragment  [string]
+Build and deploy	Deploy to Cloudflare Workers	2026-09-27T18:35:54.2059519Z       --tsconfig                                   Path to a custom tsconfig.json file  [string]
+Build and deploy	Deploy to Cloudflare Workers	2026-09-27T18:35:54.2060124Z       --minify                                     Minify the Worker  [boolean]
+Build and deploy	Deploy to Cloudflare Workers	2026-09-27T18:35:54.2061064Z       --upload-source-maps                         Include source maps when uploading this Worker  [boolean]
+Build and deploy	Deploy to Cloudflare Workers	2026-09-27T18:35:54.2061913Z       --dry-run                                    Compile a project and run checks without actually uploading the Worker  [boolean]
+Build and deploy	Deploy to Cloudflare Workers	2026-09-27T18:35:54.2063087Z       --secrets-file                               Path to a file containing secrets to upload with the version (JSON or .env format). Applies additively with secrets from previous deployments - omitted secrets will not be deleted.  [string]
+Build and deploy	Deploy to Cloudflare Workers	2026-09-27T18:35:54.2064473Z       --keep-vars                                  When not used (or set to false), Wrangler will delete all vars before setting those found in the Wrangler configuration.
+Build and deploy	Deploy to Cloudflare Workers	2026-09-27T18:35:54.2065597Z                                                    When used (and set to true), the environment variables are not deleted before the deployment.
+Build and deploy	Deploy to Cloudflare Workers	2026-09-27T18:35:54.2066412Z                                                    If you set variables via the dashboard you probably want to use this flag.
+Build and deploy	Deploy to Cloudflare Workers	2026-09-27T18:35:54.2067212Z                                                    Note that secrets are never deleted by deployments.  [boolean] [default: false]
+Build and deploy	Deploy to Cloudflare Workers	2026-09-27T18:35:54.2068168Z       --strict                                     Enables strict mode, which prevents uploads when there are conflicting remote changes.  [boolean] [default: false]
+Build and deploy	Deploy to Cloudflare Workers	2026-09-27T18:35:54.2069306Z       --durable-objects-code-update-mode           How to update Durable Object code: immediate, or deferred followed by a maximum delay (for example, deferred 30s)  [string]
+Build and deploy	Deploy to Cloudflare Workers	2026-09-27T18:35:54.2070216Z       --triggers, --schedule, --schedules          cron schedules to attach  [array]
+Build and deploy	Deploy to Cloudflare Workers	2026-09-27T18:35:54.2070825Z       --routes, --route                            Routes to upload  [array]
+Build and deploy	Deploy to Cloudflare Workers	2026-09-27T18:35:54.2071814Z       --experimental-route-zones, --x-route-zones  Experimental: Enable the --zone and --zone-id flags to attach a zone to the routes passed via --route  [boolean] [default: false]
+Build and deploy	Deploy to Cloudflare Workers	2026-09-27T18:35:54.2073114Z       --zone, --zones                              Experimental (requires --x-route-zones): Zone name for the routes passed via --route. Pass one value to apply it to all routes, or one value per --route in the same order  [array]
+Build and deploy	Deploy to Cloudflare Workers	2026-09-27T18:35:54.2075039Z       --zone-id, --zone-ids                        Experimental (requires --x-route-zones): Zone ID for the routes passed via --route. Pass one value to apply it to all routes, or one value per --route in the same order  [array]
+Build and deploy	Deploy to Cloudflare Workers	2026-09-27T18:35:54.2075800Z       --domains, --domain                          Custom domains to deploy to  [array]
+Build and deploy	Deploy to Cloudflare Workers	2026-09-27T18:35:54.2076606Z       --metafile                                   Path to output build metadata from esbuild. If flag is used without a path, defaults to 'bundle-meta.json' inside the directory specified by --outdir.  [string]
+Build and deploy	Deploy to Cloudflare Workers	2026-09-27T18:35:54.2077357Z       --logpush                                    Send Trace Events from this Worker to Workers Logpush.
+Build and deploy	Deploy to Cloudflare Workers	2026-09-27T18:35:54.2077897Z                                                    This will not configure a corresponding Logpush job automatically.  [boolean]
+Build and deploy	Deploy to Cloudflare Workers	2026-09-27T18:35:54.2078489Z       --old-asset-ttl                              Expire old assets in given seconds rather than immediate deletion.  [number]
+Build and deploy	Deploy to Cloudflare Workers	2026-09-27T18:35:54.2079142Z       --dispatch-namespace                         Name of a dispatch namespace to deploy the Worker to (Workers for Platforms)  [string]
+Build and deploy	Deploy to Cloudflare Workers	2026-09-27T18:35:54.2080580Z       --containers-rollout                         Rollout strategy for Containers changes. If set to immediate, it will override `rollout_percentage_steps` if configured and roll out to 100% of instances in one step. If set to none, the Worker will be deployed without building or updating any Containers.  [choices: "immediate", "gradual", "none"]
+Build and deploy	Deploy to Cloudflare Workers	2026-09-27T18:35:54.2081809Z       --autoconfig                                 Enables framework detection and automatic configuration when deploying  [boolean] [default: true]
+Build and deploy	Deploy to Cloudflare Workers	2026-09-27T18:35:54.2084995Z Metrics dispatcher: Posting data {"deviceId":"42fd3217-513a-46b4-ba02-55893120893f","event":"wrangler command started","timestamp":1790534154201,"properties":{"amplitude_session_id":1790534154114,"amplitude_event_id":0,"wranglerVersion":"4.142.0","wranglerMajorVersion":4,"wranglerMinorVersion":142,"wranglerPatchVersion":0,"osPlatform":"Linux","osVersion":"#22-Ubuntu SMP Mon Jul 27 17:24:03 UTC 2026","nodeVersion":24,"packageManager":"npm","isFirstUsage":true,"configFileType":"jsonc","isCI":true,"isPagesCI":false,"isWorkersCI":false,"isInteractive":false,"hasAssets":true,"agent":null,"argsUsed":[],"argsCombination":"","sanitizedCommand":"","sanitizedArgs":{},"currentAgentSkillsInstalled":null}}
+Build and deploy	Deploy to Cloudflare Workers	2026-09-27T18:35:54.2091235Z Metrics dispatcher: Posting data {"deviceId":"42fd3217-513a-46b4-ba02-55893120893f","event":"wrangler command errored","timestamp":1790534154208,"properties":{"amplitude_session_id":1790534154114,"amplitude_event_id":1,"wranglerVersion":"4.142.0","wranglerMajorVersion":4,"wranglerMinorVersion":142,"wranglerPatchVersion":0,"osPlatform":"Linux","osVersion":"#22-Ubuntu SMP Mon Jul 27 17:24:03 UTC 2026","nodeVersion":24,"packageManager":"npm","isFirstUsage":false,"configFileType":"jsonc","isCI":true,"isPagesCI":false,"isWorkersCI":false,"isInteractive":false,"hasAssets":true,"agent":null,"argsUsed":[],"argsCombination":"","sanitizedCommand":"","sanitizedArgs":{},"durationMs":16,"errorType":"CommandLineArgsError","errorMessage":"yargs validation error","currentAgentSkillsInstalled":null}}
+Build and deploy	Deploy to Cloudflare Workers	2026-09-27T18:35:54.2794962Z 🪵  Logs were written to "/home/runner/.config/.wrangler/logs/wrangler-2026-09-27_18-35-53_931.log"
+Build and deploy	Deploy to Cloudflare Workers	2026-09-27T18:35:54.3411377Z ##[error]Process completed with exit code 1.
