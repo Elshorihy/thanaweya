@@ -361,3 +361,40 @@ html[dir="ltr"] .whatsappChannelCta{
     width:100%!important;
   }
 }
+
+
+/* Sidebar is intentionally pinned to the RIGHT in every language. */
+.app > aside{
+  position:fixed !important;
+  top:0 !important;
+  right:0 !important;
+  left:auto !important;
+  inset-inline-start:auto !important;
+  inset-inline-end:0 !important;
+  direction:rtl !important;
+}
+.app > main{
+  margin-right:255px !important;
+  margin-left:0 !important;
+  width:calc(100% - 255px) !important;
+}
+@media(max-width:950px){
+  .app > aside{
+    right:0 !important;
+    left:auto !important;
+    width:76px !important;
+  }
+  .app > main{
+    margin-right:76px !important;
+    margin-left:0 !important;
+    width:calc(100% - 76px) !important;
+  }
+}
+@media(max-width:620px){
+  .app > aside{display:none !important}
+  .app > main{
+    margin-right:0 !important;
+    margin-left:0 !important;
+    width:100% !important;
+  }
+}
