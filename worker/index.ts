@@ -109,6 +109,8 @@ export default {
         }
         if(url.pathname==="/api/owner/stats" && request.method==="GET") {
           const u=await userFrom(request,env); if(!u) return json({error:"يجب تسجيل الدخول"},401);
+          const owner=await env.DB.prepare("SELECT id FROM users ORDER BY created_at ASC LIMIT 1").first<any>();
+          if(!owner || owner.id!==u.id) return json({error:"غير مصرح"},403);
           await env.DB.prepare("CREATE TABLE IF NOT EXISTS site_visits (id INTEGER PRIMARY KEY AUTOINCREMENT, day TEXT NOT NULL, visitor_hash TEXT NOT NULL, created_at INTEGER NOT NULL)").run();
           await env.DB.prepare("CREATE UNIQUE INDEX IF NOT EXISTS idx_site_visits_unique ON site_visits(day,visitor_hash)").run();
           const total=(await env.DB.prepare("SELECT COUNT(*) AS n FROM site_visits").first<any>())?.n||0;
