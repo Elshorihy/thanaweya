@@ -36,6 +36,34 @@
     <!-- Bing Webmaster: ضع قيمة التحقق هنا عند الحصول عليها. -->
     <meta name="msvalidate.01" content="" />
 
+    <style>
+      .whatsappChannelCta{
+        position:fixed;
+        left:20px;
+        bottom:20px;
+        z-index:10001;
+        display:inline-flex;
+        align-items:center;
+        gap:9px;
+        padding:11px 15px;
+        border-radius:999px;
+        background:#25D366;
+        color:#fff;
+        font:800 14px/1.2 system-ui,-apple-system,"Segoe UI",sans-serif;
+        text-decoration:none;
+        box-shadow:0 8px 24px rgba(0,0,0,.28);
+        border:1px solid rgba(255,255,255,.2);
+        direction:rtl;
+        transition:transform .15s ease,box-shadow .15s ease;
+      }
+      .whatsappChannelCta:hover{transform:translateY(-2px);box-shadow:0 11px 28px rgba(0,0,0,.34)}
+      .whatsappChannelCta:active{transform:translateY(0)}
+      .whatsappChannelCta svg{flex:0 0 23px}
+      @media(max-width:620px){
+        .whatsappChannelCta{left:12px;bottom:80px;padding:10px 12px;font-size:12px}
+      }
+    </style>
+
     <title>ثانويه | منصة مذاكرة وتنظيم 3 ثانوي</title>
 
     <script type="application/ld+json">
