@@ -1,0 +1,144 @@
+/* Thanaweya RTL hardening layer — loaded after the main stylesheet */
+html[dir="rtl"]{direction:rtl}
+html[dir="rtl"],html[dir="rtl"] body{direction:rtl}
+html[dir="rtl"] body{margin:0;text-align:right}
+html[dir="rtl"] .app{direction:rtl}
+html[dir="rtl"] aside{
+  right:auto;
+  left:auto;
+  inset-inline-start:auto;
+  inset-inline-end:0;
+  border-left:0;
+  border-right:0;
+  border-inline-start:1px solid #1f2937;
+}
+html[dir="rtl"] main{
+  margin-left:0;
+  margin-right:255px;
+  margin-inline-start:0;
+  margin-inline-end:255px;
+}
+html[dir="rtl"] header,
+html[dir="rtl"] .hero,
+html[dir="rtl"] .title,
+html[dir="rtl"] .cardhead,
+html[dir="rtl"] .taskrow,
+html[dir="rtl"] .reviewrow,
+html[dir="rtl"] .listrow,
+html[dir="rtl"] .accountBox,
+html[dir="rtl"] .missionHero,
+html[dir="rtl"] .subjectTreeHead,
+html[dir="rtl"] .unitHead{
+  direction:rtl;
+}
+html[dir="rtl"] .search{direction:rtl}
+html[dir="rtl"] .search input,
+html[dir="rtl"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="file"]),
+html[dir="rtl"] textarea,
+html[dir="rtl"] select{
+  direction:rtl;
+  text-align:right;
+}
+html[dir="rtl"] input[type="number"],
+html[dir="rtl"] input[type="time"],
+html[dir="rtl"] input[type="date"],
+html[dir="rtl"] input[type="url"],
+html[dir="rtl"] input[type="color"]{
+  direction:ltr;
+  text-align:left;
+}
+html[dir="rtl"] input[type="checkbox"],
+html[dir="rtl"] input[type="radio"]{direction:ltr}
+html[dir="rtl"] button{direction:rtl}
+html[dir="rtl"] .brand,
+html[dir="rtl"] nav button,
+html[dir="rtl"] .actions,
+html[dir="rtl"] .quick,
+html[dir="rtl"] .choices,
+html[dir="rtl"] .daychips,
+html[dir="rtl"] .focuscontrols{
+  direction:rtl;
+}
+html[dir="rtl"] .brand{flex-direction:row}
+html[dir="rtl"] nav button{justify-content:flex-start;text-align:right}
+html[dir="rtl"] .taskrow>div:nth-child(2),
+html[dir="rtl"] .reviewrow>div:first-child,
+html[dir="rtl"] .listrow>div:first-child{min-width:0}
+html[dir="rtl"] .taskstatus{margin-inline-start:0}
+html[dir="rtl"] .filterlabel{direction:rtl}
+html[dir="rtl"] .barrow{
+  direction:rtl;
+  grid-template-columns:100px minmax(0,1fr) 55px;
+}
+html[dir="rtl"] .barrow>div{direction:rtl}
+html[dir="rtl"] .calday{align-items:flex-start;text-align:right}
+html[dir="rtl"] .calendar>b{text-align:center}
+html[dir="rtl"] .siteFooter,
+html[dir="rtl"] .footerContact{direction:rtl}
+html[dir="rtl"] .fab{
+  left:auto;
+  right:25px;
+}
+html[dir="rtl"] .toast{
+  left:50%;
+  right:auto;
+  transform:translateX(-50%);
+}
+html[dir="rtl"] .bottomNav{
+  direction:rtl;
+}
+html[dir="rtl"] .bottomNav button{direction:rtl}
+html[dir="rtl"] .lessonTreeRow{
+  direction:rtl;
+}
+html[dir="rtl"] .lessonTreeRow>div{
+  direction:rtl;
+  text-align:right;
+}
+html[dir="rtl"] .lessonTreeRow input,
+html[dir="rtl"] .unitHead input,
+html[dir="rtl"] .subjectedit{
+  direction:rtl;
+  text-align:right;
+}
+html[dir="rtl"] .sourceCard,
+html[dir="rtl"] .sourceMain,
+html[dir="rtl"] .sourceMain .cardhead{
+  direction:rtl;
+}
+html[dir="rtl"] .sourceIcon{flex:0 0 48px}
+html[dir="rtl"] .sourceMain{min-width:0}
+html[dir="rtl"] .focuspage{direction:rtl}
+html[dir="rtl"] .oncard,
+html[dir="rtl"] .modal{direction:rtl}
+html[dir="rtl"] .oncard label,
+html[dir="rtl"] form label{direction:rtl;text-align:right}
+html[dir="rtl"] .searchitem{text-align:right;direction:rtl}
+html[dir="rtl"] code,
+html[dir="rtl"] pre{direction:ltr;text-align:left}
+html[dir="rtl"] [dir="ltr"]{direction:ltr}
+html[dir="rtl"] .actions button,
+html[dir="rtl"] .quick button,
+html[dir="rtl"] .choices button{
+  white-space:nowrap;
+}
+@media(max-width:950px){
+  html[dir="rtl"] main{
+    margin-left:0;
+    margin-right:76px;
+    margin-inline-start:0;
+    margin-inline-end:76px;
+  }
+}
+@media(max-width:620px){
+  html[dir="rtl"] main{
+    margin-right:0;
+    margin-left:0;
+    margin-inline:0;
+  }
+  html[dir="rtl"] .fab{
+    right:15px;
+    left:auto;
+  }
+  html[dir="rtl"] .actions button{justify-content:center}
+}
