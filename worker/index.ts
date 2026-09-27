@@ -92,19 +92,6 @@ export default {
         if(request.method==="OPTIONS") return new Response(null,{status:204,headers:{"access-control-allow-origin":url.origin,"access-control-allow-credentials":"true","access-control-allow-methods":"GET,POST,PUT,OPTIONS","access-control-allow-headers":"content-type"}});
         // Owner panel uses one fixed account and its own HttpOnly cookie.
         // It does not create a user/session record and does not depend on the site's normal auth.
-        if(url.pathname==="/api/owner/login" && request.method==="POST") {
-          const b=await body(request), email=cleanEmail(b?.email), password=String(b?.password||"");
-          if(email!==OWNER_EMAIL || !(await verifyPassword(password,OWNER_SALT,OWNER_PASSWORD_HASH))) return json({error:"الإيميل أو كلمة السر غير صحيحة"},401);
-          return json({user:{email:OWNER_EMAIL,name:OWNER_NAME}},{headers:{"set-cookie":ownerCookie(OWNER_PASSWORD_HASH)}});
-        }
-        if(url.pathname==="/api/owner/me" && request.method==="GET") {
-          return ownerCookieValue(request)===OWNER_PASSWORD_HASH
-            ? json({user:{email:OWNER_EMAIL,name:OWNER_NAME}})
-            : json({user:null});
-        }
-        if(url.pathname==="/api/owner/logout" && request.method==="POST") {
-          return json({ok:true},{headers:{"set-cookie":clearOwnerCookie()}});
-        }
         if(url.pathname==="/api/health") {
           try { await ensureSchema(env); await env.DB.prepare("SELECT 1 AS ok").first(); return json({ok:true,db:true}); }
           catch(e) { console.error("D1 health check failed",e); return json({ok:false,db:false,error:"D1 binding/database is not available. Check the DB binding in Cloudflare."},503); }
@@ -139,7 +126,6 @@ export default {
           return json({ok:true},{headers:{"set-cookie":clearCookie()}});
         }
         if(url.pathname==="/api/owner/stats" && request.method==="GET") {
-          if(ownerCookieValue(request)!==OWNER_PASSWORD_HASH) return json({error:"يجب تسجيل الدخول بحساب المالك"},401);
           await env.DB.prepare("CREATE TABLE IF NOT EXISTS site_visits (id INTEGER PRIMARY KEY AUTOINCREMENT, day TEXT NOT NULL, visitor_hash TEXT NOT NULL, created_at INTEGER NOT NULL)").run();
           await env.DB.prepare("CREATE UNIQUE INDEX IF NOT EXISTS idx_site_visits_unique ON site_visits(day,visitor_hash)").run();
           const total=(await env.DB.prepare("SELECT COUNT(*) AS n FROM site_visits").first<any>())?.n||0;
