@@ -74,17 +74,16 @@ function App(){
  useEffect(()=>{
  document.documentElement.dir=s.settings.language==='ar'?'rtl':'ltr';
  document.documentElement.lang=s.settings.language;
- document.body.className=s.settings.theme==='light'?'light':'';
- if(s.settings.language!=='en')return;
+ const applyTheme=()=>{const light=s.settings.theme==='light'||(s.settings.theme==='system'&&window.matchMedia?.('(prefers-color-scheme: light)').matches);document.body.className=light?'light':''};applyTheme();const media=window.matchMedia?.('(prefers-color-scheme: light)');const onThemeChange=()=>{if(s.settings.theme==='system')applyTheme()};media?.addEventListener?.('change',onThemeChange);if(s.settings.language!=='en')return;
  const run=()=>applyEnglish(document.body);
  run();
  const ob=new MutationObserver(run);
  ob.observe(document.body,{subtree:true,childList:true});
- return()=>ob.disconnect();
+ return()=>{ob.disconnect();media?.removeEventListener?.('change',onThemeChange)};
 },[s.settings.language,s.settings.theme]);
  useEffect(()=>{if('serviceWorker'in navigator)navigator.serviceWorker.register('/sw.js').catch(()=>{});const h=(e:any)=>{e.preventDefault();setInstallEvent(e)};window.addEventListener('beforeinstallprompt',h);const installed=()=>setInstallEvent(null);window.addEventListener('appinstalled',installed);return()=>{window.removeEventListener('beforeinstallprompt',h);window.removeEventListener('appinstalled',installed)}},[]);
  useEffect(()=>{if(!running||!focusEnd)return;let cancelled=false;const key='thanaweya_focus_end';try{localStorage.setItem(key,String(focusEnd))}catch{};const tick=()=>{if(cancelled)return;const end=Number(localStorage.getItem(key)||focusEnd);const left=Math.max(0,Math.ceil((end-Date.now())/1000));setFocusLeft(left);if(left<=0){cancelled=true;try{localStorage.removeItem(key)}catch{};setRunning(false);setFocusEnd(null);addSession(Math.max(1,Math.round(focusTotalSeconds/60)),'focus',focusSubjectId,focusLessonId||undefined);notify('🔥 خلصت جلسة المذاكرة!');setFocusLeft(s.settings.break*60);return}window.setTimeout(tick,200)};tick();const sync=()=>{if(document.visibilityState==='visible'||document.hasFocus())tick()};document.addEventListener('visibilitychange',sync);window.addEventListener('focus',sync);return()=>{cancelled=true;document.removeEventListener('visibilitychange',sync);window.removeEventListener('focus',sync)}},[running,focusEnd,focusTotalSeconds,focusSubjectId,focusLessonId,s.settings.break]);
- useEffect(()=>{if(!s.onboarded)return;const now=new Date(),hm=now.toTimeString().slice(0,5),ds=today();const send=(kind:string,msg:string,enabled:boolean)=>{const k=ds+'|'+kind;if(enabled&&!s.sentNotifications.includes(k)){notify(msg);setS(x=>({...x,sentNotifications:[...x.sentNotifications.slice(-150),k]}))}};if(hm===s.settings.notificationTime){const pending=s.tasks.filter(t=>t.date===ds&&t.status!=='completed').length;send('study','📚 وقت المذاكرة — عندك '+pending+' مهام النهارده.',s.settings.study)}if(hm===s.settings.startTime)send('morning','☀️ صباح الخير — خطتك لليوم جاهزة.',s.settings.morning);const overdue=s.tasks.filter(t=>t.date<ds&&t.status!=='completed').length;if(hm===s.settings.notificationTime&&overdue)send('overdue','⚠️ عندك '+overdue+' مهام متأخرة.',s.settings.overdue);const due=s.lessons.filter(l=>l.nextReviewAt&&l.nextReviewAt<=ds).length;if(hm===s.settings.notificationTime&&due)send('review','🧠 عندك '+due+' مراجعات مستحقة.',s.settings.review);if(hm==='23:00')send('end','📊 خلصت '+s.tasks.filter(t=>t.date===ds&&t.status==='completed').length+' مهام النهارده.',s.settings.endDay)},[s,s.tasks,s.lessons]);
+ useEffect(()=>{if(!s.onboarded)return;const check=()=>{const now=new Date(),hm=now.toTimeString().slice(0,5),ds=today();const send=(kind:string,msg:string,enabled:boolean)=>{const k=ds+'|'+kind;if(enabled&&!s.sentNotifications.includes(k)){notify(msg);setS(x=>({...x,s.sentNotifications:[...x.sentNotifications.slice(-150),k]}))}};if(hm===s.settings.notificationTime){const pending=s.tasks.filter(t=>t.date===ds&&t.status!=='completed').length;send('study','📚 وقت المذاكرة — عندك '+pending+' مهام النهارده.',s.settings.study)}if(hm===s.settings.startTime)send('morning','☀️ صباح الخير — خطتك لليوم جاهزة.',s.settings.morning);const overdue=s.tasks.filter(t=>t.date<ds&&t.status!=='completed').length;if(hm===s.settings.notificationTime&&overdue)send('overdue','⚠️ عندك '+overdue+' مهام متأخرة.',s.settings.overdue);const due=s.lessons.filter(l=>l.nextReviewAt&&l.nextReviewAt<=ds).length;if(hm===s.settings.notificationTime&&due)send('review','🧠 عندك '+due+' مراجعات مستحقة.',s.settings.review);if(hm==='23:00')send('end','📊 خلصت '+s.tasks.filter(t=>t.date===ds&&t.status==='completed').length+' مهام النهارده.',s.settings.endDay)};check();const timer=window.setInterval(check,15000);return()=>window.clearInterval(timer)},[s.onboarded,s.settings.notificationTime,s.settings.startTime,s.settings.study,s.settings.morning,s.settings.overdue,s.settings.review,s.settings.endDay,s.tasks,s.lessons,s.sentNotifications]);
  const lessonMap=useMemo(()=>Object.fromEntries(s.lessons.map(x=>[x.id,x])),[s.lessons]);const subMap=useMemo(()=>Object.fromEntries(s.subjects.map(x=>[x.id,x])),[s.subjects]);
  const todayTasks=s.tasks.filter(x=>x.date===today()),doneToday=todayTasks.filter(x=>x.status==='completed').length,totalMin=s.sessions.reduce((a,x)=>a+x.duration,0),progress=s.lessons.length?Math.round(s.lessons.filter(x=>x.status==='completed').length/s.lessons.length*100):0,streak=calcStreak(s),level=Math.floor(s.xp/100)+1;
  function update(p:Partial<Store>){setS(x=>({...x,...p}))} function notify(m:string){setNotice(m);if('Notification'in window&&Notification.permission==='granted')new Notification(m);setTimeout(()=>setNotice(''),3500)}
@@ -99,11 +98,11 @@ function App(){
 function deleteUnit(uid:string){
  if(!window.confirm(s.settings.language==='ar'?'حذف الوحدة سيحذف الدروس والمهام والأسئلة المرتبطة بها. هل تريد المتابعة؟':'Deleting this unit will also remove its lessons, tasks and linked questions. Continue?'))return;
  const lessonIds=s.lessons.filter(l=>l.unitId===uid).map(l=>l.id);
- update({units:s.units.filter(u=>u.id!==uid),lessons:s.lessons.filter(l=>l.unitId!==uid),tasks:s.tasks.filter(t=>!lessonIds.includes(t.lessonId)),questions:s.questions.filter(q=>!q.lessonId||!lessonIds.includes(q.lessonId))})
+ update({units:s.units.filter(u=>u.id!==uid),lessons:s.lessons.filter(l=>l.unitId!==uid),tasks:s.tasks.filter(t=>!lessonIds.includes(t.lessonId)),questions:s.questions.filter(q=>!q.lessonId||!lessonIds.includes(q.lessonId)),notes:s.notes.filter(n=>!n.lessonId||!lessonIds.includes(n.lessonId)),lectures:s.lectures.filter(x=>!x.lessonId||!lessonIds.includes(x.lessonId)),sessions:s.sessions.filter(x=>!lessonIds.includes(x.lessonId||''))})
 }
 function deleteLesson(lid:string){
  if(!window.confirm(s.settings.language==='ar'?'حذف الدرس سيحذف المهام والأسئلة المرتبطة به. هل تريد المتابعة؟':'Deleting this lesson will also remove its tasks and linked questions. Continue?'))return;
- update({lessons:s.lessons.filter(l=>l.id!==lid),tasks:s.tasks.filter(t=>t.lessonId!==lid),questions:s.questions.filter(q=>q.lessonId!==lid)})
+ update({lessons:s.lessons.filter(l=>l.id!==lid),tasks:s.tasks.filter(t=>t.lessonId!==lid),questions:s.questions.filter(q=>q.lessonId!==lid),notes:s.notes.filter(n=>n.lessonId!==lid),lectures:s.lectures.filter(x=>x.lessonId!==lid),sessions:s.sessions.filter(x=>x.lessonId!==lid)})
 }
  function addLesson(name:string,sid:string,unitName:string,m:number,p:Priority){name=clean(name);unitName=clean(unitName)||'الوحدة الأولى';if(!name||!sid)return;let u=s.units.find(x=>x.subjectId===sid&&x.name===unitName),units=s.units;if(!u){u={id:id(),subjectId:sid,name:unitName};units=[...units,u]}update({units,lessons:[...s.lessons,{id:id(),unitId:u.id,name,estimatedMinutes:Math.max(5,m),status:'not_started',priority:p}]});setModal(null)}
  function addTask(lessonId:string,date:string,m:number,p:Priority){if(!lessonId||!date)return;update({tasks:[...s.tasks,{id:id(),lessonId,date,estimatedMinutes:Math.max(5,m),status:'not_started',priority:p}]});setModal(null)}
@@ -149,7 +148,7 @@ function Dashboard(){const due=s.lessons.filter(l=>l.nextReviewAt&&l.nextReviewA
        <div className="subjectTitle"><span className="subjectDot" style={{background:x.color}}/><input className="subjectedit" value={x.name} onChange={e=>update({subjects:s.subjects.map(y=>y.id===x.id?{...y,name:clean(e.target.value)}:y)})}/></div>
        <div className="actions">
         <button onClick={()=>setModal('unit:'+x.id)}><Plus size={15}/> وحدة</button>
-        <button className="dangerlink" onClick={()=>{const unitIds=units.map(u=>u.id),lessonIds=s.lessons.filter(l=>unitIds.includes(l.unitId)).map(l=>l.id);update({subjects:s.subjects.filter(y=>y.id!==x.id),units:s.units.filter(u=>u.subjectId!==x.id),lessons:s.lessons.filter(l=>!unitIds.includes(l.unitId)),tasks:s.tasks.filter(t=>!lessonIds.includes(t.lessonId)),questions:s.questions.filter(q=>!q.lessonId||!lessonIds.includes(q.lessonId))})}}><Trash2 size={15}/> حذف</button>
+        <button className="dangerlink" onClick={()=>{const unitIds=units.map(u=>u.id),lessonIds=s.lessons.filter(l=>unitIds.includes(l.unitId)).map(l=>l.id);update({subjects:s.subjects.filter(y=>y.id!==x.id),units:s.units.filter(u=>u.subjectId!==x.id),lessons:s.lessons.filter(l=>!unitIds.includes(l.unitId)),tasks:s.tasks.filter(t=>!lessonIds.includes(t.lessonId)),questions:s.questions.filter(q=>!q.lessonId||!lessonIds.includes(q.lessonId)),notes:s.notes.filter(n=>n.subjectId!==x.id),lectures:s.lectures.filter(v=>v.subjectId!==x.id),sessions:s.sessions.filter(v=>v.subjectId!==x.id)})}}><Trash2 size={15}/> حذف</button>
        </div>
       </div>
       <select value={x.priority} onChange={e=>update({subjects:s.subjects.map(y=>y.id===x.id?{...y,priority:e.target.value as Priority}:y)})}><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></select>
@@ -202,7 +201,7 @@ function Dashboard(){const due=s.lessons.filter(l=>l.nextReviewAt&&l.nextReviewA
     notify(s.settings.language==='ar'?'اختار المادة الأول عشان نحفظ تقدمك بشكل صحيح.':'Choose a subject first so your progress is saved correctly.');
     return;
    }
-   const seconds=Math.min(180*60,Math.max(60,Number(focusLeft)||focusMinutes*60));
+   const seconds=Math.min(180*60,Math.max(1,Number(focusLeft)||focusMinutes*60));
    setFocusTotalSeconds(focusMinutes*60);
    const end=Date.now()+seconds*1000;
    setFocusLeft(seconds);setFocusEnd(end);
