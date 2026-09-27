@@ -283,29 +283,43 @@ html[dir="ltr"] .whatsappChannelCta{
   padding-bottom:100px!important;
 }
 
-
-/* Language-owned sidebar positioning: Arabic RIGHT / English LEFT */
-#root .app.lang-ar>aside{
+/* FINAL SIDEBAR POSITION — RIGHT IN BOTH LANGUAGES */
+#root .app>aside{
   left:auto!important;
   right:0!important;
+  inset-inline-start:auto!important;
+  inset-inline-end:0!important;
+  border-left:1px solid #1f2937!important;
+  border-right:0!important;
 }
-#root .app.lang-ar>main{
+#root .app>main{
   margin-left:0!important;
   margin-right:255px!important;
+  width:calc(100% - 255px)!important;
 }
-#root .app.lang-en>aside{
-  left:0!important;
-  right:auto!important;
+
+/* Language changes text direction only; sidebar stays on the right */
+html[dir="rtl"] #root .app>aside{
+  direction:rtl!important;
 }
-#root .app.lang-en>main{
-  margin-left:255px!important;
-  margin-right:0!important;
+html[dir="ltr"] #root .app>aside{
+  direction:ltr!important;
 }
+html[dir="rtl"] #root .app>main{direction:rtl!important}
+html[dir="ltr"] #root .app>main{direction:ltr!important}
+
 @media(max-width:950px){
-  #root .app.lang-ar>main{margin-left:0!important;margin-right:76px!important}
-  #root .app.lang-en>main{margin-left:76px!important;margin-right:0!important}
+  #root .app>aside{width:76px!important}
+  #root .app>main{
+    margin-left:0!important;
+    margin-right:76px!important;
+    width:calc(100% - 76px)!important;
+  }
 }
 @media(max-width:620px){
-  #root .app.lang-ar>main,
-  #root .app.lang-en>main{margin-left:0!important;margin-right:0!important}
+  #root .app>aside{display:none!important}
+  #root .app>main{
+    margin:0 0 68px!important;
+    width:100%!important;
+  }
 }
