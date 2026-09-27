@@ -13,9 +13,17 @@ async function ensureSchema(env:Env){
     await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_sessions_expiry ON sessions(expires_at)").run();
   })().catch(e=>{schemaReady=null;throw e});
   await schemaReady;
+  const owner=await env.DB.prepare("SELECT id FROM users WHERE email=?").bind(OWNER_EMAIL).first<{id:string}>();
+  if(!owner){
+    await env.DB.prepare("INSERT INTO users(id,email,name,password_hash,password_salt,created_at,updated_at) VALUES(?,?,?,?,?,?,?)").bind("owner-"+randomHex(12),OWNER_EMAIL,OWNER_NAME,OWNER_PASSWORD_HASH,OWNER_SALT,Date.now(),Date.now()).run();
+  }
 }
 const COOKIE = "thanaweya_session";
 const SESSION_DAYS = 30;
+const OWNER_EMAIL = "sheenomatp@gmail.com";
+const OWNER_NAME = "Elshori7y";
+const OWNER_SALT = "4a7df80d2e610ac2853c9e18c14e9062";
+const OWNER_PASSWORD_HASH = "256df679a80f59ee741d26871640103f800ff335198a0ecd4b75df58301969f8";
 
 function json(data: unknown, status=200, headers: Record<string,string>={}) {
   return new Response(JSON.stringify(data), {status, headers: {"content-type":"application/json; charset=utf-8", ...headers}});
@@ -108,7 +116,8 @@ export default {
           return json({ok:true},{headers:{"set-cookie":clearCookie()}});
         }
         if(url.pathname==="/api/owner/stats" && request.method==="GET") {
-          
+          const u=await userFrom(request,env);
+          if(!u || u.email!==OWNER_EMAIL) return json({error:"يجب تسجيل الدخول بحساب المالك"},401);
           await env.DB.prepare("CREATE TABLE IF NOT EXISTS site_visits (id INTEGER PRIMARY KEY AUTOINCREMENT, day TEXT NOT NULL, visitor_hash TEXT NOT NULL, created_at INTEGER NOT NULL)").run();
           await env.DB.prepare("CREATE UNIQUE INDEX IF NOT EXISTS idx_site_visits_unique ON site_visits(day,visitor_hash)").run();
           const total=(await env.DB.prepare("SELECT COUNT(*) AS n FROM site_visits").first<any>())?.n||0;
