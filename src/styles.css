@@ -89,3 +89,6 @@ body.light{--bg:#F3F6FB;--surface:#FFFFFF;--surface2:#FFFFFF;--border:#D9E1EC;--
 .smartAction h2{margin:6px 0 4px;font-size:20px}
 .smartAction .primary{flex:0 0 auto}
 @media(max-width:620px){.smartAction{align-items:stretch;flex-direction:column}.smartAction .primary{width:100%;justify-content:center}}
+
+.installAppBtn{font-weight:800}
+.installAppBtn svg{margin-inline-end:2px}
