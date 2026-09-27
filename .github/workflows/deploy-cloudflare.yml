@@ -31,9 +31,12 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Install Wrangler
+        run: npm install --no-save --no-audit --no-fund wrangler@4
+
       - name: Deploy to Cloudflare Workers
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: deploy
+          command: deploy worker/index.ts --config wrangler.jsonc
