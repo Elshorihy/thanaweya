@@ -105,126 +105,180 @@ body.light{--bg:#F3F6FB;--surface:#FFFFFF;--surface2:#FFFFFF;--border:#D9E1EC;--
 .navOrderList{display:grid;gap:8px;margin-top:12px}.navOrderItem{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;border:1px solid var(--border);border-radius:12px;background:var(--panel);cursor:grab;touch-action:none;user-select:none}.navOrderItem.dragging{opacity:.45;transform:scale(.98);cursor:grabbing}.dragHandle{font-size:18px;letter-spacing:-4px;opacity:.55;margin-inline-end:4px}.navOrderItem>span{display:flex;align-items:center;gap:9px}
 
 
-/* Keep the desktop shell aligned with the active language direction. */
-html[dir="ltr"] body{direction:ltr}
-html[dir="ltr"] aside{left:0;right:auto;border-left:0;border-right:1px solid #1f2937}
-html[dir="ltr"] main{margin-left:255px;margin-right:0}
+/* FINAL CLEAN APP SHELL
+   One source of truth for RTL/LTR positioning.
+   Arabic: sidebar right / content left.
+   English: sidebar left / content right.
+*/
 html[dir="rtl"] body{direction:rtl}
-@media(max-width:950px){
-  html[dir="ltr"] aside{left:0;right:auto}
-  html[dir="ltr"] main{margin-left:76px;margin-right:0}
-}
-@media(max-width:620px){
-  html[dir="ltr"] aside{display:none}
-  html[dir="ltr"] main{margin-left:0;margin-right:0}
-}
-/* Definitive RTL/LTR app shell */
-html[dir="rtl"] .app{direction:rtl}
-html[dir="rtl"] aside{inset:0 0 0 auto!important;left:auto!important;right:0!important;border-left:1px solid #1f2937!important;border-right:0!important}
-html[dir="rtl"] main{margin-right:255px!important;margin-left:0!important;width:calc(100% - 255px)!important}
+html[dir="ltr"] body{direction:ltr}
 
-html[dir="ltr"] .app{direction:ltr}
-html[dir="ltr"] aside{inset:0 auto 0 0!important;left:0!important;right:auto!important;border-left:0!important;border-right:1px solid #1f2937!important}
-html[dir="ltr"] main{margin-left:255px!important;margin-right:0!important;width:calc(100% - 255px)!important}
-
-@media(max-width:950px){
-  html[dir="rtl"] aside{inset:0 0 0 auto!important}
-  html[dir="rtl"] main{margin-right:76px!important;margin-left:0!important;width:calc(100% - 76px)!important}
-  html[dir="ltr"] aside{inset:0 auto 0 0!important}
-  html[dir="ltr"] main{margin-left:76px!important;margin-right:0!important;width:calc(100% - 76px)!important}
-}
-@media(max-width:620px){
-  html[dir="rtl"] aside,html[dir="ltr"] aside{display:none!important}
-  html[dir="rtl"] main,html[dir="ltr"] main{margin-left:0!important;margin-right:0!important;width:100%!important}
+#root .app{
+  min-height:100vh;
+  width:100%;
+  display:block;
+  position:relative;
 }
 
-
-/* Absolute RTL/LTR shell lock: layout is based on the actual document direction. */
-html[dir="rtl"] .app>aside{left:auto!important;right:0!important;inset-inline-start:auto!important;inset-inline-end:0!important}
-html[dir="rtl"] .app>main{margin-left:0!important;margin-right:255px!important;width:calc(100% - 255px)!important;direction:rtl!important}
-html[dir="ltr"] .app>aside{left:0!important;right:auto!important;inset-inline-start:0!important;inset-inline-end:auto!important}
-html[dir="ltr"] .app>main{margin-left:255px!important;margin-right:0!important;width:calc(100% - 255px)!important;direction:ltr!important}
-@media(max-width:950px){
- html[dir="rtl"] .app>main{margin-left:0!important;margin-right:76px!important;width:calc(100% - 76px)!important}
- html[dir="ltr"] .app>main{margin-left:76px!important;margin-right:0!important;width:calc(100% - 76px)!important}
-}
-@media(max-width:620px){
- html[dir="rtl"] .app>aside,html[dir="ltr"] .app>aside{display:none!important}
- html[dir="rtl"] .app>main,html[dir="ltr"] .app>main{margin:0 0 68px!important;width:100%!important}
+/* Desktop shell */
+#root .app>aside{
+  position:fixed!important;
+  top:0!important;
+  bottom:0!important;
+  width:255px!important;
+  height:100vh!important;
+  z-index:100!important;
+  box-sizing:border-box!important;
+  overflow-y:auto!important;
+  overflow-x:hidden!important;
 }
 
-/* Language shell hard-lock: English sidebar is physically on the left. */
-.app.lang-en{direction:ltr!important}
-.app.lang-en>aside{left:0!important;right:auto!important;inset-inline-start:0!important;inset-inline-end:auto!important}
-.app.lang-en>main{margin-left:255px!important;margin-right:0!important;width:calc(100% - 255px)!important;direction:ltr!important}
-.app.lang-ar{direction:rtl!important}
-.app.lang-ar>aside{left:auto!important;right:0!important;inset-inline-start:auto!important;inset-inline-end:0!important}
-.app.lang-ar>main{margin-left:0!important;margin-right:255px!important;width:calc(100% - 255px)!important;direction:rtl!important}
-@media(max-width:950px){.app.lang-en>main{margin-left:76px!important;margin-right:0!important;width:calc(100% - 76px)!important}.app.lang-ar>main{margin-left:0!important;margin-right:76px!important;width:calc(100% - 76px)!important}}
-@media(max-width:620px){.app.lang-en>aside,.app.lang-ar>aside{display:none!important}.app.lang-en>main,.app.lang-ar>main{margin:0 0 68px!important;width:100%!important}}
+#root .app>main{
+  min-height:100vh!important;
+  box-sizing:border-box!important;
+  padding-bottom:110px!important;
+  width:calc(100% - 255px)!important;
+}
 
-/* FINAL DASHBOARD RTL LOCK */
-html[dir="rtl"] #root .app.lang-ar>aside{
+/* Arabic = sidebar RIGHT */
+html[dir="rtl"] #root .app>aside{
   left:auto!important;
   right:0!important;
   inset-inline-start:auto!important;
   inset-inline-end:0!important;
+  border-left:1px solid #1f2937!important;
+  border-right:0!important;
   direction:rtl!important;
 }
-html[dir="rtl"] #root .app.lang-ar>main{
+html[dir="rtl"] #root .app>main{
   margin-left:0!important;
   margin-right:255px!important;
-  width:calc(100% - 255px)!important;
   direction:rtl!important;
 }
-html[dir="rtl"] #root .app.lang-ar>aside nav{
-  direction:rtl!important;
-}
-html[dir="rtl"] #root .app.lang-ar>aside nav button{
-  direction:rtl!important;
-  justify-content:flex-start!important;
-  text-align:right!important;
-}
-html[dir="rtl"] #root .app.lang-ar>aside .brand{
-  direction:rtl!important;
-  text-align:right!important;
-}
-html[dir="ltr"] #root .app.lang-en>aside{
+
+/* English = sidebar LEFT */
+html[dir="ltr"] #root .app>aside{
   left:0!important;
   right:auto!important;
   inset-inline-start:0!important;
   inset-inline-end:auto!important;
+  border-left:0!important;
+  border-right:1px solid #1f2937!important;
   direction:ltr!important;
 }
-html[dir="ltr"] #root .app.lang-en>main{
+html[dir="ltr"] #root .app>main{
   margin-left:255px!important;
   margin-right:0!important;
-  width:calc(100% - 255px)!important;
   direction:ltr!important;
 }
-html[dir="ltr"] #root .app.lang-en>aside nav button{
+
+/* Sidebar internals follow the active language */
+html[dir="rtl"] #root .app>aside nav,
+html[dir="rtl"] #root .app>aside .brand{
+  direction:rtl!important;
+  text-align:right!important;
+}
+html[dir="rtl"] #root .app>aside nav button{
+  direction:rtl!important;
+  justify-content:flex-start!important;
+  text-align:right!important;
+}
+html[dir="ltr"] #root .app>aside nav,
+html[dir="ltr"] #root .app>aside .brand{
+  direction:ltr!important;
+  text-align:left!important;
+}
+html[dir="ltr"] #root .app>aside nav button{
   direction:ltr!important;
   justify-content:flex-start!important;
   text-align:left!important;
 }
+
+/* The fixed WhatsApp CTA is centered inside the CONTENT area, never the sidebar. */
+.whatsappChannelCta{
+  position:fixed!important;
+  bottom:18px!important;
+  z-index:9999!important;
+  display:flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  gap:10px!important;
+  box-sizing:border-box!important;
+  padding:11px 18px!important;
+  min-height:46px!important;
+  border-radius:999px!important;
+  color:#fff!important;
+  background:linear-gradient(135deg,#25D366,#128C7E)!important;
+  text-decoration:none!important;
+  font-family:inherit!important;
+  font-weight:800!important;
+  font-size:15px!important;
+  line-height:1.2!important;
+  white-space:nowrap!important;
+  box-shadow:0 8px 30px rgba(0,0,0,.28)!important;
+  transform:translateX(-50%)!important;
+  transition:transform .2s ease,box-shadow .2s ease!important;
+}
+.whatsappChannelCta:hover{
+  transform:translateX(-50%) scale(1.04)!important;
+  box-shadow:0 10px 34px rgba(0,0,0,.36)!important;
+}
+html[dir="rtl"] .whatsappChannelCta{
+  left:calc(50% - 127.5px)!important;
+  right:auto!important;
+}
+html[dir="ltr"] .whatsappChannelCta{
+  left:calc(50% + 127.5px)!important;
+  right:auto!important;
+}
+.whatsappChannelCta svg{flex:0 0 auto!important}
+
+/* Tablet / compact desktop */
 @media(max-width:950px){
-  html[dir="rtl"] #root .app.lang-ar>main{
-    margin-left:0!important;
+  #root .app>aside{width:76px!important}
+  html[dir="rtl"] #root .app>main{
     margin-right:76px!important;
+    margin-left:0!important;
     width:calc(100% - 76px)!important;
   }
-  html[dir="ltr"] #root .app.lang-en>main{
+  html[dir="ltr"] #root .app>main{
     margin-left:76px!important;
     margin-right:0!important;
     width:calc(100% - 76px)!important;
   }
+  html[dir="rtl"] .whatsappChannelCta{
+    left:calc(50% - 38px)!important;
+  }
+  html[dir="ltr"] .whatsappChannelCta{
+    left:calc(50% + 38px)!important;
+  }
 }
+
+/* Mobile: no fixed sidebar, full-width content */
 @media(max-width:620px){
-  html[dir="rtl"] #root .app.lang-ar>aside,
-  html[dir="ltr"] #root .app.lang-en>aside{display:none!important}
-  html[dir="rtl"] #root .app.lang-ar>main,
-  html[dir="ltr"] #root .app.lang-en>main{
+  #root .app>aside{
+    display:none!important;
+  }
+  #root .app>main{
     margin:0 0 68px!important;
     width:100%!important;
+    padding-bottom:105px!important;
   }
+  html[dir="rtl"] .whatsappChannelCta,
+  html[dir="ltr"] .whatsappChannelCta{
+    left:50%!important;
+    right:auto!important;
+    bottom:12px!important;
+    max-width:calc(100vw - 24px)!important;
+    padding:10px 14px!important;
+    font-size:14px!important;
+  }
+}
+
+/* Keep focus content clear of the floating CTA. */
+.focuspage{
+  scroll-margin-bottom:110px;
+}
+.focuspage.runningFocus{
+  padding-bottom:100px!important;
 }
