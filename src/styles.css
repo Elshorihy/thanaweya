@@ -162,3 +162,69 @@ html[dir="ltr"] .app>main{margin-left:255px!important;margin-right:0!important;w
 .app.lang-ar>main{margin-left:0!important;margin-right:255px!important;width:calc(100% - 255px)!important;direction:rtl!important}
 @media(max-width:950px){.app.lang-en>main{margin-left:76px!important;margin-right:0!important;width:calc(100% - 76px)!important}.app.lang-ar>main{margin-left:0!important;margin-right:76px!important;width:calc(100% - 76px)!important}}
 @media(max-width:620px){.app.lang-en>aside,.app.lang-ar>aside{display:none!important}.app.lang-en>main,.app.lang-ar>main{margin:0 0 68px!important;width:100%!important}}
+
+/* FINAL DASHBOARD RTL LOCK */
+html[dir="rtl"] #root .app.lang-ar>aside{
+  left:auto!important;
+  right:0!important;
+  inset-inline-start:auto!important;
+  inset-inline-end:0!important;
+  direction:rtl!important;
+}
+html[dir="rtl"] #root .app.lang-ar>main{
+  margin-left:0!important;
+  margin-right:255px!important;
+  width:calc(100% - 255px)!important;
+  direction:rtl!important;
+}
+html[dir="rtl"] #root .app.lang-ar>aside nav{
+  direction:rtl!important;
+}
+html[dir="rtl"] #root .app.lang-ar>aside nav button{
+  direction:rtl!important;
+  justify-content:flex-start!important;
+  text-align:right!important;
+}
+html[dir="rtl"] #root .app.lang-ar>aside .brand{
+  direction:rtl!important;
+  text-align:right!important;
+}
+html[dir="ltr"] #root .app.lang-en>aside{
+  left:0!important;
+  right:auto!important;
+  inset-inline-start:0!important;
+  inset-inline-end:auto!important;
+  direction:ltr!important;
+}
+html[dir="ltr"] #root .app.lang-en>main{
+  margin-left:255px!important;
+  margin-right:0!important;
+  width:calc(100% - 255px)!important;
+  direction:ltr!important;
+}
+html[dir="ltr"] #root .app.lang-en>aside nav button{
+  direction:ltr!important;
+  justify-content:flex-start!important;
+  text-align:left!important;
+}
+@media(max-width:950px){
+  html[dir="rtl"] #root .app.lang-ar>main{
+    margin-left:0!important;
+    margin-right:76px!important;
+    width:calc(100% - 76px)!important;
+  }
+  html[dir="ltr"] #root .app.lang-en>main{
+    margin-left:76px!important;
+    margin-right:0!important;
+    width:calc(100% - 76px)!important;
+  }
+}
+@media(max-width:620px){
+  html[dir="rtl"] #root .app.lang-ar>aside,
+  html[dir="ltr"] #root .app.lang-en>aside{display:none!important}
+  html[dir="rtl"] #root .app.lang-ar>main,
+  html[dir="ltr"] #root .app.lang-en>main{
+    margin:0 0 68px!important;
+    width:100%!important;
+  }
+}
