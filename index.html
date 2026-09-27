@@ -95,6 +95,17 @@
       <span>انضم لقناتنا على واتساب</span>
     </a>
 
+    <script>
+      // Private owner shortcut: Ctrl+Shift+A opens the Cloudflare analytics dashboard.
+      // It is intentionally invisible to site visitors and does not alter the UI.
+      window.addEventListener('keydown', function(e){
+        if(e.ctrlKey && e.shiftKey && e.key.toLowerCase()==='a'){
+          e.preventDefault();
+          window.open('https://dash.cloudflare.com/?to=/:account/workers/services', '_blank', 'noopener,noreferrer');
+        }
+      });
+    </script>
+
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
