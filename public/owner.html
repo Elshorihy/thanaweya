@@ -9,11 +9,11 @@
 </style>
 </head>
 <body><main class="wrap"><section class="card">
-<div class="top"><div><h1>إحصائيات الزوار 📊</h1><p class="muted">لوحة خاصة — افتح الرابط مباشرة.</p></div><button id="refresh" class="btn">تحديث</button></div>
+<div class="top"><div><h1>إحصائيات الزيارات 📊</h1><p class="muted">لوحة خاصة — بتعرض عدد مرات فتح الموقع.</p></div><button id="refresh" class="btn">تحديث</button></div>
 <div class="grid">
-<div class="stat"><span>إجمالي الزيارات الفريدة بالأيام</span><b id="total">—</b></div>
-<div class="stat"><span>زوار اليوم</span><b id="today">—</b></div>
-<div class="stat"><span>زوار آخر 7 أيام</span><b id="week">—</b></div>
+<div class="stat"><span>إجمالي الزيارات</span><b id="total">—</b></div>
+<div class="stat"><span>زيارات اليوم</span><b id="today">—</b></div>
+<div class="stat"><span>زيارات آخر 7 أيام</span><b id="week">—</b></div>
 </div><p id="error" class="error"></p>
 </section></main>
 <script>
@@ -24,9 +24,9 @@ async function loadStats(){
     const r=await fetch("/api/owner/stats",{cache:"no-store"});
     let j={};try{j=await r.json()}catch{}
     if(!r.ok)throw Error(j.error||"حدث خطأ");
-    $("total").textContent=Number(j.totalVisitors||0).toLocaleString("ar-EG");
-    $("today").textContent=Number(j.todayVisitors||0).toLocaleString("ar-EG");
-    $("week").textContent=Number(j.last7DaysVisitors||0).toLocaleString("ar-EG");
+    $("total").textContent=Number(j.totalVisits||0).toLocaleString("ar-EG");
+    $("today").textContent=Number(j.todayVisits||0).toLocaleString("ar-EG");
+    $("week").textContent=Number(j.last7DaysVisits||0).toLocaleString("ar-EG");
   }catch(e){$("error").textContent=e.message||"تعذر تحميل الإحصائيات"}
 }
 $("refresh").onclick=loadStats;loadStats();
