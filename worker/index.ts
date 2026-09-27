@@ -60,6 +60,17 @@ async function body(request:Request){try{return await request.json() as any}catc
 export default {
   async fetch(request:Request,env:Env):Promise<Response> {
     const url=new URL(request.url);
+    // Count real site visits without exposing analytics data to visitors.
+    if(request.method==="GET" && !url.pathname.startsWith("/api/") && !url.pathname.includes(".")) {
+      try {
+        await env.DB.prepare("CREATE TABLE IF NOT EXISTS site_visits (id INTEGER PRIMARY KEY AUTOINCREMENT, day TEXT NOT NULL, visitor_hash TEXT NOT NULL, created_at INTEGER NOT NULL)").run();
+        await env.DB.prepare("CREATE UNIQUE INDEX IF NOT EXISTS idx_site_visits_unique ON site_visits(day,visitor_hash)").run();
+        const ip=request.headers.get("CF-Connecting-IP")||"unknown";
+        const day=new Date().toISOString().slice(0,10);
+        const visitorHash=await sha256(day+"|"+ip);
+        await env.DB.prepare("INSERT OR IGNORE INTO site_visits(day,visitor_hash,created_at) VALUES(?,?,?)").bind(day,visitorHash,Date.now()).run();
+      } catch(e) { console.error("Visit counter failed",e); }
+    }
     if(url.pathname.startsWith("/api/")) {
       try {
         if(request.method==="OPTIONS") return new Response(null,{status:204,headers:{"access-control-allow-origin":url.origin,"access-control-allow-credentials":"true","access-control-allow-methods":"GET,POST,PUT,OPTIONS","access-control-allow-headers":"content-type"}});
@@ -95,6 +106,16 @@ export default {
         if(url.pathname==="/api/auth/logout" && request.method==="POST") {
           const token=cookieValue(request); if(token) await env.DB.prepare("DELETE FROM sessions WHERE token_hash=?").bind(await sha256(token)).run();
           return json({ok:true},{headers:{"set-cookie":clearCookie()}});
+        }
+        if(url.pathname==="/api/owner/stats" && request.method==="GET") {
+          const u=await userFrom(request,env); if(!u) return json({error:"يجب تسجيل الدخول"},401);
+          await env.DB.prepare("CREATE TABLE IF NOT EXISTS site_visits (id INTEGER PRIMARY KEY AUTOINCREMENT, day TEXT NOT NULL, visitor_hash TEXT NOT NULL, created_at INTEGER NOT NULL)").run();
+          await env.DB.prepare("CREATE UNIQUE INDEX IF NOT EXISTS idx_site_visits_unique ON site_visits(day,visitor_hash)").run();
+          const total=(await env.DB.prepare("SELECT COUNT(*) AS n FROM site_visits").first<any>())?.n||0;
+          const todayCount=(await env.DB.prepare("SELECT COUNT(*) AS n FROM site_visits WHERE day=?").bind(new Date().toISOString().slice(0,10)).first<any>())?.n||0;
+          const weekCount=(await env.DB.prepare("SELECT COUNT(*) AS n FROM site_visits WHERE day>=date(?, '-6 day')").bind(new Date().toISOString().slice(0,10)).first<any>())?.n||0;
+          const visits=(await env.DB.prepare("SELECT COUNT(*) AS n FROM site_visits").first<any>())?.n||0;
+          return json({totalVisitors:total,todayVisitors:todayCount,last7DaysVisitors:weekCount,trackedVisits:visits});
         }
         if(url.pathname==="/api/data" && (request.method==="GET"||request.method==="PUT")) {
           const u=await userFrom(request,env); if(!u) return json({error:"يجب تسجيل الدخول"},401);
