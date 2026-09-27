@@ -283,30 +283,37 @@ html[dir="ltr"] .whatsappChannelCta{
   padding-bottom:100px!important;
 }
 
-/* FINAL SIDEBAR POSITION — RIGHT IN BOTH LANGUAGES */
+/* FINAL SIDEBAR POSITION — RIGHT IN BOTH LANGUAGES
+   Position is independent of language. The .app carries the language class,
+   so this does not depend on html[dir].
+*/
 #root .app>aside{
+  position:fixed!important;
+  top:0!important;
+  bottom:0!important;
   left:auto!important;
   right:0!important;
   inset-inline-start:auto!important;
   inset-inline-end:0!important;
+  width:255px!important;
+  height:100vh!important;
   border-left:1px solid #1f2937!important;
   border-right:0!important;
+  z-index:100!important;
 }
 #root .app>main{
   margin-left:0!important;
   margin-right:255px!important;
   width:calc(100% - 255px)!important;
 }
-
-/* Language changes text direction only; sidebar stays on the right */
-html[dir="rtl"] #root .app>aside{
-  direction:rtl!important;
+#root .app.lang-ar>aside,
+#root .app.lang-en>aside{
+  left:auto!important;
+  right:0!important;
+  direction:inherit!important;
 }
-html[dir="ltr"] #root .app>aside{
-  direction:ltr!important;
-}
-html[dir="rtl"] #root .app>main{direction:rtl!important}
-html[dir="ltr"] #root .app>main{direction:ltr!important}
+#root .app.lang-ar>main{direction:rtl!important}
+#root .app.lang-en>main{direction:ltr!important}
 
 @media(max-width:950px){
   #root .app>aside{width:76px!important}
