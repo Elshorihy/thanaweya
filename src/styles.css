@@ -103,3 +103,18 @@ body.light{--bg:#F3F6FB;--surface:#FFFFFF;--surface2:#FFFFFF;--border:#D9E1EC;--
 .uploadProgress{margin:14px 0;padding:14px;border-radius:14px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1)}.uploadProgress b{display:block;text-align:center;margin-bottom:10px;font-size:15px}.uploadProgressTrack{height:10px;border-radius:999px;overflow:hidden;background:rgba(255,255,255,.1)}.uploadProgressTrack i{display:block;height:100%;border-radius:999px;background:currentColor;transition:width .18s ease}.uploadProgressMeta{display:flex;justify-content:space-between;gap:10px;margin-top:8px;font-size:12px}.spin{animation:thanaweyaSpin 1s linear infinite}@keyframes thanaweyaSpin{to{transform:rotate(360deg)}}
 
 .navOrderList{display:grid;gap:8px;margin-top:12px}.navOrderItem{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;border:1px solid var(--border);border-radius:12px;background:var(--panel);cursor:grab;touch-action:none;user-select:none}.navOrderItem.dragging{opacity:.45;transform:scale(.98);cursor:grabbing}.dragHandle{font-size:18px;letter-spacing:-4px;opacity:.55;margin-inline-end:4px}.navOrderItem>span{display:flex;align-items:center;gap:9px}
+
+
+/* Keep the desktop shell aligned with the active language direction. */
+html[dir="ltr"] body{direction:ltr}
+html[dir="ltr"] aside{left:0;right:auto;border-left:0;border-right:1px solid #1f2937}
+html[dir="ltr"] main{margin-left:255px;margin-right:0}
+html[dir="rtl"] body{direction:rtl}
+@media(max-width:950px){
+  html[dir="ltr"] aside{left:0;right:auto}
+  html[dir="ltr"] main{margin-left:76px;margin-right:0}
+}
+@media(max-width:620px){
+  html[dir="ltr"] aside{display:none}
+  html[dir="ltr"] main{margin-left:0;margin-right:0}
+}
