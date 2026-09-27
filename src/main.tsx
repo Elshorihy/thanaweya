@@ -120,11 +120,23 @@ function App(){
  const media=window.matchMedia?.('(prefers-color-scheme: light)');
  const onThemeChange=()=>{if(s.settings.theme==='system')applyTheme()};
  media?.addEventListener?.('change',onThemeChange);
- const run=()=>applyEnglish(document.body,s.settings.language==='en');
+ let observer:MutationObserver|null=null;
+ let timer:number|undefined;
+ let scheduled=false;
+ const run=()=>{
+   if(scheduled)return;
+   scheduled=true;
+   timer=window.setTimeout(()=>{
+     scheduled=false;
+     observer?.disconnect();
+     applyEnglish(document.body,s.settings.language==='en');
+     observer?.observe(document.body,{subtree:true,childList:true,attributes:true,attributeFilter:['placeholder','aria-label','title','alt']});
+   },80);
+ };
+ observer=new MutationObserver(run);
+ observer.observe(document.body,{subtree:true,childList:true,attributes:true,attributeFilter:['placeholder','aria-label','title','alt']});
  run();
- const ob=new MutationObserver(run);
- ob.observe(document.body,{subtree:true,childList:true,characterData:true,attributes:true,attributeFilter:['placeholder','aria-label','title','alt']});
- return()=>{ob.disconnect();media?.removeEventListener?.('change',onThemeChange)};
+ return()=>{if(timer)window.clearTimeout(timer);observer?.disconnect();media?.removeEventListener?.('change',onThemeChange)};
 },[s.settings.language,s.settings.theme]);
  useEffect(()=>{if('serviceWorker'in navigator)navigator.serviceWorker.register('/sw.js?v=7',{updateViaCache:'none'}).catch(()=>{});const h=(e:any)=>{e.preventDefault();setInstallEvent(e)};window.addEventListener('beforeinstallprompt',h);const installed=()=>setInstallEvent(null);window.addEventListener('appinstalled',installed);return()=>{window.removeEventListener('beforeinstallprompt',h);window.removeEventListener('appinstalled',installed)}},[]);
  useEffect(()=>{if(!running||!focusEnd)return;let cancelled=false;const key='thanaweya_focus_end';try{localStorage.setItem(key,String(focusEnd))}catch{};const tick=()=>{if(cancelled)return;const end=Number(localStorage.getItem(key)||focusEnd);const left=Math.max(0,Math.ceil((end-Date.now())/1000));setFocusLeft(left);if(left<=0){cancelled=true;try{localStorage.removeItem(key)}catch{};setRunning(false);setFocusEnd(null);addSession(Math.max(1,Math.round(focusTotalSeconds/60)),'focus',focusSubjectId,focusLessonId||undefined);notify('🔥 خلصت جلسة المذاكرة!');setFocusLeft(s.settings.break*60);return}window.setTimeout(tick,200)};tick();const sync=()=>{if(document.visibilityState==='visible'||document.hasFocus())tick()};document.addEventListener('visibilitychange',sync);window.addEventListener('focus',sync);return()=>{cancelled=true;document.removeEventListener('visibilitychange',sync);window.removeEventListener('focus',sync)}},[running,focusEnd,focusTotalSeconds,focusSubjectId,focusLessonId,s.settings.break]);
