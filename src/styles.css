@@ -210,3 +210,97 @@ html[dir="ltr"] body{direction:ltr}
     width:100%!important;
   }
 }
+
+
+/* FINAL RESPONSIVE PASS: desktop, tablet and phone */
+html,body,#root{max-width:100%;overflow-x:hidden}
+img,video,iframe{max-width:100%}
+button,input,select,textarea{max-width:100%}
+.card,.sourceCard,.subjectTree,.unitTree,.oncard,.modal{min-width:0}
+.cardhead,.title,.hero,.missionHero,.accountBox{min-width:0}
+.cardhead>*,.title>div,.hero>div,.sourceMain,.sourceCardActions{min-width:0}
+.card h2,.title h1,.hero h1,.sourceMain h2,.subjectedit,.unitHead input,.lessonTreeRow input{overflow-wrap:anywhere;word-break:break-word}
+
+@media (min-width:951px){
+  #root .app > main{padding-left:clamp(22px,3vw,42px)!important;padding-right:clamp(22px,3vw,42px)!important}
+  .statsgrid{grid-template-columns:repeat(4,minmax(0,1fr))}
+}
+
+@media (min-width:621px) and (max-width:950px){
+  #root .app > main{padding:18px!important}
+  header{height:auto;min-height:52px;flex-wrap:wrap}
+  .search{min-width:220px}
+  .headActions{flex-wrap:wrap}
+  .hero,.title{align-items:flex-start}
+  .hero .primary,.title .actions{flex:0 0 auto}
+  .sourceStats{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .sourceGrid{grid-template-columns:1fr}
+  .calendar{overflow-x:auto;grid-template-columns:repeat(7,minmax(82px,1fr))}
+}
+
+@media (max-width:620px){
+  #root .app > main{padding:10px!important;padding-bottom:82px!important}
+  header{height:auto;min-height:48px;gap:7px;margin-bottom:15px;align-items:stretch}
+  .mobileMenu{flex:0 0 42px;justify-content:center}
+  .search{min-width:0;padding:0 8px}
+  .search input{padding:10px 5px;font-size:13px}
+  .headActions{gap:5px;flex:0 0 auto}
+  .headActions button{padding:8px;min-width:40px;justify-content:center}
+  .headActions button.installAppBtn{font-size:11px;max-width:115px;white-space:nowrap;overflow:hidden}
+  .headActions button.installAppBtn svg{display:none}
+  .hero,.title{width:100%;gap:12px;margin-bottom:16px}
+  .hero h1,.title h1{font-size:clamp(22px,7vw,28px);line-height:1.25}
+  .hero p,.title p{font-size:12px;line-height:1.5}
+  .title .actions{width:100%;display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}
+  .title .actions button{width:100%;justify-content:center;min-width:0}
+  .statsgrid{gap:8px}
+  .stat{padding:12px;grid-template-columns:34px minmax(0,1fr);column-gap:8px}
+  .stat .iconbox{width:34px;height:34px}
+  .stat b{font-size:17px}
+  .card{padding:13px;border-radius:14px}
+  .cardhead{gap:8px;align-items:flex-start}
+  .cardhead h2{font-size:15px;line-height:1.35}
+  .cardhead button{padding:7px 8px}
+  .grid2,.settingsgrid,.sourceGrid,.sourceStats,.memoryGrid,.rpgWorlds{grid-template-columns:1fr}
+  .taskrow,.reviewrow,.listrow{gap:8px;align-items:flex-start}
+  .taskrow>div:nth-child(2),.reviewrow>div:first-child,.listrow>div:first-child{min-width:0}
+  .taskrow .taskstatus{max-width:105px}
+  .actions{width:100%;gap:6px}
+  .actions button,.actions .upload{flex:1;min-width:0;justify-content:center}
+  .filterrow{display:grid;grid-template-columns:1fr;gap:7px}
+  .filterrow>*{min-width:0;width:100%}
+  .sourceCard{display:block}
+  .sourceIcon{width:auto;height:auto;margin-bottom:8px;display:block}
+  .sourceCardActions{flex-wrap:wrap}
+  .videoEmbed{aspect-ratio:16/9}
+  .lessonTreeRow{grid-template-columns:minmax(0,1fr) auto}
+  .lessonTreeRow>div{min-width:0}
+  .lessonTreeRow small{font-size:10px}
+  .formgrid{grid-template-columns:1fr}
+  .quick{padding-bottom:2px}
+  .quick button{flex:0 0 auto}
+  .barrow{grid-template-columns:minmax(70px,90px) minmax(0,1fr) 42px;gap:7px}
+  .modal{width:calc(100vw - 20px);max-height:calc(100vh - 20px);padding:14px}
+  .overlay{padding:10px}
+  .onboard{padding:10px}
+  .oncard{padding:22px 16px}
+  .focuspage.runningFocus{width:100%;min-height:calc(100vh - 88px);padding:22px 10px}
+  .focusTopbar{width:100%}
+  .focuspage.runningFocus h1{font-size:clamp(58px,18vw,105px)}
+  .focuscontrols{width:100%;flex-wrap:wrap}
+  .focuscontrols button{flex:1;justify-content:center;min-width:100px}
+  .siteFooter{margin:22px 0 78px;padding:18px 8px}
+  .footerContact a{min-width:0;flex:1}
+  .quickmodal{grid-template-columns:1fr}
+  .calendar{width:100%;overflow-x:auto;padding-bottom:4px}
+  .calendar>*{min-width:0}
+}
+
+@media (max-width:380px){
+  #root .app > main{padding:8px!important}
+  .headActions button{min-width:36px;padding:7px}
+  .statsgrid{grid-template-columns:1fr}
+  .title .actions{grid-template-columns:1fr}
+  .footerContact{display:grid;grid-template-columns:1fr 1fr;width:100%}
+  .footerContact>span{grid-column:1/-1}
+}
