@@ -139,6 +139,20 @@ html[dir="ltr"] main{margin-left:255px!important;margin-right:0!important;width:
 }
 
 
+/* Absolute RTL/LTR shell lock: layout is based on the actual document direction. */
+html[dir="rtl"] .app>aside{left:auto!important;right:0!important;inset-inline-start:auto!important;inset-inline-end:0!important}
+html[dir="rtl"] .app>main{margin-left:0!important;margin-right:255px!important;width:calc(100% - 255px)!important;direction:rtl!important}
+html[dir="ltr"] .app>aside{left:0!important;right:auto!important;inset-inline-start:0!important;inset-inline-end:auto!important}
+html[dir="ltr"] .app>main{margin-left:255px!important;margin-right:0!important;width:calc(100% - 255px)!important;direction:ltr!important}
+@media(max-width:950px){
+ html[dir="rtl"] .app>main{margin-left:0!important;margin-right:76px!important;width:calc(100% - 76px)!important}
+ html[dir="ltr"] .app>main{margin-left:76px!important;margin-right:0!important;width:calc(100% - 76px)!important}
+}
+@media(max-width:620px){
+ html[dir="rtl"] .app>aside,html[dir="ltr"] .app>aside{display:none!important}
+ html[dir="rtl"] .app>main,html[dir="ltr"] .app>main{margin:0 0 68px!important;width:100%!important}
+}
+
 /* Language shell hard-lock: English sidebar is physically on the left. */
 .app.lang-en{direction:ltr!important}
 .app.lang-en>aside{left:0!important;right:auto!important;inset-inline-start:0!important;inset-inline-end:auto!important}
