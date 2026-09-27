@@ -19,12 +19,7 @@ async function ensureSchema(env:Env){
   }
 }
 const COOKIE = "thanaweya_session";
-const OWNER_COOKIE = "thanaweya_owner";
 const SESSION_DAYS = 30;
-const OWNER_EMAIL = "sheenomatp@gmail.com";
-const OWNER_NAME = "Elshori7y";
-const OWNER_SALT = "4a7df80d2e610ac2853c9e18c14e9062";
-const OWNER_PASSWORD_HASH = "256df679a80f59ee741d26871640103f800ff335198a0ecd4b75df58301969f8";
 
 function json(data: unknown, status=200, headers: Record<string,string>={}) {
   return new Response(JSON.stringify(data), {status, headers: {"content-type":"application/json; charset=utf-8", ...headers}});
@@ -58,14 +53,6 @@ async function userFrom(request:Request,env:Env) {
 }
 const sessionCookie=(token:string)=>`${COOKIE}=${token}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${SESSION_DAYS*86400}`;
 const clearCookie=()=>`${COOKIE}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`;
-const ownerCookie=(value:string)=>`${OWNER_COOKIE}=${value}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${SESSION_DAYS*86400}`;
-const clearOwnerCookie=()=>`${OWNER_COOKIE}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`;
-function ownerCookieValue(request:Request){
-  const raw=request.headers.get("Cookie")||"";
-  for(const part of raw.split(";")) { const [k,...rest]=part.trim().split("="); if(k===OWNER_COOKIE) return rest.join("="); }
-  return "";
-}
-
 async function createSession(userId:string,env:Env) {
   const token=randomHex(32), hash=await sha256(token), expires=Date.now()+SESSION_DAYS*86400000;
   await env.DB.prepare("INSERT INTO sessions(id,user_id,token_hash,expires_at,created_at) VALUES(?,?,?,?,?)").bind(randomHex(16),userId,hash,expires,Date.now()).run();
@@ -76,16 +63,14 @@ async function body(request:Request){try{return await request.json() as any}catc
 export default {
   async fetch(request:Request,env:Env):Promise<Response> {
     const url=new URL(request.url);
-    // Count real site visits without exposing analytics data to visitors.
-    if(request.method==="GET" && !url.pathname.startsWith("/api/") && !url.pathname.includes(".")) {
+    // Count every real HTML page view (not assets/API), excluding the private owner page.
+    const acceptsHtml=(request.headers.get("accept")||"").includes("text/html");
+    if(request.method==="GET" && !url.pathname.startsWith("/api/") && url.pathname!=="/owner.html" && acceptsHtml) {
       try {
-        await env.DB.prepare("CREATE TABLE IF NOT EXISTS site_visits (id INTEGER PRIMARY KEY AUTOINCREMENT, day TEXT NOT NULL, visitor_hash TEXT NOT NULL, created_at INTEGER NOT NULL)").run();
-        await env.DB.prepare("CREATE UNIQUE INDEX IF NOT EXISTS idx_site_visits_unique ON site_visits(day,visitor_hash)").run();
-        const ip=request.headers.get("CF-Connecting-IP")||"unknown";
+        await env.DB.prepare("CREATE TABLE IF NOT EXISTS site_page_views (id INTEGER PRIMARY KEY AUTOINCREMENT, day TEXT NOT NULL, created_at INTEGER NOT NULL)").run();
         const day=new Date().toISOString().slice(0,10);
-        const visitorHash=await sha256(day+"|"+ip);
-        await env.DB.prepare("INSERT OR IGNORE INTO site_visits(day,visitor_hash,created_at) VALUES(?,?,?)").bind(day,visitorHash,Date.now()).run();
-      } catch(e) { console.error("Visit counter failed",e); }
+        await env.DB.prepare("INSERT INTO site_page_views(day,created_at) VALUES(?,?)").bind(day,Date.now()).run();
+      } catch(e) { console.error("Page view counter failed",e); }
     }
     if(url.pathname.startsWith("/api/")) {
       try {
@@ -126,13 +111,11 @@ export default {
           return json({ok:true},{headers:{"set-cookie":clearCookie()}});
         }
         if(url.pathname==="/api/owner/stats" && request.method==="GET") {
-          await env.DB.prepare("CREATE TABLE IF NOT EXISTS site_visits (id INTEGER PRIMARY KEY AUTOINCREMENT, day TEXT NOT NULL, visitor_hash TEXT NOT NULL, created_at INTEGER NOT NULL)").run();
-          await env.DB.prepare("CREATE UNIQUE INDEX IF NOT EXISTS idx_site_visits_unique ON site_visits(day,visitor_hash)").run();
-          const total=(await env.DB.prepare("SELECT COUNT(*) AS n FROM site_visits").first<any>())?.n||0;
-          const todayCount=(await env.DB.prepare("SELECT COUNT(*) AS n FROM site_visits WHERE day=?").bind(new Date().toISOString().slice(0,10)).first<any>())?.n||0;
-          const weekCount=(await env.DB.prepare("SELECT COUNT(*) AS n FROM site_visits WHERE day>=date(?, '-6 day')").bind(new Date().toISOString().slice(0,10)).first<any>())?.n||0;
-          const visits=(await env.DB.prepare("SELECT COUNT(*) AS n FROM site_visits").first<any>())?.n||0;
-          return json({totalVisitors:total,todayVisitors:todayCount,last7DaysVisitors:weekCount,trackedVisits:visits});
+          await env.DB.prepare("CREATE TABLE IF NOT EXISTS site_page_views (id INTEGER PRIMARY KEY AUTOINCREMENT, day TEXT NOT NULL, created_at INTEGER NOT NULL)").run();
+          const total=(await env.DB.prepare("SELECT COUNT(*) AS n FROM site_page_views").first<any>())?.n||0;
+          const todayCount=(await env.DB.prepare("SELECT COUNT(*) AS n FROM site_page_views WHERE day=?").bind(new Date().toISOString().slice(0,10)).first<any>())?.n||0;
+          const weekCount=(await env.DB.prepare("SELECT COUNT(*) AS n FROM site_page_views WHERE day>=date(?, '-6 day')").bind(new Date().toISOString().slice(0,10)).first<any>())?.n||0;
+          return json({totalVisits:total,todayVisits:todayCount,last7DaysVisits:weekCount});
         }
         if(url.pathname==="/api/data" && (request.method==="GET"||request.method==="PUT")) {
           const u=await userFrom(request,env); if(!u) return json({error:"يجب تسجيل الدخول"},401);
