@@ -1,52 +1,24 @@
 <!doctype html>
 <html lang="ar" dir="rtl">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Thanaweya OS — Owner Stats</title>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Thanaweya OS — إحصائيات الزوار</title>
 <style>
 :root{color-scheme:dark;--bg:#0b1020;--card:#121a2d;--line:#26314a;--text:#f5f7fb;--muted:#9aa7bf;--accent:#7c3aed}
-*{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(circle at 20% 0%,#1c1740,transparent 35%),var(--bg);font-family:system-ui,-apple-system,Segoe UI,Tahoma,sans-serif;color:var(--text);display:grid;place-items:center;padding:20px}
-.wrap{width:min(900px,100%)}.card{background:rgba(18,26,45,.92);border:1px solid var(--line);border-radius:22px;padding:24px;box-shadow:0 18px 60px rgba(0,0,0,.3)}
-h1{margin:0 0 6px;font-size:28px}.muted{color:var(--muted);margin:0 0 20px}.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.stat{padding:20px;border:1px solid var(--line);border-radius:16px;background:#0e1628}.stat span{display:block;color:var(--muted);font-size:13px}.stat b{display:block;font-size:34px;margin-top:8px}.form{max-width:430px;margin:auto}label{display:block;margin:12px 0;color:var(--muted)}input{width:100%;padding:12px;border-radius:12px;border:1px solid var(--line);background:#0b1020;color:var(--text);font:inherit;margin-top:6px}button{border:0;border-radius:12px;padding:12px 16px;background:var(--accent);color:#fff;font:inherit;font-weight:800;cursor:pointer;width:100%;margin-top:8px}.secondary{background:#202b43}.row{display:flex;gap:8px;margin-top:14px}.row button{margin:0}.hidden{display:none!important}.error{color:#ff8f9d;min-height:22px;margin-top:10px}.top{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:18px}.logout{width:auto;background:#202b43;margin:0}.refresh{width:auto;margin:0}.note{margin-top:18px;color:var(--muted);font-size:12px;line-height:1.7}@media(max-width:650px){.grid{grid-template-columns:1fr}.stat b{font-size:28px}.top{align-items:stretch;flex-direction:column}.top .row{width:100%}}
+*{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(circle at 20% 0%,#1c1740,transparent 35%),var(--bg);font-family:system-ui,-apple-system,Segoe UI,Tahoma,sans-serif;color:var(--text);display:grid;place-items:center;padding:20px}.wrap{width:min(900px,100%)}.card{background:rgba(18,26,45,.94);border:1px solid var(--line);border-radius:22px;padding:24px;box-shadow:0 18px 60px rgba(0,0,0,.3)}h1{margin:0 0 6px;font-size:28px}.muted{color:var(--muted);margin:0 0 20px}.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.stat{padding:20px;border:1px solid var(--line);border-radius:16px;background:#0e1628}.stat span{display:block;color:var(--muted);font-size:13px}.stat b{display:block;font-size:34px;margin-top:8px}.top{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:18px}.btn{border:0;border-radius:12px;padding:11px 16px;background:var(--accent);color:#fff;font:inherit;font-weight:800;cursor:pointer}.note{margin-top:18px;color:var(--muted);font-size:12px;line-height:1.7}.error{color:#ff8f9d}@media(max-width:650px){.grid{grid-template-columns:1fr}.top{align-items:stretch;flex-direction:column}.btn{width:100%}}
 </style>
 </head>
-<body>
-<main class="wrap">
-<section id="auth" class="card form">
-<h1>لوحة المالك 🔒</h1>
-<p class="muted">صفحة خاصة لمتابعة زوار Thanaweya OS.</p>
-<form id="authForm">
-<label>الإيميل<input id="email" type="email" autocomplete="email" required></label>
-<label>كلمة السر<input id="password" type="password" autocomplete="current-password" minlength="8" required></label>
-<label id="nameWrap" class="hidden">الاسم<input id="name" type="text" autocomplete="name"></label>
-<button id="submit">تسجيل الدخول</button>
-</form>
-<div id="error" class="error"></div>
-<div class="row"><button id="mode" class="secondary" type="button">أول مرة؟ إنشاء حساب المالك</button></div>
-<p class="note">الحساب الأول الذي يتم إنشاؤه هو حساب المالك، وإحصائيات الزيارات لا تظهر للحسابات الأخرى.</p>
-</section>
-<section id="stats" class="card hidden">
-<div class="top"><div><h1>إحصائيات الزوار 📊</h1><p class="muted">الأرقام دي خاصة بيك ومش بتظهر لزوار الموقع.</p></div><div class="row"><button id="refresh" class="refresh">تحديث</button><button id="logout" class="logout">خروج</button></div></div>
+<body><main class="wrap"><section class="card">
+<div class="top"><div><h1>إحصائيات الزوار 📊</h1><p class="muted">صفحة مخفية — مش موجود لها رابط ظاهر في الموقع.</p></div><button id="refresh" class="btn">تحديث</button></div>
 <div class="grid">
-<div class="stat"><span>إجمالي الزوار الفريدين المسجلين</span><b id="total">—</b></div>
+<div class="stat"><span>إجمالي الزيارات الفريدة بالأيام</span><b id="total">—</b></div>
 <div class="stat"><span>زوار اليوم</span><b id="today">—</b></div>
 <div class="stat"><span>زوار آخر 7 أيام</span><b id="week">—</b></div>
 </div>
-<p class="note">العدّ يعتمد على زيارات الموقع الفعلية، والرقم اليومي يستخدم عنوان الاتصال كمعرّف مؤقت؛ لذلك هو إحصاء تقريبي وليس تعريفًا شخصيًا للزوار.</p>
-</section>
-</main>
+<p id="error" class="note error"></p>
+<p class="note">الصفحة لا تحتاج تسجيل دخول؛ الوصول إليها يعتمد على معرفة الرابط فقط. الأرقام تقريبية، والعدّ اليومي يعتمد على معرّف اتصال مجزّأ ولا يخزن عنوان IP الخام.</p>
+</section></main>
 <script>
 const $=id=>document.getElementById(id);
-let register=false;
-function showStats(){ $('auth').classList.add('hidden'); $('stats').classList.remove('hidden'); loadStats(); }
-async function me(){try{const r=await fetch('/api/auth/me',{credentials:'include'});const j=await r.json();if(j.user)showStats()}catch{}}
-async function loadStats(){const r=await fetch('/api/owner/stats',{credentials:'include'});const j=await r.json();if(r.ok){$('total').textContent=Number(j.totalVisitors||0).toLocaleString('ar-EG');$('today').textContent=Number(j.todayVisitors||0).toLocaleString('ar-EG');$('week').textContent=Number(j.last7DaysVisitors||0).toLocaleString('ar-EG')}else{$('stats').classList.add('hidden');$('auth').classList.remove('hidden');$('error').textContent=j.error||'غير مصرح';}}
-$('mode').onclick=()=>{register=!register;$('nameWrap').classList.toggle('hidden',!register);$('submit').textContent=register?'إنشاء حساب المالك':'تسجيل الدخول';$('mode').textContent=register?'لدي حساب بالفعل':'أول مرة؟ إنشاء حساب المالك';$('error').textContent=''};
-$('authForm').onsubmit=async e=>{e.preventDefault();$('error').textContent='';const body={email:$('email').value,password:$('password').value};let url='/api/auth/login';if(register){url='/api/auth/register';body.name=$('name').value||'مالك Thanaweya'}const r=await fetch(url,{method:'POST',headers:{'content-type':'application/json'},credentials:'include',body:JSON.stringify(body)});const j=await r.json();if(!r.ok){$('error').textContent=j.error||'حدث خطأ';return}showStats()};
-$('refresh').onclick=loadStats;
-$('logout').onclick=async()=>{await fetch('/api/auth/logout',{method:'POST',credentials:'include'});location.reload()};
-me();
-</script>
-</body>
-</html>
+async function load(){ $('error').textContent=''; try{const r=await fetch('/api/owner/stats',{cache:'no-store'});const j=await r.json();if(!r.ok)throw Error(j.error||'تعذر تحميل الإحصائيات');$('total').textContent=Number(j.totalVisitors||0).toLocaleString('ar-EG');$('today').textContent=Number(j.todayVisitors||0).toLocaleString('ar-EG');$('week').textContent=Number(j.last7DaysVisitors||0).toLocaleString('ar-EG')}catch(e){$('error').textContent=e.message||'حدث خطأ'}}$('refresh').onclick=load;load();
+</script></body></html>
