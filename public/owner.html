@@ -38,9 +38,9 @@ async function api(path,options={}){const r=await fetch(path,{...options,credent
 async function loadStats(){ $('error').textContent=''; try{const j=await api('/api/owner/stats');$('total').textContent=Number(j.totalVisitors||0).toLocaleString('ar-EG');$('today').textContent=Number(j.todayVisitors||0).toLocaleString('ar-EG');$('week').textContent=Number(j.last7DaysVisitors||0).toLocaleString('ar-EG')}catch(e){if(String(e.message).includes('تسجيل الدخول'))showLogin();else $('error').textContent=e.message||'حدث خطأ'}} 
 function showStats(u){$('loginCard').hidden=true;$('statsCard').hidden=false;$('ownerName').textContent=u?.name||'Elshori7y';loadStats()}
 function showLogin(){$('statsCard').hidden=true;$('loginCard').hidden=false}
-async function boot(){try{const j=await api('/api/auth/me');if(j.user)showStats(j.user);else showLogin()}catch{showLogin()}}
-$('loginForm').onsubmit=async e=>{e.preventDefault();$('loginError').textContent='';try{const j=await api('/api/auth/login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({email:$('email').value,password:$('password').value})});if(j.user?.email!=='sheenomatp@gmail.com')throw Error('هذا الحساب ليس حساب المالك');showStats(j.user)}catch(e){$('loginError').textContent=e.message||'تعذر تسجيل الدخول'}};
+async function boot(){try{const j=await api('/api/owner/me');if(j.user)showStats(j.user);else showLogin()}catch{showLogin()}}
+$('loginForm').onsubmit=async e=>{e.preventDefault();$('loginError').textContent='';try{const j=await api('/api/owner/login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({email:$('email').value,password:$('password').value})});if(j.user?.email!=='sheenomatp@gmail.com')throw Error('هذا الحساب ليس حساب المالك');showStats(j.user)}catch(e){$('loginError').textContent=e.message||'تعذر تسجيل الدخول'}};
 $('refresh').onclick=loadStats;
-$('logout').onclick=async()=>{try{await api('/api/auth/logout',{method:'POST'})}finally{showLogin()}};
+$('logout').onclick=async()=>{try{await api('/api/owner/logout',{method:'POST'})}finally{showLogin()}};
 boot();
 </script></body></html>
