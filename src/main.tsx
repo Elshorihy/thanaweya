@@ -168,64 +168,125 @@ function deleteLesson(lid:string){
  function rescue(min:number){const pool=s.tasks.filter(t=>t.status!=='completed').sort((a,b)=>priority(b)-priority(a)||a.date.localeCompare(b.date));let left=min,chosen:Task[]=[];for(const t of pool){if(left<=0)break;chosen.push(t);left-=Math.min(left,t.estimatedMinutes)}setModal(null);setNotice('خطة إنقاذ: '+(chosen.map(x=>lessonMap[x.lessonId]?.name).filter(Boolean).join(' ← ')||'لا توجد مهام مناسبة'))}
  function importCurriculum(file:File){
   const r=new FileReader();
+  r.onerror=()=>notify('تعذر قراءة ملف المنهج: تأكد أن الملف سليم ويمكن فتحه');
   r.onload=()=>{
     try{
       let text=String(r.result||'').replace(/^\uFEFF/,'').trim();
       text=text.replace(/^\s*\`\`\`(?:json)?\s*/i,'').replace(/\s*\`\`\`\s*$/,'').trim();
-      const raw=JSON.parse(text);
-      const unwrap=(value:any):any=>{
-        if(typeof value==='string'){
-          const t=value.replace(/^\uFEFF/,'').trim().replace(/^\s*\`\`\`(?:json)?\s*/i,'').replace(/\s*\`\`\`\s*$/,'').trim();
-          try{return JSON.parse(t)}catch{return value}
-        }
-        return value;
+      if(!text)throw Error('Empty file');
+      const parseMaybe=(value:any):any=>{
+        if(typeof value!=='string')return value;
+        const t=value.replace(/^\uFEFF/,'').trim().replace(/^\s*\`\`\`(?:json)?\s*/i,'').replace(/\s*\`\`\`\s*$/,'').trim();
+        try{return JSON.parse(t)}catch{return value}
       };
-      const root0=unwrap(raw);
-      const root=root0?.curriculum&&typeof root0.curriculum==='object'?unwrap(root0.curriculum):root0;
-      const sourceSubjects=Array.isArray(root)?root:(Array.isArray(root?.subjects)?root.subjects:[]);
-      if(!sourceSubjects.length)throw Error('No subjects array');
+      const raw=parseMaybe(text);
+      const unwrap=(value:any):any=>{
+        let v=parseMaybe(value);
+        for(let i=0;i<3&&typeof v==='object'&&v;i++){
+          const next=v.curriculum??v.data??v.content;
+          if(next===undefined)break;
+          const parsed=parseMaybe(next);
+          if(parsed===v)break;
+          v=parsed;
+        }
+        return v;
+      };
+      const root=unwrap(raw);
+      const sourceSubjects=Array.isArray(root)
+        ?root
+        :(Array.isArray(root?.subjects)?root.subjects
+        :(Array.isArray(root?.materials)?root.materials
+        :(Array.isArray(root?.subjects_list)?root.subjects_list:[])));
+      if(!sourceSubjects.length)throw Error('No subjects');
+
       const subjects:Subject[]=[],units:Unit[]=[],lessons:Lesson[]=[];
-      const addUnit=(a:any,sid:string,u:any)=>{
-        if(!u||typeof u!=='object')return;
-        const unitName=u.name??u.unit_name??u.title;
+      const addLesson=(uid:string,l:any)=>{
+        const value=unwrap(l);
+        const lessonName=typeof value==='string'
+          ?value.trim()
+          :(value?.name??value?.lesson_name??value?.title??value?.topic);
+        if(!lessonName)return;
+        const estimatedMinutes=typeof value==='object'
+          ?Number(value.estimatedMinutes??value.estimated_minutes??value.duration??value.minutes??value.time)||45
+          :45;
+        const lp=typeof value==='object'?value.priority:undefined;
+        lessons.push({
+          id:typeof value==='object'&&value.id?String(value.id):id(),
+          unitId:uid,
+          name:clean(String(lessonName)),
+          estimatedMinutes:Math.max(5,estimatedMinutes),
+          status:'not_started',
+          priority:['low','medium','high'].includes(lp)?lp:'medium'
+        });
+      };
+      const addUnit=(sid:string,u:any,unitFallbackName?:string)=>{
+        const value=unwrap(u);
+        if(typeof value==='string'){
+          const name=value.trim();
+          if(!name)return;
+          const uid=id();
+          units.push({id:uid,subjectId:sid,name:clean(name)});
+          return uid;
+        }
+        if(!value||typeof value!=='object')return;
+        const unitName=value.name??value.unit_name??value.title??value.unit??unitFallbackName;
         if(!unitName)return;
         const uid=id();
         units.push({id:uid,subjectId:sid,name:clean(String(unitName))});
-        const sourceLessons=Array.isArray(u.lessons)?u.lessons:(Array.isArray(u.topics)?u.topics:[]);
-        for(const l of sourceLessons){
-          const lessonName=typeof l==='string'?l:(l?.name??l?.lesson_name??l?.title);
-          if(!lessonName)continue;
-          const estimatedMinutes=typeof l==='object'?Number(l.estimatedMinutes??l.estimated_minutes??l.duration??l.minutes)||45:45;
-          const lp=typeof l==='object'?l.priority:undefined;
-          lessons.push({id:typeof l==='object'&&l.id?String(l.id):id(),unitId:uid,name:clean(String(lessonName)),estimatedMinutes:Math.max(5,estimatedMinutes),status:'not_started',priority:['low','medium','high'].includes(lp)?lp:'medium'});
-        }
+        const sourceLessons=Array.isArray(value.lessons)?value.lessons
+          :(Array.isArray(value.topics)?value.topics
+          :(Array.isArray(value.chapters)?value.chapters:[]));
+        for(const l of sourceLessons)addLesson(uid,l);
+        return uid;
       };
+
       for(const a0 of sourceSubjects){
         const a=unwrap(a0);
+        if(typeof a==='string'){
+          const sid=id();
+          subjects.push({id:sid,name:clean(a),color:'#7C3AED',priority:'medium'});
+          continue;
+        }
         if(!a||typeof a!=='object')continue;
-        const subjectName=a.name??a.subject_name??a.title;
+        const subjectName=a.name??a.subject_name??a.subject??a.title??a.material;
         if(!subjectName)continue;
         const sid=id();
-        subjects.push({id:sid,name:clean(String(subjectName)),color:typeof a.color==='string'?a.color:'#7C3AED',priority:['low','medium','high'].includes(a.priority)?a.priority:'medium'});
-        if(Array.isArray(a.units))for(const u of a.units)addUnit(a,sid,unwrap(u));
-        if(Array.isArray(a.branches))for(const b0 of a.branches){
+        subjects.push({
+          id:sid,
+          name:clean(String(subjectName)),
+          color:typeof a.color==='string'?a.color:'#7C3AED',
+          priority:['low','medium','high'].includes(a.priority)?a.priority:'medium'
+        });
+
+        const directUnits=Array.isArray(a.units)?a.units:[];
+        for(const u of directUnits)addUnit(sid,u);
+
+        const branches=Array.isArray(a.branches)?a.branches
+          :(Array.isArray(a.sections)?a.sections:[]);
+        for(const b0 of branches){
           const b=unwrap(b0);
           if(!b||typeof b!=='object')continue;
-          if(Array.isArray(b.units))for(const u of b.units)addUnit(a,sid,unwrap(u));
-          if(Array.isArray(b.lessons))addUnit(a,sid,{name:b.name??b.branch_name??b.title,lessons:b.lessons});
+          if(Array.isArray(b.units))for(const u of b.units)addUnit(sid,u);
+          if(Array.isArray(b.lessons))addUnit(sid,{name:b.name??b.branch_name??b.title??'Branch',lessons:b.lessons});
+          if(Array.isArray(b.topics))addUnit(sid,{name:b.name??b.branch_name??b.title??'Branch',lessons:b.topics});
         }
+
+        if(Array.isArray(a.lessons))addUnit(sid,{name:'General',lessons:a.lessons});
+        if(Array.isArray(a.topics))addUnit(sid,{name:'General',lessons:a.topics});
       }
+
       if(!subjects.length)throw Error('No valid subjects');
       if(!units.length||!lessons.length)throw Error('No valid units or lessons');
+
       update({subjects,units,lessons});
       notify('تم استيراد المنهج بنجاح');
-      setModal(null)
+      setModal(null);
     }catch(e){
       console.error('Curriculum import failed',e);
-      notify('ملف المنهج غير صالح: تأكد أنه JSON صحيح ويحتوي على subjects → units/branches → lessons')
+      notify('ملف المنهج غير صالح: تأكد أنه JSON صحيح ويحتوي على مواد ووحدات ودروس');
     }
   };
-  r.readAsText(file)
+  r.readAsText(file,'utf-8');
  }
 async function exportData(){try{const files:any[]=[];for(const v of [...s.lectures,...s.trashLectures]){if(!v.fileName)continue;const blob=await getLectureFile(v.id);if(!blob)continue;const buf=await blob.arrayBuffer();let bin='';const bytes=new Uint8Array(buf);for(let i=0;i<bytes.length;i+=0x8000)bin+=String.fromCharCode(...bytes.subarray(i,i+0x8000));files.push({id:v.id,name:v.fileName,type:blob.type||'application/octet-stream',data:btoa(bin)})}const payload={...s,backupVersion:2,lectureFiles:files};const b=new Blob([JSON.stringify(payload)],{type:'application/json'}),url=URL.createObjectURL(b),a=document.createElement('a');a.href=url;a.download='thanaweya-os-backup.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);notify('تم تصدير النسخة الاحتياطية بالملفات بنجاح')}catch{notify('حصل خطأ أثناء إنشاء النسخة الاحتياطية')}}
  function importData(f:File){const r=new FileReader();r.onload=async()=>{try{const x=JSON.parse(String(r.result));if(!x||!Array.isArray(x.subjects)||!Array.isArray(x.lessons)||!Array.isArray(x.tasks)||!x.settings)throw Error();const next={...initial,...x,settings:{...initial.settings,...x.settings},lectureFiles:undefined};setS(next);for(const item of Array.isArray(x.lectureFiles)?x.lectureFiles:[]){if(!item?.id||!item?.data)continue;const bin=atob(item.data),bytes=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)bytes[i]=bin.charCodeAt(i);await saveLectureFile(item.id,new File([bytes],item.name||'file',{type:item.type||'application/octet-stream'}))}notify('تم استيراد النسخة الاحتياطية والملفات بنجاح')}catch{notify('ملف النسخة الاحتياطية غير صالح')}};r.readAsText(f)}
