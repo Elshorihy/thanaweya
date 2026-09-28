@@ -170,46 +170,59 @@ function deleteLesson(lid:string){
   const r=new FileReader();
   r.onload=()=>{
     try{
-      let text=String(r.result||'').replace(/^\\uFEFF/,'').trim();
-      if(text.startsWith('\\```')) text=text.replace(/^\\```(?:json)?\\s*/i,'').replace(/\\s*\\```$/,'').trim();
+      let text=String(r.result||'').replace(/^\uFEFF/,'').trim();
+      text=text.replace(/^\s*\`\`\`(?:json)?\s*/i,'').replace(/\s*\`\`\`\s*$/,'').trim();
       const raw=JSON.parse(text);
-      const root=raw?.curriculum&&typeof raw.curriculum==='object'?raw.curriculum:raw;
+      const unwrap=(value:any):any=>{
+        if(typeof value==='string'){
+          const t=value.replace(/^\uFEFF/,'').trim().replace(/^\s*\`\`\`(?:json)?\s*/i,'').replace(/\s*\`\`\`\s*$/,'').trim();
+          try{return JSON.parse(t)}catch{return value}
+        }
+        return value;
+      };
+      const root0=unwrap(raw);
+      const root=root0?.curriculum&&typeof root0.curriculum==='object'?unwrap(root0.curriculum):root0;
       const sourceSubjects=Array.isArray(root)?root:(Array.isArray(root?.subjects)?root.subjects:[]);
-      if(!sourceSubjects.length)throw Error('no subjects');
+      if(!sourceSubjects.length)throw Error('No subjects array');
       const subjects:Subject[]=[],units:Unit[]=[],lessons:Lesson[]=[];
-      for(const a of sourceSubjects){
+      const addUnit=(a:any,sid:string,u:any)=>{
+        if(!u||typeof u!=='object')return;
+        const unitName=u.name??u.unit_name??u.title;
+        if(!unitName)return;
+        const uid=id();
+        units.push({id:uid,subjectId:sid,name:clean(String(unitName))});
+        const sourceLessons=Array.isArray(u.lessons)?u.lessons:(Array.isArray(u.topics)?u.topics:[]);
+        for(const l of sourceLessons){
+          const lessonName=typeof l==='string'?l:(l?.name??l?.lesson_name??l?.title);
+          if(!lessonName)continue;
+          const estimatedMinutes=typeof l==='object'?Number(l.estimatedMinutes??l.estimated_minutes??l.duration??l.minutes)||45:45;
+          const lp=typeof l==='object'?l.priority:undefined;
+          lessons.push({id:typeof l==='object'&&l.id?String(l.id):id(),unitId:uid,name:clean(String(lessonName)),estimatedMinutes:Math.max(5,estimatedMinutes),status:'not_started',priority:['low','medium','high'].includes(lp)?lp:'medium'});
+        }
+      };
+      for(const a0 of sourceSubjects){
+        const a=unwrap(a0);
         if(!a||typeof a!=='object')continue;
         const subjectName=a.name??a.subject_name??a.title;
         if(!subjectName)continue;
-        const sid=String(a.id||id());
+        const sid=id();
         subjects.push({id:sid,name:clean(String(subjectName)),color:typeof a.color==='string'?a.color:'#7C3AED',priority:['low','medium','high'].includes(a.priority)?a.priority:'medium'});
-        const sourceUnits=Array.isArray(a.units)?a.units:[];
-        const branches=Array.isArray(a.branches)?a.branches:[];
-        const normalizedUnits=[...sourceUnits,...branches.flatMap((b:any)=>Array.isArray(b?.units)?b.units:[])];
-        for(const u of normalizedUnits){
-          if(!u||typeof u!=='object')continue;
-          const unitName=u.name??u.unit_name??u.title;
-          if(!unitName)continue;
-          const uid=String(u.id||id());
-          units.push({id:uid,subjectId:sid,name:clean(String(unitName))});
-          const sourceLessons=Array.isArray(u.lessons)?u.lessons:(Array.isArray(u.topics)?u.topics:[]);
-          for(const l of sourceLessons){
-            const lessonName=typeof l==='string'?l:(l?.name??l?.lesson_name??l?.title);
-            if(!lessonName)continue;
-            const estimatedMinutes=typeof l==='object'?Number(l.estimatedMinutes??l.duration??l.minutes)||45:45;
-            const lp=typeof l==='object'?l.priority:undefined;
-            lessons.push({id:typeof l==='object'&&l.id?String(l.id):id(),unitId:uid,name:clean(String(lessonName)),estimatedMinutes:Math.max(5,estimatedMinutes),status:'not_started',priority:['low','medium','high'].includes(lp)?lp:'medium'});
-          }
+        if(Array.isArray(a.units))for(const u of a.units)addUnit(a,sid,unwrap(u));
+        if(Array.isArray(a.branches))for(const b0 of a.branches){
+          const b=unwrap(b0);
+          if(!b||typeof b!=='object')continue;
+          if(Array.isArray(b.units))for(const u of b.units)addUnit(a,sid,unwrap(u));
+          if(Array.isArray(b.lessons))addUnit(a,sid,{name:b.name??b.branch_name??b.title,lessons:b.lessons});
         }
       }
-      if(!subjects.length)throw Error('no valid subjects');
-      if(!units.length||!lessons.length)throw Error('no valid units or lessons');
+      if(!subjects.length)throw Error('No valid subjects');
+      if(!units.length||!lessons.length)throw Error('No valid units or lessons');
       update({subjects,units,lessons});
       notify('تم استيراد المنهج بنجاح');
       setModal(null)
     }catch(e){
       console.error('Curriculum import failed',e);
-      notify('ملف المنهج غير صالح: تأكد أن الملف JSON وأن داخله subjects أو curriculum.subjects')
+      notify('ملف المنهج غير صالح: تأكد أنه JSON صحيح ويحتوي على subjects → units/branches → lessons')
     }
   };
   r.readAsText(file)
