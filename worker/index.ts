@@ -132,7 +132,7 @@ function otpCode(){ const a=new Uint32Array(1); crypto.getRandomValues(a); retur
 async function otpHash(email:string,type:string,code:string){ return sha256(email+"|"+type+"|"+code); }
 async function sendEmailOtp(env:Env,email:string,code:string,type:"register"|"reset"){
   if(!env.RESEND_API_KEY) throw new Error("البريد الإلكتروني غير مفعّل حاليًا");
-  const from=env.RESEND_FROM_EMAIL||"Thanaweya <onboarding@resend.dev>";
+  const from="Thanaweya <onboarding@resend.dev>";
   const title=type==="register"?"تأكيد البريد الإلكتروني":"استعادة كلمة السر";
   const intro=type==="register"?"استخدم الكود التالي لتأكيد بريدك الإلكتروني وإنشاء حسابك:":"استخدم الكود التالي لإعادة تعيين كلمة السر:";
   const r=await fetch("https://api.resend.com/emails",{method:"POST",headers:{"content-type":"application/json","authorization":"Bearer "+env.RESEND_API_KEY},body:JSON.stringify({from,to:[email],subject:"Thanaweya — "+title,text:intro+"\\n\\n"+code+"\\n\\nالكود صالح لمدة 10 دقائق. لو ما طلبتش العملية دي تجاهل الرسالة."})});
