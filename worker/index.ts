@@ -6,6 +6,11 @@ interface Env {
   GREEN_API_INSTANCE_ID?: string;
   GREEN_API_TOKEN?: string;
   GREEN_API_URL?: string;
+  WHATSAPP_PHONE_NUMBER_ID?: string;
+  WHATSAPP_ACCESS_TOKEN?: string;
+  WHATSAPP_TEMPLATE_NAME?: string;
+  WHATSAPP_TEMPLATE_LANGUAGE?: string;
+  WHATSAPP_GRAPH_VERSION?: string;
   RESEND_API_KEY?: string;
   RESEND_FROM_EMAIL?: string;
 }
@@ -119,7 +124,7 @@ async function telegramCall(env:Env,method:string,payload:Record<string,unknown>
   return data;
 }
 
-async function whatsappCall(env:Env,phone:string,message:string){
+async function greenApiCall(env:Env,phone:string,message:string){
   if(!env.GREEN_API_INSTANCE_ID||!env.GREEN_API_TOKEN) throw new Error("WhatsApp is not configured");
   const apiUrl=(env.GREEN_API_URL||"https://api.greenapi.com").replace(/\/$/,"");
   const digits=phone.replace(/\D/g,"");
@@ -133,12 +138,41 @@ async function whatsappCall(env:Env,phone:string,message:string){
   return String(data.idMessage);
 }
 
+async function whatsappOtpCall(env:Env,phone:string,code:string){
+  if(!env.WHATSAPP_PHONE_NUMBER_ID||!env.WHATSAPP_ACCESS_TOKEN) throw new Error("WhatsApp Cloud API is not configured");
+  const version=env.WHATSAPP_GRAPH_VERSION||"v23.0";
+  const templateName=env.WHATSAPP_TEMPLATE_NAME||"verification_code";
+  const language=env.WHATSAPP_TEMPLATE_LANGUAGE||"ar";
+  const digits=phone.replace(/\D/g,"");
+  const endpoint="https://graph.facebook.com/"+version+"/"+env.WHATSAPP_PHONE_NUMBER_ID+"/messages";
+  const r=await fetch(endpoint,{
+    method:"POST",
+    headers:{"content-type":"application/json","authorization":"Bearer "+env.WHATSAPP_ACCESS_TOKEN},
+    body:JSON.stringify({
+      messaging_product:"whatsapp",
+      to:digits,
+      type:"template",
+      template:{
+        name:templateName,
+        language:{code:language},
+        components:[{type:"body",parameters:[{type:"text",text:code}]}]
+      }
+    })
+  });
+  const data=await r.json() as any;
+  if(!r.ok||data?.error) {
+    const detail=data?.error?.message||data?.error?.error_data?.details||("WhatsApp Cloud API error: "+r.status);
+    throw new Error(String(detail));
+  }
+  return String(data?.messages?.[0]?.id||"sent");
+}
+
 function otpCode(){ const a=new Uint32Array(1); crypto.getRandomValues(a); return String(a[0]%1000000).padStart(6,"0"); }
 async function otpHash(email:string,type:string,code:string){ return sha256(email+"|"+type+"|"+code); }
 async function sendWhatsAppOtp(env:Env,phone:string,code:string,type:"register"|"reset"){
   const title=type==="register"?"تأكيد حسابك في ثانوية":"استعادة كلمة السر";
   const message=title+"\n\nكود التأكيد: *"+code+"*\n\nالكود صالح لمدة 10 دقائق. لو ما طلبتش العملية دي تجاهل الرسالة.";
-  const result=await whatsappCall(env,phone,message);
+  const result=await whatsappOtpCall(env,phone,code);
   if(!result) throw new Error("تعذر إرسال كود واتساب");
 }
 
@@ -150,7 +184,7 @@ async function ensureWhatsAppLog(env:Env){
 async function sendWhatsAppToUser(env:Env,userId:string,phone:string,message:string){
   await ensureWhatsAppLog(env);
   try{
-    const providerId=await whatsappCall(env,phone,message);
+    const providerId=await greenApiCall(env,phone,message);
     await env.DB.prepare("INSERT INTO whatsapp_messages(id,user_id,phone,message,status,provider_id,error,created_at) VALUES(?,?,?,?,?,?,?,?)").bind(randomHex(16),userId,phone,message,"sent",providerId,null,Date.now()).run();
     return {ok:true,providerId};
   }catch(e){
@@ -177,8 +211,7 @@ async function ensureTelegramDashboard(env:Env){
 }
 
 function telegramDashboardKeyboard(){
-  return {
-    inline_keyboard:[
+  return {    inline_keyboard:[
       [{text:"📊 الرئيسية والإحصائيات",callback_data:"dash_stats"},{text:"👥 المستخدمين",callback_data:"dash_users"}],
       [{text:"🔎 بحث عن مستخدم",callback_data:"dash_search"},{text:"🕐 آخر المستخدمين",callback_data:"dash_recent"}],
       [{text:"📈 الزيارات",callback_data:"dash_traffic"},{text:"🔐 الدخول و OTP",callback_data:"dash_auth"}],
@@ -357,8 +390,7 @@ async function handleTelegramUpdate(env:Env,update:any){
     if(data==="dash_home"){await clearTelegramAdminMode(env,chatId);await sendTelegramDashboard(env,chatId);return;}
     if(data==="dash_stats"){await sendTelegramDashboard(env,chatId);return;}
     if(data==="dash_users"){await clearTelegramAdminMode(env,chatId);await sendTelegramUsers(env,chatId);return;}
-    if(data==="dash_recent"){await clearTelegramAdminMode(env,chatId);await sendTelegramRecentUsers(env,chatId);return;}
-    if(data==="dash_search"){await setTelegramAdminMode(env,chatId,"user_search");await telegramCall(env,"sendMessage",{chat_id:chatId,text:"🔎 ابعت الاسم أو الإيميل أو رقم الواتساب اللي عايز تدور عليه.",reply_markup:{inline_keyboard:[[ {text:"❌ إلغاء",callback_data:"dash_cancel"} ]] }});return;}
+    if(data==="dash_recent"){await clearTelegramAdminMode(env,chatId);await sendTelegramRecentUsers(env,chatId);return;}    if(data==="dash_search"){await setTelegramAdminMode(env,chatId,"user_search");await telegramCall(env,"sendMessage",{chat_id:chatId,text:"🔎 ابعت الاسم أو الإيميل أو رقم الواتساب اللي عايز تدور عليه.",reply_markup:{inline_keyboard:[[ {text:"❌ إلغاء",callback_data:"dash_cancel"} ]] }});return;}
     if(data==="dash_traffic"){await clearTelegramAdminMode(env,chatId);await sendTelegramTraffic(env,chatId);return;}
     if(data==="dash_auth"){await clearTelegramAdminMode(env,chatId);await sendTelegramAuthStats(env,chatId);return;}
     if(data==="dash_wa"){await clearTelegramAdminMode(env,chatId);await sendTelegramWhatsAppStats(env,chatId);return;}
@@ -537,8 +569,7 @@ export default {
           const b=await body(request), phone=cleanPhone(b?.phone);
           if(phone && !validPhone(phone)) return json({error:"رقم واتساب غير صالح"},400);
           if(phone){
-            const exists=await env.DB.prepare("SELECT user_id FROM user_phones WHERE phone=? AND user_id<>?").bind(phone,u.id).first();
-            if(exists)return json({error:"رقم واتساب مستخدم بالفعل"},409);
+            const exists=await env.DB.prepare("SELECT user_id FROM user_phones WHERE phone=? AND user_id<>?").bind(phone,u.id).first();            if(exists)return json({error:"رقم واتساب مستخدم بالفعل"},409);
             await env.DB.prepare("INSERT INTO user_phones(user_id,phone,updated_at) VALUES(?,?,?) ON CONFLICT(user_id) DO UPDATE SET phone=excluded.phone,updated_at=excluded.updated_at").bind(u.id,phone,Date.now()).run();
           } else {
             await env.DB.prepare("DELETE FROM user_phones WHERE user_id=?").bind(u.id).run();
