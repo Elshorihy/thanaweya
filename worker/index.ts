@@ -130,14 +130,11 @@ async function whatsappCall(env:Env,phone:string,message:string){
 
 function otpCode(){ const a=new Uint32Array(1); crypto.getRandomValues(a); return String(a[0]%1000000).padStart(6,"0"); }
 async function otpHash(email:string,type:string,code:string){ return sha256(email+"|"+type+"|"+code); }
-async function sendEmailOtp(env:Env,email:string,code:string,type:"register"|"reset"){
-  if(!env.RESEND_API_KEY) throw new Error("البريد الإلكتروني غير مفعّل حاليًا");
-  const from="Thanaweya <onboarding@resend.dev>";
-  const title=type==="register"?"تأكيد البريد الإلكتروني":"استعادة كلمة السر";
-  const intro=type==="register"?"استخدم الكود التالي لتأكيد بريدك الإلكتروني وإنشاء حسابك:":"استخدم الكود التالي لإعادة تعيين كلمة السر:";
-  const r=await fetch("https://api.resend.com/emails",{method:"POST",headers:{"content-type":"application/json","authorization":"Bearer "+env.RESEND_API_KEY},body:JSON.stringify({from,to:[email],subject:"Thanaweya — "+title,text:intro+"\\n\\n"+code+"\\n\\nالكود صالح لمدة 10 دقائق. لو ما طلبتش العملية دي تجاهل الرسالة."})});
-  const data=await r.json() as any;
-  if(!r.ok||!data?.id) throw new Error(data?.message||data?.error||("Email provider error: "+r.status));
+async function sendWhatsAppOtp(env:Env,phone:string,code:string,type:"register"|"reset"){
+  const title=type==="register"?"تأكيد حسابك في ثانوية":"استعادة كلمة السر";
+  const message=title+"\n\nكود التأكيد: *"+code+"*\n\nالكود صالح لمدة 10 دقائق. لو ما طلبتش العملية دي تجاهل الرسالة.";
+  const result=await whatsappCall(env,phone,message);
+  if(!result) throw new Error("تعذر إرسال كود واتساب");
 }
 
 async function ensureWhatsAppLog(env:Env){
@@ -264,14 +261,14 @@ export default {
         await ensureSchema(env);
         if(url.pathname==="/api/auth/register/start" && request.method==="POST") {
           const b=await body(request), email=cleanEmail(b?.email), name=cleanName(b?.name), password=String(b?.password||""), phone=cleanPhone(b?.phone);
-          if(!name||!email||password.length<8) return json({error:"الاسم والإيميل وكلمة السر (8 أحرف على الأقل) مطلوبة"},400);
+          if(!name||!email||password.length<8||!phone) return json({error:"الاسم والإيميل وكلمة السر (8 أحرف على الأقل) ورقم واتساب مطلوبة"},400);
           const exists=await env.DB.prepare("SELECT id FROM users WHERE email=?").bind(email).first(); if(exists) return json({error:"الإيميل مستخدم بالفعل"},409);
-          if(phone && !validPhone(phone)) return json({error:"رقم واتساب غير صالح"},400);
+          if(!validPhone(phone)) return json({error:"رقم واتساب غير صالح"},400);
           if(phone){const phoneExists=await env.DB.prepare("SELECT user_id FROM user_phones WHERE phone=?").bind(phone).first();if(phoneExists)return json({error:"رقم واتساب مستخدم بالفعل"},409);}
           const salt=randomHex(16), pass=await hashPassword(password,salt), code=otpCode(), now=Date.now(), expires=now+10*60*1000, payload=JSON.stringify({name,password_hash:pass,password_salt:salt,phone:phone||null});
           await env.DB.prepare("DELETE FROM auth_codes WHERE email=? AND type='register'").bind(email).run();
           await env.DB.prepare("INSERT INTO auth_codes(id,email,type,code_hash,payload_json,expires_at,attempts,created_at) VALUES(?,?,?,?,?,?,?,?)").bind(randomHex(16),email,"register",await otpHash(email,"register",code),payload,expires,0,now).run();
-          try { await sendEmailOtp(env,email,code,"register"); } catch(e){ await env.DB.prepare("DELETE FROM auth_codes WHERE email=? AND type='register'").bind(email).run(); throw e; }
+          try { await sendWhatsAppOtp(env,phone,code,"register"); } catch(e){ await env.DB.prepare("DELETE FROM auth_codes WHERE email=? AND type='register'").bind(email).run(); throw e; }
           return json({ok:true,email});
         }
         if(url.pathname==="/api/auth/register/verify" && request.method==="POST") {
@@ -288,7 +285,10 @@ export default {
         }
         if(url.pathname==="/api/auth/forgot/start" && request.method==="POST") {
           const b=await body(request), email=cleanEmail(b?.email), u=await env.DB.prepare("SELECT id FROM users WHERE email=?").bind(email).first<any>();
-          if(u){const code=otpCode(),now=Date.now();await env.DB.prepare("DELETE FROM auth_codes WHERE email=? AND type='reset'").bind(email).run();await env.DB.prepare("INSERT INTO auth_codes(id,email,type,code_hash,payload_json,expires_at,attempts,created_at) VALUES(?,?,?,?,?,?,?,?)").bind(randomHex(16),email,"reset",await otpHash(email,"reset",code),null,now+10*60*1000,0,now).run();try{await sendEmailOtp(env,email,code,"reset");}catch(e){await env.DB.prepare("DELETE FROM auth_codes WHERE email=? AND type='reset'").bind(email).run();throw e;}}
+          if(u){
+            const phoneRow=await env.DB.prepare("SELECT phone FROM user_phones WHERE user_id=?").bind(u.id).first<any>();
+            if(!phoneRow?.phone) throw new Error("لا يوجد رقم واتساب مرتبط بالحساب");
+            const code=otpCode(),now=Date.now();await env.DB.prepare("DELETE FROM auth_codes WHERE email=? AND type='reset'").bind(email).run();await env.DB.prepare("INSERT INTO auth_codes(id,email,type,code_hash,payload_json,expires_at,attempts,created_at) VALUES(?,?,?,?,?,?,?,?)").bind(randomHex(16),email,"reset",await otpHash(email,"reset",code),null,now+10*60*1000,0,now).run();try{await sendWhatsAppOtp(env,String(phoneRow.phone),code,"reset");}catch(e){await env.DB.prepare("DELETE FROM auth_codes WHERE email=? AND type='reset'").bind(email).run();throw e;}}
           return json({ok:true});
         }
         if(url.pathname==="/api/auth/reset" && request.method==="POST") {
@@ -304,7 +304,7 @@ export default {
         }
         if(url.pathname==="/api/auth/register" && request.method==="POST") {
           const b=await body(request), email=cleanEmail(b?.email), name=cleanName(b?.name), password=String(b?.password||""), phone=cleanPhone(b?.phone);
-          if(!name||!email||password.length<8) return json({error:"الاسم والإيميل وكلمة السر (8 أحرف على الأقل) مطلوبة"},400);
+          if(!name||!email||password.length<8||!phone) return json({error:"الاسم والإيميل وكلمة السر (8 أحرف على الأقل) ورقم واتساب مطلوبة"},400);
           const exists=await env.DB.prepare("SELECT id FROM users WHERE email=?").bind(email).first();
           if(exists) return json({error:"الإيميل مستخدم بالفعل"},409);
           if(phone && !validPhone(phone)) return json({error:"رقم واتساب غير صالح"},400);
