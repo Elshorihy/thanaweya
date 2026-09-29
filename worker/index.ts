@@ -146,12 +146,16 @@ async function sendEmailOtp(env:Env,email:string,code:string,type:"register"|"re
 
   const r=await fetch(url,{
     method:"POST",
-    headers:{"content-type":"application/json"},
+    headers:{"content-type":"application/json","accept":"application/json"},
     body:JSON.stringify({secret,email,code,otpCode:code,type})
   });
 
-  const data=await r.json().catch(()=>({})) as any;
-  if(!r.ok||!data?.ok) throw new Error(data?.error||"فشل إرسال الإيميل عبر Gmail");
+  const raw=await r.text();
+  let data:any={};
+  try { data=JSON.parse(raw); } catch {}
+
+  if(!r.ok) throw new Error("Google Apps Script HTTP "+r.status+(raw?": "+raw.slice(0,180):""));
+  if(!data?.ok) throw new Error(String(data?.error||raw||"فشل إرسال الإيميل عبر Gmail").slice(0,240));
 }
 
 async function ensureWhatsAppLog(env:Env){
