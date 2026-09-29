@@ -308,3 +308,43 @@ button,input,select,textarea{max-width:100%}
 .fieldError{margin:2px 0 10px!important;padding:9px 11px;border:1px solid rgba(239,68,68,.35);border-radius:9px;background:rgba(239,68,68,.1);color:#f87171;font-size:13px;font-weight:700;line-height:1.5}
 .light .fieldError{background:#fff1f2;border-color:#fecdd3;color:#dc2626}
 input:invalid,textarea:invalid,select:invalid{border-color:#ef4444}
+
+/* MOBILE UX PASS */
+@media(max-width:620px){
+  body{font-size:14px}
+  header{position:sticky;top:0;z-index:8;background:var(--bg);padding:6px 0 8px}
+  .mobileMenu{display:inline-flex!important;flex:0 0 42px;width:42px;height:42px;border:1px solid var(--border2);background:var(--surface);justify-content:center;align-items:center;border-radius:11px}
+  .search{height:42px;flex:1;min-width:0;border-radius:11px}
+  .search svg{flex:0 0 auto}
+  .headActions{flex:0 0 auto}
+  .headActions button{height:42px;min-width:42px;border-radius:11px}
+  .headActions button:first-child{font-size:0}
+  .headActions button:first-child svg{margin:0}
+  .headActions button.installAppBtn{display:none}
+  .mobileNavGrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+  .mobileNavGrid button{min-height:48px;padding:10px;border:1px solid var(--border);background:var(--surface2);justify-content:flex-start;text-align:start}
+  .mobileNavGrid button.active{background:#7C3AED;color:#fff;border-color:#7C3AED}
+  .mobileNavGrid span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .modal.mobileNavModal{width:calc(100vw - 16px)}
+  .modal{border-radius:16px}
+  .modal label{font-size:13px}
+  .modal input,.modal select,.modal textarea{font-size:16px;min-height:44px}
+  .modal textarea{min-height:110px}
+  .modal button{min-height:42px}
+  .actions{gap:7px}
+  .actions button{min-height:42px}
+  .cardhead{flex-wrap:wrap}
+  .taskrow,.reviewrow,.listrow{padding:11px 0}
+  .taskrow .taskstatus{min-height:40px}
+  .lessonTreeRow{padding:10px 4px}
+  .lessonTreeRow input,.unitHead input,.subjectedit{font-size:15px}
+  .calendar{touch-action:pan-x}
+  .calday{min-height:82px}
+  .fab{width:50px;height:50px}
+}
+@media(max-width:380px){
+  .mobileNavGrid{grid-template-columns:1fr}
+  .headActions button{min-width:38px;width:38px}
+  .search input{font-size:12px}
+  .hero h1,.title h1{font-size:22px}
+}
