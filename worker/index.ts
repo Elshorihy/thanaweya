@@ -3,6 +3,9 @@ interface Env {
   ASSETS: Fetcher;
   TELEGRAM_BOT_TOKEN: string;
   TELEGRAM_CHAT_ID: string;
+  WHATSAPP_ACCESS_TOKEN?: string;
+  WHATSAPP_PHONE_NUMBER_ID?: string;
+  WHATSAPP_API_VERSION?: string;
 }
 
 let schemaReady:Promise<void>|null=null;
@@ -106,6 +109,47 @@ async function telegramCall(env:Env,method:string,payload:Record<string,unknown>
   return data;
 }
 
+async function whatsappCall(env:Env,phone:string,message:string){
+  if(!env.WHATSAPP_ACCESS_TOKEN||!env.WHATSAPP_PHONE_NUMBER_ID) throw new Error("WhatsApp is not configured");
+  const version=env.WHATSAPP_API_VERSION||"v23.0";
+  const r=await fetch("https://graph.facebook.com/"+version+"/"+env.WHATSAPP_PHONE_NUMBER_ID+"/messages",{
+    method:"POST",headers:{"content-type":"application/json","authorization":"Bearer "+env.WHATSAPP_ACCESS_TOKEN},
+    body:JSON.stringify({messaging_product:"whatsapp",to:phone,type:"text",text:{preview_url:false,body:message}})
+  });
+  const data=await r.json() as any;
+  if(!r.ok||!data?.messages?.[0]?.id) throw new Error(data?.error?.message||("WhatsApp API error: "+r.status));
+  return String(data.messages[0].id);
+}
+
+async function ensureWhatsAppLog(env:Env){
+  await env.DB.prepare("CREATE TABLE IF NOT EXISTS whatsapp_messages (id TEXT PRIMARY KEY,user_id TEXT,phone TEXT NOT NULL,message TEXT NOT NULL,status TEXT NOT NULL,provider_id TEXT,error TEXT,created_at INTEGER NOT NULL,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE SET NULL)").run();
+  await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_whatsapp_messages_created ON whatsapp_messages(created_at)").run();
+}
+
+async function sendWhatsAppToUser(env:Env,userId:string,phone:string,message:string){
+  await ensureWhatsAppLog(env);
+  try{
+    const providerId=await whatsappCall(env,phone,message);
+    await env.DB.prepare("INSERT INTO whatsapp_messages(id,user_id,phone,message,status,provider_id,error,created_at) VALUES(?,?,?,?,?,?,?,?)").bind(randomHex(16),userId,phone,message,"sent",providerId,null,Date.now()).run();
+    return {ok:true,providerId};
+  }catch(e){
+    const error=e instanceof Error?e.message:String(e);
+    await env.DB.prepare("INSERT INTO whatsapp_messages(id,user_id,phone,message,status,provider_id,error,created_at) VALUES(?,?,?,?,?,?,?,?)").bind(randomHex(16),userId,phone,message,"failed",null,error.slice(0,500),Date.now()).run();
+    return {ok:false,error};
+  }
+}
+
+async function broadcastWhatsApp(env:Env,message:string){
+  await ensureWhatsAppLog(env);
+  const rows=await env.DB.prepare("SELECT u.id,p.phone FROM user_phones p JOIN users u ON u.id=p.user_id WHERE p.phone IS NOT NULL AND p.phone<>''").all<any>();
+  let sent=0,failed=0; const errors:string[]=[];
+  for(const row of rows.results||[]){
+    const result=await sendWhatsAppToUser(env,String(row.id),String(row.phone),message);
+    if(result.ok) sent++; else {failed++; if(errors.length<5) errors.push(String(row.phone)+": "+result.error);}
+  }
+  return {total:(rows.results||[]).length,sent,failed,errors};
+}
+
 function telegramStatsText(stats:{totalUsers:number;totalVisits:number;todayVisits:number;last7DaysVisits:number}){
   return [
     "👤 إجمالي المستخدمين: "+stats.totalUsers.toLocaleString("ar-EG"),
@@ -134,7 +178,26 @@ async function handleTelegramUpdate(env:Env,update:any){
     return;
   }
   const text=String(message?.text||"").trim();
-  if(text==="/start" || text==="/stats" || text==="📊 الإحصائيات الآن") await sendTelegramStats(env,chatId);
+  if(text==="/start" || text==="/stats" || text==="📊 الإحصائيات الآن") { await sendTelegramStats(env,chatId); return; }
+  if(text.startsWith("/waall ")){
+    const messageText=text.slice(7).trim();
+    if(!messageText){await telegramCall(env,"sendMessage",{chat_id:chatId,text:"الاستخدام: /waall رسالتك هنا"});return;}
+    try{
+      const result=await broadcastWhatsApp(env,messageText);
+      await telegramCall(env,"sendMessage",{chat_id:chatId,text:"📲 تم إرسال حملة واتساب\n\n👥 الإجمالي: "+result.total+"\n✅ نجح: "+result.sent+"\n❌ فشل: "+result.failed+(result.errors.length?"\n\n"+result.errors.join("\n"):"")});
+    }catch(e){await telegramCall(env,"sendMessage",{chat_id:chatId,text:"⚠️ تعذر إرسال حملة واتساب: "+(e instanceof Error?e.message:String(e)).slice(0,700)});}
+    return;
+  }
+  if(text.startsWith("/wa ")){
+    const parts=text.split(/\\s+/); const phone=cleanPhone(parts[1]||""); const messageText=parts.slice(2).join(" ").trim();
+    if(!validPhone(phone)||!messageText){await telegramCall(env,"sendMessage",{chat_id:chatId,text:"الاستخدام: /wa +201xxxxxxxxx رسالتك هنا"});return;}
+    try{
+      const row=await env.DB.prepare("SELECT user_id FROM user_phones WHERE phone=?").bind(phone).first<any>();
+      const result=await sendWhatsAppToUser(env,String(row?.user_id||""),phone,messageText);
+      await telegramCall(env,"sendMessage",{chat_id:chatId,text:result.ok?"✅ تم إرسال الرسالة على واتساب إلى "+phone:"❌ فشل الإرسال إلى "+phone+"\\n"+result.error});
+    }catch(e){await telegramCall(env,"sendMessage",{chat_id:chatId,text:"⚠️ تعذر إرسال واتساب: "+(e instanceof Error?e.message:String(e)).slice(0,700)});}
+    return;
+  }
 }
 
 export default {
