@@ -16,8 +16,13 @@ async function ensurePageViews(env:Env){
 async function ensureSchema(env:Env){
   if(!schemaReady) schemaReady=(async()=>{
     await env.DB.prepare("CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY,email TEXT NOT NULL UNIQUE,name TEXT NOT NULL,password_hash TEXT NOT NULL,password_salt TEXT NOT NULL,phone TEXT,created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL)").run();
-    try { await env.DB.prepare("ALTER TABLE users ADD COLUMN phone TEXT").run(); } catch {}
-    try { await env.DB.prepare("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_phone ON users(phone) WHERE phone IS NOT NULL AND phone<>''").run(); } catch (e) { console.error("phone index setup failed", e); }
+    await env.DB.prepare("CREATE TABLE IF NOT EXISTS user_phones (user_id TEXT PRIMARY KEY, phone TEXT UNIQUE, updated_at INTEGER NOT NULL, FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE)").run();
+    try {
+      await env.DB.prepare("ALTER TABLE users ADD COLUMN phone TEXT").run();
+    } catch {}
+    try {
+      await env.DB.prepare("INSERT OR IGNORE INTO user_phones(user_id,phone,updated_at) SELECT id,phone,updated_at FROM users WHERE phone IS NOT NULL AND phone<>''").run();
+    } catch {}
     await env.DB.prepare("CREATE TABLE IF NOT EXISTS sessions (id TEXT PRIMARY KEY,user_id TEXT NOT NULL,token_hash TEXT NOT NULL UNIQUE,expires_at INTEGER NOT NULL,created_at INTEGER NOT NULL,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE)").run();
     await env.DB.prepare("CREATE TABLE IF NOT EXISTS user_data (user_id TEXT PRIMARY KEY,data_json TEXT NOT NULL DEFAULT '{}',updated_at INTEGER NOT NULL,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE)").run();
     await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token_hash)").run();
@@ -184,32 +189,42 @@ export default {
           if(phone){const phoneExists=await env.DB.prepare("SELECT id FROM users WHERE phone=?").bind(phone).first();if(phoneExists)return json({error:"رقم واتساب مستخدم بالفعل"},409);}
           const id=randomHex(16), salt=randomHex(16), pass=await hashPassword(password,salt);
           await env.DB.batch([
-            env.DB.prepare("INSERT INTO users(id,email,name,password_hash,password_salt,phone,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)").bind(id,email,name,pass,salt,phone||null,Date.now(),Date.now()),
-            env.DB.prepare("INSERT INTO user_data(user_id,data_json,updated_at) VALUES(?,?,?)").bind(id,"",Date.now())
+            env.DB.prepare("INSERT INTO users(id,email,name,password_hash,password_salt,created_at,updated_at) VALUES(?,?,?,?,?,?,?)").bind(id,email,name,pass,salt,Date.now(),Date.now()),
+            env.DB.prepare("INSERT INTO user_data(user_id,data_json,updated_at) VALUES(?,?,?)").bind(id,"",Date.now()),
+            ...(phone ? [env.DB.prepare("INSERT INTO user_phones(user_id,phone,updated_at) VALUES(?,?,?)").bind(id,phone,Date.now())] : [])
           ]);
           const token=await createSession(id,env);
           return json({user:{id,email,name,phone:phone||null}},{headers:{"set-cookie":sessionCookie(token)}});
         }
         if(url.pathname==="/api/auth/login" && request.method==="POST") {
           const b=await body(request), email=cleanEmail(b?.email), password=String(b?.password||"");
-          const u=await env.DB.prepare("SELECT id,email,name,password_hash,password_salt,phone FROM users WHERE email=?").bind(email).first<any>();
+          const u=await env.DB.prepare("SELECT id,email,name,password_hash,password_salt FROM users WHERE email=?").bind(email).first<any>();
           if(!u||!(await verifyPassword(password,u.password_salt,u.password_hash))) return json({error:"الإيميل أو كلمة السر غير صحيحة"},401);
+          const phoneRow=await env.DB.prepare("SELECT phone FROM user_phones WHERE user_id=?").bind(u.id).first<any>();
           await env.DB.prepare("DELETE FROM sessions WHERE expires_at<=?").bind(Date.now()).run();
           const token=await createSession(u.id,env);
-          return json({user:{id:u.id,email:u.email,name:u.name,phone:u.phone||null}},{headers:{"set-cookie":sessionCookie(token)}});
+          return json({user:{id:u.id,email:u.email,name:u.name,phone:phoneRow?.phone||null}},{headers:{"set-cookie":sessionCookie(token)}});
         }
         if(url.pathname==="/api/account/whatsapp" && (request.method==="GET"||request.method==="PUT")) {
           const u=await userFrom(request,env); if(!u) return json({error:"يجب تسجيل الدخول"},401);
-          if(request.method==="GET") { const row=await env.DB.prepare("SELECT phone FROM users WHERE id=?").bind(u.id).first<any>(); return json({phone:row?.phone||""}); }
+          if(request.method==="GET") {
+            const row=await env.DB.prepare("SELECT phone FROM user_phones WHERE user_id=?").bind(u.id).first<any>();
+            return json({phone:row?.phone||""});
+          }
           const b=await body(request), phone=cleanPhone(b?.phone);
           if(phone && !validPhone(phone)) return json({error:"رقم واتساب غير صالح"},400);
-          if(phone){const exists=await env.DB.prepare("SELECT id FROM users WHERE phone=? AND id<>?").bind(phone,u.id).first();if(exists)return json({error:"رقم واتساب مستخدم بالفعل"},409);}
-          await env.DB.prepare("UPDATE users SET phone=?,updated_at=? WHERE id=?").bind(phone||null,Date.now(),u.id).run();
+          if(phone){
+            const exists=await env.DB.prepare("SELECT user_id FROM user_phones WHERE phone=? AND user_id<>?").bind(phone,u.id).first();
+            if(exists)return json({error:"رقم واتساب مستخدم بالفعل"},409);
+            await env.DB.prepare("INSERT INTO user_phones(user_id,phone,updated_at) VALUES(?,?,?) ON CONFLICT(user_id) DO UPDATE SET phone=excluded.phone,updated_at=excluded.updated_at").bind(u.id,phone,Date.now()).run();
+          } else {
+            await env.DB.prepare("DELETE FROM user_phones WHERE user_id=?").bind(u.id).run();
+          }
           return json({ok:true,phone});
         }
         if(url.pathname==="/api/auth/me" && request.method==="GET") {
           const u=await userFrom(request,env); if(!u) return json({user:null});
-          const row=await env.DB.prepare("SELECT phone FROM users WHERE id=?").bind(u.id).first<any>();
+          const row=await env.DB.prepare("SELECT phone FROM user_phones WHERE user_id=?").bind(u.id).first<any>();
           return json({user:{id:u.id,email:u.email,name:u.name,phone:row?.phone||null}});
         }
         if(url.pathname==="/api/auth/logout" && request.method==="POST") {
