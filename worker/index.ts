@@ -6,6 +6,8 @@ interface Env {
   GREEN_API_INSTANCE_ID?: string;
   GREEN_API_TOKEN?: string;
   GREEN_API_URL?: string;
+  RESEND_API_KEY?: string;
+  RESEND_FROM_EMAIL?: string;
 }
 
 let schemaReady:Promise<void>|null=null;
@@ -18,7 +20,8 @@ async function ensurePageViews(env:Env){
 }
 async function ensureSchema(env:Env){
   if(!schemaReady) schemaReady=(async()=>{
-    await env.DB.prepare("CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY,email TEXT NOT NULL UNIQUE,name TEXT NOT NULL,password_hash TEXT NOT NULL,password_salt TEXT NOT NULL,phone TEXT,created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL)").run();
+    await env.DB.prepare("CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY,email TEXT NOT NULL UNIQUE,name TEXT NOT NULL,password_hash TEXT NOT NULL,password_salt TEXT NOT NULL,phone TEXT,email_verified_at INTEGER,created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL)").run();
+    try { await env.DB.prepare("ALTER TABLE users ADD COLUMN email_verified_at INTEGER").run(); } catch {}
     await env.DB.prepare("CREATE TABLE IF NOT EXISTS user_phones (user_id TEXT PRIMARY KEY, phone TEXT UNIQUE, updated_at INTEGER NOT NULL, FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE)").run();
     try {
       await env.DB.prepare("ALTER TABLE users ADD COLUMN phone TEXT").run();
@@ -27,6 +30,8 @@ async function ensureSchema(env:Env){
       await env.DB.prepare("INSERT OR IGNORE INTO user_phones(user_id,phone,updated_at) SELECT id,phone,updated_at FROM users WHERE phone IS NOT NULL AND phone<>''").run();
     } catch {}
     await env.DB.prepare("CREATE TABLE IF NOT EXISTS sessions (id TEXT PRIMARY KEY,user_id TEXT NOT NULL,token_hash TEXT NOT NULL UNIQUE,expires_at INTEGER NOT NULL,created_at INTEGER NOT NULL,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE)").run();
+    await env.DB.prepare("CREATE TABLE IF NOT EXISTS auth_codes (id TEXT PRIMARY KEY,email TEXT NOT NULL,type TEXT NOT NULL,code_hash TEXT NOT NULL,payload_json TEXT,expires_at INTEGER NOT NULL,attempts INTEGER NOT NULL DEFAULT 0,created_at INTEGER NOT NULL)").run();
+    await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_auth_codes_lookup ON auth_codes(email,type,expires_at)").run();
     await env.DB.prepare("CREATE TABLE IF NOT EXISTS user_data (user_id TEXT PRIMARY KEY,data_json TEXT NOT NULL DEFAULT '{}',updated_at INTEGER NOT NULL,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE)").run();
     await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token_hash)").run();
     await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_sessions_expiry ON sessions(expires_at)").run();
@@ -121,6 +126,18 @@ async function whatsappCall(env:Env,phone:string,message:string){
   const data=await r.json() as any;
   if(!r.ok||!data?.idMessage) throw new Error(data?.message||data?.error||("GREEN-API error: "+r.status));
   return String(data.idMessage);
+}
+
+function otpCode(){ const a=new Uint32Array(1); crypto.getRandomValues(a); return String(a[0]%1000000).padStart(6,"0"); }
+async function otpHash(email:string,type:string,code:string){ return sha256(email+"|"+type+"|"+code); }
+async function sendEmailOtp(env:Env,email:string,code:string,type:"register"|"reset"){
+  if(!env.RESEND_API_KEY) throw new Error("البريد الإلكتروني غير مفعّل حاليًا");
+  const from=env.RESEND_FROM_EMAIL||"Thanaweya <onboarding@resend.dev>";
+  const title=type==="register"?"تأكيد البريد الإلكتروني":"استعادة كلمة السر";
+  const intro=type==="register"?"استخدم الكود التالي لتأكيد بريدك الإلكتروني وإنشاء حسابك:":"استخدم الكود التالي لإعادة تعيين كلمة السر:";
+  const r=await fetch("https://api.resend.com/emails",{method:"POST",headers:{"content-type":"application/json","authorization":"Bearer "+env.RESEND_API_KEY},body:JSON.stringify({from,to:[email],subject:"Thanaweya — "+title,text:intro+"\\n\\n"+code+"\\n\\nالكود صالح لمدة 10 دقائق. لو ما طلبتش العملية دي تجاهل الرسالة."})});
+  const data=await r.json() as any;
+  if(!r.ok||!data?.id) throw new Error(data?.message||data?.error||("Email provider error: "+r.status));
 }
 
 async function ensureWhatsAppLog(env:Env){
@@ -245,6 +262,46 @@ export default {
           catch(e) { console.error("D1 health check failed",e); return json({ok:false,db:false,error:"D1 binding/database is not available. Check the DB binding in Cloudflare."},503); }
         }
         await ensureSchema(env);
+        if(url.pathname==="/api/auth/register/start" && request.method==="POST") {
+          const b=await body(request), email=cleanEmail(b?.email), name=cleanName(b?.name), password=String(b?.password||""), phone=cleanPhone(b?.phone);
+          if(!name||!email||password.length<8) return json({error:"الاسم والإيميل وكلمة السر (8 أحرف على الأقل) مطلوبة"},400);
+          const exists=await env.DB.prepare("SELECT id FROM users WHERE email=?").bind(email).first(); if(exists) return json({error:"الإيميل مستخدم بالفعل"},409);
+          if(phone && !validPhone(phone)) return json({error:"رقم واتساب غير صالح"},400);
+          if(phone){const phoneExists=await env.DB.prepare("SELECT user_id FROM user_phones WHERE phone=?").bind(phone).first();if(phoneExists)return json({error:"رقم واتساب مستخدم بالفعل"},409);}
+          const salt=randomHex(16), pass=await hashPassword(password,salt), code=otpCode(), now=Date.now(), expires=now+10*60*1000, payload=JSON.stringify({name,password_hash:pass,password_salt:salt,phone:phone||null});
+          await env.DB.prepare("DELETE FROM auth_codes WHERE email=? AND type='register'").bind(email).run();
+          await env.DB.prepare("INSERT INTO auth_codes(id,email,type,code_hash,payload_json,expires_at,attempts,created_at) VALUES(?,?,?,?,?,?,?,?)").bind(randomHex(16),email,"register",await otpHash(email,"register",code),payload,expires,0,now).run();
+          try { await sendEmailOtp(env,email,code,"register"); } catch(e){ await env.DB.prepare("DELETE FROM auth_codes WHERE email=? AND type='register'").bind(email).run(); throw e; }
+          return json({ok:true,email});
+        }
+        if(url.pathname==="/api/auth/register/verify" && request.method==="POST") {
+          const b=await body(request), email=cleanEmail(b?.email), code=String(b?.code||"").replace(/\\D/g,"").slice(0,6);
+          const row=await env.DB.prepare("SELECT * FROM auth_codes WHERE email=? AND type='register' ORDER BY created_at DESC LIMIT 1").bind(email).first<any>();
+          if(!row||Number(row.expires_at)<Date.now()) return json({error:"الكود انتهت صلاحيته. اطلب كود جديد."},400);
+          if(Number(row.attempts)>=5) return json({error:"تم تجاوز عدد المحاولات. اطلب كود جديد."},429);
+          const ok=(await otpHash(email,"register",code))===row.code_hash;
+          if(!ok){await env.DB.prepare("UPDATE auth_codes SET attempts=attempts+1 WHERE id=?").bind(row.id).run();return json({error:"كود التأكيد غير صحيح"},400);}
+          const p=JSON.parse(row.payload_json||"{}"), exists=await env.DB.prepare("SELECT id FROM users WHERE email=?").bind(email).first(); if(exists){await env.DB.prepare("DELETE FROM auth_codes WHERE id=?").bind(row.id).run();return json({error:"الإيميل مستخدم بالفعل"},409);}
+          const id=randomHex(16), now=Date.now();
+          await env.DB.batch([env.DB.prepare("INSERT INTO users(id,email,name,password_hash,password_salt,email_verified_at,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)").bind(id,email,p.name,p.password_hash,p.password_salt,now,now,now),env.DB.prepare("INSERT INTO user_data(user_id,data_json,updated_at) VALUES(?,?,?)").bind(id,"",now),...(p.phone?[env.DB.prepare("INSERT INTO user_phones(user_id,phone,updated_at) VALUES(?,?,?)").bind(id,p.phone,now)]:[]),env.DB.prepare("DELETE FROM auth_codes WHERE id=?").bind(row.id)]);
+          const token=await createSession(id,env); return json({user:{id,email,name:p.name,phone:p.phone||null}},200,{"set-cookie":sessionCookie(token)});
+        }
+        if(url.pathname==="/api/auth/forgot/start" && request.method==="POST") {
+          const b=await body(request), email=cleanEmail(b?.email), u=await env.DB.prepare("SELECT id FROM users WHERE email=?").bind(email).first<any>();
+          if(u){const code=otpCode(),now=Date.now();await env.DB.prepare("DELETE FROM auth_codes WHERE email=? AND type='reset'").bind(email).run();await env.DB.prepare("INSERT INTO auth_codes(id,email,type,code_hash,payload_json,expires_at,attempts,created_at) VALUES(?,?,?,?,?,?,?,?)").bind(randomHex(16),email,"reset",await otpHash(email,"reset",code),null,now+10*60*1000,0,now).run();try{await sendEmailOtp(env,email,code,"reset");}catch(e){await env.DB.prepare("DELETE FROM auth_codes WHERE email=? AND type='reset'").bind(email).run();throw e;}}
+          return json({ok:true});
+        }
+        if(url.pathname==="/api/auth/reset" && request.method==="POST") {
+          const b=await body(request), email=cleanEmail(b?.email), code=String(b?.code||"").replace(/\\D/g,"").slice(0,6), password=String(b?.password||"");
+          if(password.length<8)return json({error:"كلمة السر لازم تكون 8 أحرف على الأقل"},400);
+          const row=await env.DB.prepare("SELECT * FROM auth_codes WHERE email=? AND type='reset' ORDER BY created_at DESC LIMIT 1").bind(email).first<any>();
+          if(!row||Number(row.expires_at)<Date.now())return json({error:"الكود انتهت صلاحيته. اطلب كود جديد."},400);
+          if(Number(row.attempts)>=5)return json({error:"تم تجاوز عدد المحاولات. اطلب كود جديد."},429);
+          if((await otpHash(email,"reset",code))!==row.code_hash){await env.DB.prepare("UPDATE auth_codes SET attempts=attempts+1 WHERE id=?").bind(row.id).run();return json({error:"كود التأكيد غير صحيح"},400);}
+          const u=await env.DB.prepare("SELECT id FROM users WHERE email=?").bind(email).first<any>(); if(!u)return json({error:"لا يوجد حساب بهذا الإيميل"},404);
+          const salt=randomHex(16), pass=await hashPassword(password,salt),now=Date.now(); await env.DB.batch([env.DB.prepare("UPDATE users SET password_hash=?,password_salt=?,updated_at=? WHERE id=?").bind(pass,salt,now,u.id),env.DB.prepare("DELETE FROM auth_codes WHERE id=?").bind(row.id)]);
+          return json({ok:true});
+        }
         if(url.pathname==="/api/auth/register" && request.method==="POST") {
           const b=await body(request), email=cleanEmail(b?.email), name=cleanName(b?.name), password=String(b?.password||""), phone=cleanPhone(b?.phone);
           if(!name||!email||password.length<8) return json({error:"الاسم والإيميل وكلمة السر (8 أحرف على الأقل) مطلوبة"},400);
