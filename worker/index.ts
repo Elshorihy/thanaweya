@@ -15,7 +15,9 @@ async function ensurePageViews(env:Env){
 }
 async function ensureSchema(env:Env){
   if(!schemaReady) schemaReady=(async()=>{
-    await env.DB.prepare("CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY,email TEXT NOT NULL UNIQUE,name TEXT NOT NULL,password_hash TEXT NOT NULL,password_salt TEXT NOT NULL,created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL)").run();
+    await env.DB.prepare("CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY,email TEXT NOT NULL UNIQUE,name TEXT NOT NULL,password_hash TEXT NOT NULL,password_salt TEXT NOT NULL,phone TEXT,created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL)").run();
+    try { await env.DB.prepare("ALTER TABLE users ADD COLUMN phone TEXT").run(); } catch {}
+    await env.DB.prepare("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_phone ON users(phone) WHERE phone IS NOT NULL AND phone<>''").run();
     await env.DB.prepare("CREATE TABLE IF NOT EXISTS sessions (id TEXT PRIMARY KEY,user_id TEXT NOT NULL,token_hash TEXT NOT NULL UNIQUE,expires_at INTEGER NOT NULL,created_at INTEGER NOT NULL,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE)").run();
     await env.DB.prepare("CREATE TABLE IF NOT EXISTS user_data (user_id TEXT PRIMARY KEY,data_json TEXT NOT NULL DEFAULT '{}',updated_at INTEGER NOT NULL,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE)").run();
     await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token_hash)").run();
@@ -35,6 +37,8 @@ function json(data: unknown, status=200, headers: Record<string,string>={}) {
 }
 function cleanEmail(v: unknown) { return String(v ?? "").trim().toLowerCase().slice(0,160); }
 function cleanName(v: unknown) { return String(v ?? "").trim().replace(/[<>]/g,"").slice(0,80); }
+function cleanPhone(v: unknown) { return String(v ?? "").replace(/[^0-9+]/g,"").replace(/^00/,"+").slice(0,20); }
+function validPhone(v:string) { return /^\+?[1-9]\d{7,14}$/.test(v); }
 function bytesToHex(bytes: Uint8Array) { return [...bytes].map(b=>b.toString(16).padStart(2,"0")).join(""); }
 function randomHex(n=32) { const a=new Uint8Array(n); crypto.getRandomValues(a); return bytesToHex(a); }
 async function sha256(value:string) {
@@ -176,28 +180,41 @@ export default {
         }
         await ensureSchema(env);
         if(url.pathname==="/api/auth/register" && request.method==="POST") {
-          const b=await body(request), email=cleanEmail(b?.email), name=cleanName(b?.name), password=String(b?.password||"");
+          const b=await body(request), email=cleanEmail(b?.email), name=cleanName(b?.name), password=String(b?.password||""), phone=cleanPhone(b?.phone);
           if(!name||!email||password.length<8) return json({error:"الاسم والإيميل وكلمة السر (8 أحرف على الأقل) مطلوبة"},400);
           const exists=await env.DB.prepare("SELECT id FROM users WHERE email=?").bind(email).first();
           if(exists) return json({error:"الإيميل مستخدم بالفعل"},409);
+          if(phone && !validPhone(phone)) return json({error:"رقم واتساب غير صالح"},400);
+          if(phone){const phoneExists=await env.DB.prepare("SELECT id FROM users WHERE phone=?").bind(phone).first();if(phoneExists)return json({error:"رقم واتساب مستخدم بالفعل"},409);}
           const id=randomHex(16), salt=randomHex(16), pass=await hashPassword(password,salt);
           await env.DB.batch([
-            env.DB.prepare("INSERT INTO users(id,email,name,password_hash,password_salt,created_at,updated_at) VALUES(?,?,?,?,?,?,?)").bind(id,email,name,pass,salt,Date.now(),Date.now()),
+            env.DB.prepare("INSERT INTO users(id,email,name,password_hash,password_salt,phone,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)").bind(id,email,name,pass,salt,phone||null,Date.now(),Date.now()),
             env.DB.prepare("INSERT INTO user_data(user_id,data_json,updated_at) VALUES(?,?,?)").bind(id,"",Date.now())
           ]);
           const token=await createSession(id,env);
-          return json({user:{id,email,name}},{headers:{"set-cookie":sessionCookie(token)}});
+          return json({user:{id,email,name,phone:phone||null}},{headers:{"set-cookie":sessionCookie(token)}});
         }
         if(url.pathname==="/api/auth/login" && request.method==="POST") {
           const b=await body(request), email=cleanEmail(b?.email), password=String(b?.password||"");
-          const u=await env.DB.prepare("SELECT id,email,name,password_hash,password_salt FROM users WHERE email=?").bind(email).first<any>();
+          const u=await env.DB.prepare("SELECT id,email,name,password_hash,password_salt,phone FROM users WHERE email=?").bind(email).first<any>();
           if(!u||!(await verifyPassword(password,u.password_salt,u.password_hash))) return json({error:"الإيميل أو كلمة السر غير صحيحة"},401);
           await env.DB.prepare("DELETE FROM sessions WHERE expires_at<=?").bind(Date.now()).run();
           const token=await createSession(u.id,env);
-          return json({user:{id:u.id,email:u.email,name:u.name}},{headers:{"set-cookie":sessionCookie(token)}});
+          return json({user:{id:u.id,email:u.email,name:u.name,phone:u.phone||null}},{headers:{"set-cookie":sessionCookie(token)}});
+        }
+        if(url.pathname==="/api/account/whatsapp" && (request.method==="GET"||request.method==="PUT")) {
+          const u=await userFrom(request,env); if(!u) return json({error:"يجب تسجيل الدخول"},401);
+          if(request.method==="GET") { const row=await env.DB.prepare("SELECT phone FROM users WHERE id=?").bind(u.id).first<any>(); return json({phone:row?.phone||""}); }
+          const b=await body(request), phone=cleanPhone(b?.phone);
+          if(phone && !validPhone(phone)) return json({error:"رقم واتساب غير صالح"},400);
+          if(phone){const exists=await env.DB.prepare("SELECT id FROM users WHERE phone=? AND id<>?").bind(phone,u.id).first();if(exists)return json({error:"رقم واتساب مستخدم بالفعل"},409);}
+          await env.DB.prepare("UPDATE users SET phone=?,updated_at=? WHERE id=?").bind(phone||null,Date.now(),u.id).run();
+          return json({ok:true,phone});
         }
         if(url.pathname==="/api/auth/me" && request.method==="GET") {
-          const u=await userFrom(request,env); return json({user:u?{id:u.id,email:u.email,name:u.name}:null});
+          const u=await userFrom(request,env); if(!u) return json({user:null});
+          const row=await env.DB.prepare("SELECT phone FROM users WHERE id=?").bind(u.id).first<any>();
+          return json({user:{id:u.id,email:u.email,name:u.name,phone:row?.phone||null}});
         }
         if(url.pathname==="/api/auth/logout" && request.method==="POST") {
           const token=cookieValue(request); if(token) await env.DB.prepare("DELETE FROM sessions WHERE token_hash=?").bind(await sha256(token)).run();
