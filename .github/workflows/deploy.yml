@@ -34,6 +34,8 @@ jobs:
           GREEN_API_INSTANCE_ID: ${{ secrets.GREEN_API_INSTANCE_ID }}
           GREEN_API_TOKEN: ${{ secrets.GREEN_API_TOKEN }}
           GREEN_API_URL: ${{ secrets.GREEN_API_URL }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          RESEND_FROM_EMAIL: ${{ secrets.RESEND_FROM_EMAIL }}
         run: |
           if [ -n "$TELEGRAM_BOT_TOKEN" ] && [ -n "$TELEGRAM_CHAT_ID" ]; then
             printf '%s' "$TELEGRAM_BOT_TOKEN" | npx wrangler secret put TELEGRAM_BOT_TOKEN
@@ -54,6 +56,16 @@ jobs:
             echo "GREEN-API secrets configured."
           else
             echo "GREEN-API secrets not configured; skipping WhatsApp setup."
+          fi
+
+          if [ -n "$RESEND_API_KEY" ]; then
+            printf '%s' "$RESEND_API_KEY" | npx wrangler secret put RESEND_API_KEY
+            if [ -n "$RESEND_FROM_EMAIL" ]; then
+              printf '%s' "$RESEND_FROM_EMAIL" | npx wrangler secret put RESEND_FROM_EMAIL
+            fi
+            echo "Resend email secrets configured."
+          else
+            echo "Resend secrets not configured; email OTP will be unavailable until configured."
           fi
 
 # Telegram secrets are configured via GitHub Actions secrets.
