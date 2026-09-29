@@ -92,7 +92,7 @@ function telegramStatsText(stats:{totalVisits:number;todayVisits:number;last7Day
     "📊 إحصائيات الموقع","",
     `👀 إجمالي الزيارات: ${stats.totalVisits.toLocaleString("ar-EG")}`,
     `📅 زيارات اليوم: ${stats.todayVisits.toLocaleString("ar-EG")}`,
-    `🗓️ آخر 7 أيام: ${stats.last7DaysVisits.toLocaleString("ar-EG")`}`,
+    `🗓️ آخر 7 أيام: ${stats.last7DaysVisits.toLocaleString("ar-EG")}`,
     "",
     `🕐 ${new Date().toLocaleString("ar-EG",{timeZone:"Africa/Cairo"})}`
   ].join("\\n");
