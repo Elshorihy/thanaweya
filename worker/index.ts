@@ -167,31 +167,38 @@ async function broadcastWhatsApp(env:Env,message:string){
 }
 
 async function ensureTelegramDashboard(env:Env){
-  await env.DB.prepare("CREATE TABLE IF NOT EXISTS telegram_admin_state (chat_id TEXT PRIMARY KEY, mode TEXT NOT NULL, updated_at INTEGER NOT NULL)").run();
+  await env.DB.prepare("CREATE TABLE IF NOT EXISTS telegram_admin_state (chat_id TEXT PRIMARY KEY, mode TEXT NOT NULL, payload_json TEXT, updated_at INTEGER NOT NULL)").run();
+  try { await env.DB.prepare("ALTER TABLE telegram_admin_state ADD COLUMN payload_json TEXT").run(); } catch {}
 }
 
 function telegramDashboardKeyboard(){
   return {
     inline_keyboard:[
-      [{text:"📊 الإحصائيات",callback_data:"dash_stats"},{text:"👥 المستخدمين",callback_data:"dash_users"}],
-      [{text:"📱 واتساب",callback_data:"dash_wa"},{text:"🕐 آخر المستخدمين",callback_data:"dash_recent"}],
+      [{text:"📊 الرئيسية والإحصائيات",callback_data:"dash_stats"},{text:"👥 المستخدمين",callback_data:"dash_users"}],
+      [{text:"🔎 بحث عن مستخدم",callback_data:"dash_search"},{text:"🕐 آخر المستخدمين",callback_data:"dash_recent"}],
+      [{text:"📈 الزيارات",callback_data:"dash_traffic"},{text:"🔐 الدخول و OTP",callback_data:"dash_auth"}],
+      [{text:"📱 واتساب",callback_data:"dash_wa"},{text:"🩺 حالة النظام",callback_data:"dash_system"}],
       [{text:"📢 إرسال للجميع",callback_data:"dash_broadcast"}],
       [{text:"🔄 تحديث اللوحة",callback_data:"dash_home"}]
     ]
   };
 }
+const dashBack=()=>({inline_keyboard:[[ {text:"⬅️ رجوع للوحة",callback_data:"dash_home"} ]]});
 
 async function sendTelegramDashboard(env:Env,chatId:string){
   const stats=await getPageViewStats(env);
+  let linked=0;
+  try { const r=await env.DB.prepare("SELECT COUNT(*) AS n FROM user_phones WHERE phone IS NOT NULL AND phone<>''").first<any>(); linked=Number(r?.n||0); } catch {}
   const text=[
-    "🎛️ لوحة تحكم ثانوية",
+    "🎛️ لوحة تحكم ثانوية — الإدارة",
     "",
-    "👥 المستخدمون: "+stats.totalUsers.toLocaleString("ar-EG"),
-    "👀 الزيارات: "+stats.totalVisits.toLocaleString("ar-EG"),
+    "👥 الحسابات: "+stats.totalUsers.toLocaleString("ar-EG"),
+    "📱 أرقام واتساب المرتبطة: "+linked.toLocaleString("ar-EG"),
+    "👀 إجمالي الزيارات: "+stats.totalVisits.toLocaleString("ar-EG"),
     "📅 زيارات اليوم: "+stats.todayVisits.toLocaleString("ar-EG"),
-    "🗓️ آخر 7 أيام: "+stats.last7DaysVisits.toLocaleString("ar-EG"),
+    "🗓️ زيارات آخر 7 أيام: "+stats.last7DaysVisits.toLocaleString("ar-EG"),
     "",
-    "اختار العملية من الأزرار تحت 👇"
+    "اختار القسم اللي عايز تديره 👇"
   ].join("\n");
   await telegramCall(env,"sendMessage",{chat_id:chatId,text,reply_markup:telegramDashboardKeyboard()});
 }
@@ -200,25 +207,78 @@ async function sendTelegramUsers(env:Env,chatId:string){
   const row=await env.DB.prepare("SELECT COUNT(*) AS n FROM users").first<any>();
   const verified=await env.DB.prepare("SELECT COUNT(*) AS n FROM users WHERE email_verified_at IS NOT NULL").first<any>();
   const whatsapp=await env.DB.prepare("SELECT COUNT(*) AS n FROM user_phones WHERE phone IS NOT NULL AND phone<>''").first<any>();
+  const noWhatsapp=Number(row?.n||0)-Number(whatsapp?.n||0);
+  const today=await env.DB.prepare("SELECT COUNT(*) AS n FROM users WHERE created_at>=?").bind(Date.now()-86400000).first<any>();
+  const week=await env.DB.prepare("SELECT COUNT(*) AS n FROM users WHERE created_at>=?").bind(Date.now()-7*86400000).first<any>();
   const text=[
-    "👥 إحصائيات المستخدمين",
+    "👥 تفاصيل المستخدمين",
     "",
     "👤 إجمالي الحسابات: "+Number(row?.n||0).toLocaleString("ar-EG"),
     "✅ حسابات مؤكدة: "+Number(verified?.n||0).toLocaleString("ar-EG"),
-    "📱 مربوط لهم واتساب: "+Number(whatsapp?.n||0).toLocaleString("ar-EG")
+    "📱 مربوط لهم واتساب: "+Number(whatsapp?.n||0).toLocaleString("ar-EG"),
+    "⚠️ بدون واتساب: "+Math.max(0,noWhatsapp).toLocaleString("ar-EG"),
+    "🆕 تسجيلات آخر 24 ساعة: "+Number(today?.n||0).toLocaleString("ar-EG"),
+    "🗓️ تسجيلات آخر 7 أيام: "+Number(week?.n||0).toLocaleString("ar-EG")
   ].join("\n");
-  await telegramCall(env,"sendMessage",{chat_id:chatId,text,reply_markup:{inline_keyboard:[[ {text:"⬅️ رجوع",callback_data:"dash_home"} ]] }});
+  await telegramCall(env,"sendMessage",{chat_id:chatId,text,reply_markup:dashBack()});
 }
 
 async function sendTelegramRecentUsers(env:Env,chatId:string){
-  const rows=await env.DB.prepare("SELECT u.name,u.email,p.phone,u.created_at FROM users u LEFT JOIN user_phones p ON p.user_id=u.id ORDER BY u.created_at DESC LIMIT 10").all<any>();
-  const items=(rows.results||[]);
+  const rows=await env.DB.prepare("SELECT u.id,u.name,u.email,p.phone,u.email_verified_at,u.created_at,u.updated_at FROM users u LEFT JOIN user_phones p ON p.user_id=u.id ORDER BY u.created_at DESC LIMIT 10").all<any>();
+  const items=rows.results||[];
+  const lines=items.map((u:any,i:number)=>{
+    const created=new Date(Number(u.created_at||0)).toLocaleString("ar-EG",{dateStyle:"short",timeStyle:"short"});
+    const verified=u.email_verified_at?"✅":"⏳";
+    return (i+1)+". "+String(u.name||"بدون اسم")+" "+verified+
+      "\n   ✉️ "+String(u.email||"")+
+      "\n   📱 "+String(u.phone||"—")+
+      "\n   🕐 "+created;
+  });
+  const text=["🕐 آخر 10 حسابات", "", ...(lines.length?lines:["لا يوجد مستخدمون حتى الآن."])].join("\n");
+  await telegramCall(env,"sendMessage",{chat_id:chatId,text,reply_markup:dashBack()});
+}
+
+async function sendTelegramUserSearch(env:Env,chatId:string,query:string){
+  const q="%"+query.trim().slice(0,80)+"%";
+  const rows=await env.DB.prepare("SELECT u.id,u.name,u.email,p.phone,u.email_verified_at,u.created_at FROM users u LEFT JOIN user_phones p ON p.user_id=u.id WHERE u.name LIKE ? OR u.email LIKE ? OR COALESCE(p.phone,'') LIKE ? ORDER BY u.created_at DESC LIMIT 10").bind(q,q,q).all<any>();
+  const items=rows.results||[];
   const lines=items.map((u:any,i:number)=>{
     const date=new Date(Number(u.created_at||0)).toLocaleString("ar-EG",{dateStyle:"short",timeStyle:"short"});
-    return (i+1)+". "+String(u.name||"بدون اسم")+"\n   ✉️ "+String(u.email||"")+"\n   📱 "+String(u.phone||"—")+"\n   🕐 "+date;
+    return (i+1)+". "+String(u.name||"بدون اسم")+(u.email_verified_at?" ✅":" ⏳")+
+      "\n   ✉️ "+String(u.email||"")+
+      "\n   📱 "+String(u.phone||"—")+
+      "\n   🕐 "+date;
   });
-  const text=["🕐 آخر 10 مستخدمين","",...(lines.length?lines:["لا يوجد مستخدمون حتى الآن."])].join("\n");
-  await telegramCall(env,"sendMessage",{chat_id:chatId,text,reply_markup:{inline_keyboard:[[ {text:"⬅️ رجوع",callback_data:"dash_home"} ]] }});
+  const text=["🔎 نتائج البحث عن: "+query,"",...(lines.length?lines:["لا توجد نتائج مطابقة."])].join("\n");
+  await telegramCall(env,"sendMessage",{chat_id:chatId,text,reply_markup:{inline_keyboard:[[ {text:"🔎 بحث جديد",callback_data:"dash_search"} ],[ {text:"⬅️ رجوع",callback_data:"dash_home"} ]] }});
+}
+
+async function sendTelegramTraffic(env:Env,chatId:string){
+  await ensurePageViews(env);
+  const rows=await env.DB.prepare("SELECT day,COUNT(*) AS n FROM site_page_views WHERE day>=date(?, '-6 day') GROUP BY day ORDER BY day DESC").bind(new Date().toISOString().slice(0,10)).all<any>();
+  const items=rows.results||[];
+  const total=items.reduce((a:any,x:any)=>a+Number(x.n||0),0);
+  const lines=items.map((x:any)=>"📅 "+String(x.day)+" — "+Number(x.n||0).toLocaleString("ar-EG")+" زيارة");
+  const text=["📈 حركة الموقع — آخر 7 أيام","",...lines,"","🔢 إجمالي الفترة: "+total.toLocaleString("ar-EG")].join("\n");
+  await telegramCall(env,"sendMessage",{chat_id:chatId,text,reply_markup:dashBack()});
+}
+
+async function sendTelegramAuthStats(env:Env,chatId:string){
+  const verified=await env.DB.prepare("SELECT COUNT(*) AS n FROM users WHERE email_verified_at IS NOT NULL").first<any>();
+  const unverified=await env.DB.prepare("SELECT COUNT(*) AS n FROM users WHERE email_verified_at IS NULL").first<any>();
+  const activeSessions=await env.DB.prepare("SELECT COUNT(*) AS n FROM sessions WHERE expires_at>?").bind(Date.now()).first<any>();
+  const registerCodes=await env.DB.prepare("SELECT COUNT(*) AS n FROM auth_codes WHERE type='register' AND expires_at>?").bind(Date.now()).first<any>();
+  const resetCodes=await env.DB.prepare("SELECT COUNT(*) AS n FROM auth_codes WHERE type='reset' AND expires_at>?").bind(Date.now()).first<any>();
+  const text=[
+    "🔐 الدخول والتحقق",
+    "",
+    "✅ حسابات مؤكدة: "+Number(verified?.n||0).toLocaleString("ar-EG"),
+    "⏳ حسابات غير مؤكدة: "+Number(unverified?.n||0).toLocaleString("ar-EG"),
+    "🟢 جلسات دخول فعالة: "+Number(activeSessions?.n||0).toLocaleString("ar-EG"),
+    "📨 أكواد تسجيل فعالة: "+Number(registerCodes?.n||0).toLocaleString("ar-EG"),
+    "🔑 أكواد استعادة فعالة: "+Number(resetCodes?.n||0).toLocaleString("ar-EG")
+  ].join("\n");
+  await telegramCall(env,"sendMessage",{chat_id:chatId,text,reply_markup:dashBack()});
 }
 
 async function sendTelegramWhatsAppStats(env:Env,chatId:string){
@@ -226,26 +286,54 @@ async function sendTelegramWhatsAppStats(env:Env,chatId:string){
   const users=await env.DB.prepare("SELECT COUNT(*) AS n FROM user_phones WHERE phone IS NOT NULL AND phone<>''").first<any>();
   const sent=await env.DB.prepare("SELECT COUNT(*) AS n FROM whatsapp_messages WHERE status='sent'").first<any>();
   const failed=await env.DB.prepare("SELECT COUNT(*) AS n FROM whatsapp_messages WHERE status='failed'").first<any>();
-  const today=await env.DB.prepare("SELECT COUNT(*) AS n FROM whatsapp_messages WHERE status='sent' AND created_at>=?").bind(Date.now()-86400000).first<any>();
+  const last24=await env.DB.prepare("SELECT COUNT(*) AS n FROM whatsapp_messages WHERE created_at>=?").bind(Date.now()-86400000).first<any>();
+  const failed24=await env.DB.prepare("SELECT COUNT(*) AS n FROM whatsapp_messages WHERE status='failed' AND created_at>=?").bind(Date.now()-86400000).first<any>();
+  const lastFailure=await env.DB.prepare("SELECT phone,error,created_at FROM whatsapp_messages WHERE status='failed' ORDER BY created_at DESC LIMIT 1").first<any>();
   const text=[
-    "📱 إحصائيات واتساب",
+    "📱 تفاصيل واتساب",
     "",
-    "📞 أرقام مرتبطة بحسابات: "+Number(users?.n||0).toLocaleString("ar-EG"),
+    "📞 أرقام مرتبطة: "+Number(users?.n||0).toLocaleString("ar-EG"),
+    "📨 إجمالي الرسائل: "+(Number(sent?.n||0)+Number(failed?.n||0)).toLocaleString("ar-EG"),
     "✅ رسائل ناجحة: "+Number(sent?.n||0).toLocaleString("ar-EG"),
     "❌ رسائل فاشلة: "+Number(failed?.n||0).toLocaleString("ar-EG"),
-    "📨 ناجحة آخر 24 ساعة: "+Number(today?.n||0).toLocaleString("ar-EG")
+    "📨 آخر 24 ساعة: "+Number(last24?.n||0).toLocaleString("ar-EG"),
+    "❌ فشل آخر 24 ساعة: "+Number(failed24?.n||0).toLocaleString("ar-EG"),
+    lastFailure?"\n⚠️ آخر فشل: "+String(lastFailure.phone||"")+" — "+String(lastFailure.error||"غير معروف").slice(0,180):""
   ].join("\n");
-  await telegramCall(env,"sendMessage",{chat_id:chatId,text,reply_markup:{inline_keyboard:[[ {text:"⬅️ رجوع",callback_data:"dash_home"} ]] }});
+  await telegramCall(env,"sendMessage",{chat_id:chatId,text,reply_markup:dashBack()});
 }
 
-async function setTelegramAdminMode(env:Env,chatId:string,mode:string){
-  await ensureTelegramDashboard(env);
-  await env.DB.prepare("INSERT INTO telegram_admin_state(chat_id,mode,updated_at) VALUES(?,?,?) ON CONFLICT(chat_id) DO UPDATE SET mode=excluded.mode,updated_at=excluded.updated_at").bind(chatId,mode,Date.now()).run();
+async function sendTelegramSystem(env:Env,chatId:string){
+  let db="❌",users="—",views="—",wa="—";
+  try{await ensureSchema(env);await env.DB.prepare("SELECT 1 AS ok").first();db="✅";}catch{}
+  try{const r=await env.DB.prepare("SELECT COUNT(*) AS n FROM users").first<any>();users=Number(r?.n||0).toLocaleString("ar-EG");}catch{}
+  try{const r=await env.DB.prepare("SELECT COUNT(*) AS n FROM site_page_views").first<any>();views=Number(r?.n||0).toLocaleString("ar-EG");}catch{}
+  try{await ensureWhatsAppLog(env);const r=await env.DB.prepare("SELECT COUNT(*) AS n FROM whatsapp_messages").first<any>();wa=Number(r?.n||0).toLocaleString("ar-EG");}catch{}
+  const text=[
+    "🩺 حالة النظام",
+    "",
+    "🗄️ قاعدة البيانات D1: "+db,
+    "👥 سجلات المستخدمين: "+users,
+    "👀 سجلات الزيارات: "+views,
+    "📱 سجلات واتساب: "+wa,
+    "☁️ Worker: يعمل",
+    "🤖 Telegram: متصل",
+    "",
+    "آخر فحص: "+new Date().toLocaleString("ar-EG")
+  ].join("\n");
+  await telegramCall(env,"sendMessage",{chat_id:chatId,text,reply_markup:dashBack()});
 }
-async function getTelegramAdminMode(env:Env,chatId:string){
+
+async function setTelegramAdminMode(env:Env,chatId:string,mode:string,payload:any=null){
   await ensureTelegramDashboard(env);
-  const row=await env.DB.prepare("SELECT mode FROM telegram_admin_state WHERE chat_id=?").bind(chatId).first<any>();
-  return String(row?.mode||"");
+  await env.DB.prepare("INSERT INTO telegram_admin_state(chat_id,mode,payload_json,updated_at) VALUES(?,?,?,?) ON CONFLICT(chat_id) DO UPDATE SET mode=excluded.mode,payload_json=excluded.payload_json,updated_at=excluded.updated_at").bind(chatId,mode,payload===null?null:JSON.stringify(payload),Date.now()).run();
+}
+async function getTelegramAdminState(env:Env,chatId:string){
+  await ensureTelegramDashboard(env);
+  const row=await env.DB.prepare("SELECT mode,payload_json FROM telegram_admin_state WHERE chat_id=?").bind(chatId).first<any>();
+  let payload:any=null;
+  if(row?.payload_json){try{payload=JSON.parse(row.payload_json)}catch{}}
+  return {mode:String(row?.mode||""),payload};
 }
 async function clearTelegramAdminMode(env:Env,chatId:string){
   await ensureTelegramDashboard(env);
@@ -261,75 +349,60 @@ async function handleTelegramUpdate(env:Env,update:any){
   if(callback){
     if(callback.id) await telegramCall(env,"answerCallbackQuery",{callback_query_id:callback.id});
     const data=String(callback.data||"");
-    if(data==="dash_home"){await sendTelegramDashboard(env,chatId);return;}
+    if(data==="dash_home"){await clearTelegramAdminMode(env,chatId);await sendTelegramDashboard(env,chatId);return;}
     if(data==="dash_stats"){await sendTelegramDashboard(env,chatId);return;}
-    if(data==="dash_users"){await sendTelegramUsers(env,chatId);return;}
-    if(data==="dash_recent"){await sendTelegramRecentUsers(env,chatId);return;}
-    if(data==="dash_wa"){await sendTelegramWhatsAppStats(env,chatId);return;}
-    if(data==="dash_broadcast"){
-      await setTelegramAdminMode(env,chatId,"broadcast");
-      await telegramCall(env,"sendMessage",{chat_id:chatId,text:"📢 ابعتلي الرسالة اللي عايز أبعتها لكل أرقام واتساب المسجلة.\n\n⚠️ الرسالة هتتبعت مباشرة للجميع بعد ما تبعتها.",reply_markup:{inline_keyboard:[[ {text:"❌ إلغاء",callback_data:"dash_cancel"} ]] }});
-      return;
-    }
-    if(data==="dash_cancel"){
+    if(data==="dash_users"){await clearTelegramAdminMode(env,chatId);await sendTelegramUsers(env,chatId);return;}
+    if(data==="dash_recent"){await clearTelegramAdminMode(env,chatId);await sendTelegramRecentUsers(env,chatId);return;}
+    if(data==="dash_search"){await setTelegramAdminMode(env,chatId,"user_search");await telegramCall(env,"sendMessage",{chat_id:chatId,text:"🔎 ابعت الاسم أو الإيميل أو رقم الواتساب اللي عايز تدور عليه.",reply_markup:{inline_keyboard:[[ {text:"❌ إلغاء",callback_data:"dash_cancel"} ]] }});return;}
+    if(data==="dash_traffic"){await clearTelegramAdminMode(env,chatId);await sendTelegramTraffic(env,chatId);return;}
+    if(data==="dash_auth"){await clearTelegramAdminMode(env,chatId);await sendTelegramAuthStats(env,chatId);return;}
+    if(data==="dash_wa"){await clearTelegramAdminMode(env,chatId);await sendTelegramWhatsAppStats(env,chatId);return;}
+    if(data==="dash_system"){await clearTelegramAdminMode(env,chatId);await sendTelegramSystem(env,chatId);return;}
+    if(data==="dash_broadcast"){await setTelegramAdminMode(env,chatId,"broadcast");await telegramCall(env,"sendMessage",{chat_id:chatId,text:"📢 ابعتلي الرسالة اللي عايز تبعتها لكل أرقام واتساب المسجلة.\n\n⚠️ بعد ما تبعتها هعرض عليك تأكيد قبل الإرسال للجميع.",reply_markup:{inline_keyboard:[[ {text:"❌ إلغاء",callback_data:"dash_cancel"} ]] }});return;}
+    if(data==="dash_broadcast_confirm"){
+      const state=await getTelegramAdminState(env,chatId);
+      const pending=String(state.payload?.message||"").trim();
+      if(!pending){await clearTelegramAdminMode(env,chatId);await sendTelegramDashboard(env,chatId);return;}
       await clearTelegramAdminMode(env,chatId);
-      await sendTelegramDashboard(env,chatId);
+      await telegramCall(env,"sendMessage",{chat_id:chatId,text:"⏳ جاري إرسال الحملة لكل الأرقام..."});
+      try{
+        const result=await broadcastWhatsApp(env,pending);
+        await telegramCall(env,"sendMessage",{chat_id:chatId,text:["📢 نتيجة الحملة","","👥 الإجمالي: "+result.total,"✅ تم الإرسال: "+result.sent,"❌ فشل: "+result.failed,result.errors.length?"\nأمثلة للأخطاء:\n"+result.errors.join("\n"):""].join("\n"),reply_markup:{inline_keyboard:[[ {text:"🎛️ لوحة التحكم",callback_data:"dash_home"} ]] }});
+      }catch(e){await telegramCall(env,"sendMessage",{chat_id:chatId,text:"⚠️ تعذر تنفيذ الحملة: "+(e instanceof Error?e.message:String(e)).slice(0,700),reply_markup:{inline_keyboard:[[ {text:"🎛️ لوحة التحكم",callback_data:"dash_home"} ]] }});}
       return;
     }
+    if(data==="dash_cancel"){await clearTelegramAdminMode(env,chatId);await sendTelegramDashboard(env,chatId);return;}
     return;
   }
 
   const text=String(message?.text||"").trim();
-  const mode=await getTelegramAdminMode(env,chatId);
-
-  if(mode==="broadcast" && text){
+  const state=await getTelegramAdminState(env,chatId);
+  if(state.mode==="broadcast" && text){
+    await setTelegramAdminMode(env,chatId,"broadcast_pending",{message:text});
+    await telegramCall(env,"sendMessage",{chat_id:chatId,text:"📝 الرسالة جاهزة للإرسال:\n\n"+text+"\n\nهل أنت متأكد إنك عايز تبعتها لكل أرقام واتساب؟",reply_markup:{inline_keyboard:[[ {text:"✅ تأكيد الإرسال",callback_data:"dash_broadcast_confirm"},{text:"❌ إلغاء",callback_data:"dash_cancel"} ]] }});
+    return;
+  }
+  if(state.mode==="user_search" && text){
     await clearTelegramAdminMode(env,chatId);
-    try{
-      const result=await broadcastWhatsApp(env,text);
-      await telegramCall(env,"sendMessage",{
-        chat_id:chatId,
-        text:[
-          "📢 نتيجة الحملة",
-          "",
-          "👥 الإجمالي: "+result.total,
-          "✅ تم الإرسال: "+result.sent,
-          "❌ فشل: "+result.failed,
-          result.errors.length?"\nأمثلة للأخطاء:\n"+result.errors.join("\n"):""
-        ].join("\n"),
-        reply_markup:{inline_keyboard:[[ {text:"🎛️ لوحة التحكم",callback_data:"dash_home"} ]]}
-      });
-    }catch(e){
-      await telegramCall(env,"sendMessage",{chat_id:chatId,text:"⚠️ تعذر تنفيذ الحملة: "+(e instanceof Error?e.message:String(e)).slice(0,700),reply_markup:{inline_keyboard:[[ {text:"🎛️ لوحة التحكم",callback_data:"dash_home"} ]] }});
-    }
+    await sendTelegramUserSearch(env,chatId,text);
     return;
   }
 
-  if(text==="/start" || text==="/panel" || text==="/dashboard" || text==="/stats" || text==="📊 الإحصائيات الآن"){
-    await sendTelegramDashboard(env,chatId);
-    return;
-  }
-
+  if(text==="/start" || text==="/panel" || text==="/dashboard" || text==="/stats" || text==="📊 الإحصائيات الآن"){await sendTelegramDashboard(env,chatId);return;}
   if(text.startsWith("/waall ")){
     const messageText=text.slice(7).trim();
     if(!messageText){await telegramCall(env,"sendMessage",{chat_id:chatId,text:"الاستخدام: /waall رسالتك هنا"});return;}
-    try{
-      const result=await broadcastWhatsApp(env,messageText);
-      await telegramCall(env,"sendMessage",{chat_id:chatId,text:"📲 تم إرسال حملة واتساب\n\n👥 الإجمالي: "+result.total+"\n✅ نجح: "+result.sent+"\n❌ فشل: "+result.failed});
-    }catch(e){await telegramCall(env,"sendMessage",{chat_id:chatId,text:"⚠️ تعذر إرسال حملة واتساب: "+(e instanceof Error?e.message:String(e)).slice(0,700)});}
+    try{const result=await broadcastWhatsApp(env,messageText);await telegramCall(env,"sendMessage",{chat_id:chatId,text:"📲 تم إرسال حملة واتساب\n\n👥 الإجمالي: "+result.total+"\n✅ نجح: "+result.sent+"\n❌ فشل: "+result.failed});}
+    catch(e){await telegramCall(env,"sendMessage",{chat_id:chatId,text:"⚠️ تعذر إرسال حملة واتساب: "+(e instanceof Error?e.message:String(e)).slice(0,700)});}
     return;
   }
-
   if(text.startsWith("/wa ")){
     const parts=text.split(/\s+/),phone=cleanPhone(parts[1]||""),messageText=parts.slice(2).join(" ").trim();
     if(!validPhone(phone)||!messageText){await telegramCall(env,"sendMessage",{chat_id:chatId,text:"الاستخدام: /wa +201xxxxxxxxx رسالتك هنا"});return;}
-    try{
-      const row=await env.DB.prepare("SELECT user_id FROM user_phones WHERE phone=?").bind(phone).first<any>();
-      const result=await sendWhatsAppToUser(env,String(row?.user_id||""),phone,messageText);
-      await telegramCall(env,"sendMessage",{chat_id:chatId,text:result.ok?"✅ تم إرسال الرسالة على واتساب إلى "+phone:"❌ فشل الإرسال إلى "+phone+"\n"+result.error});
-    }catch(e){await telegramCall(env,"sendMessage",{chat_id:chatId,text:"⚠️ تعذر إرسال واتساب: "+(e instanceof Error?e.message:String(e)).slice(0,700)});}
+    try{const row=await env.DB.prepare("SELECT user_id FROM user_phones WHERE phone=?").bind(phone).first<any>();const result=await sendWhatsAppToUser(env,String(row?.user_id||""),phone,messageText);await telegramCall(env,"sendMessage",{chat_id:chatId,text:result.ok?"✅ تم إرسال الرسالة على واتساب إلى "+phone:"❌ فشل الإرسال إلى "+phone+"\n"+result.error});}
+    catch(e){await telegramCall(env,"sendMessage",{chat_id:chatId,text:"⚠️ تعذر إرسال واتساب: "+(e instanceof Error?e.message:String(e)).slice(0,700)});}
     return;
   }
-
   await sendTelegramDashboard(env,chatId);
 }
 
