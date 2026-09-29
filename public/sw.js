@@ -1,4 +1,4 @@
-const CACHE='thanaweya-shell-v9';
+const CACHE='thanaweya-shell-v10';
 const CORE=['/','/manifest.webmanifest','/icons/thanaweya-192.png','/icons/thanaweya-512.png'];
 
 self.addEventListener('install',event=>{
@@ -11,7 +11,9 @@ self.addEventListener('activate',event=>{
 
 self.addEventListener('fetch',event=>{
  const req=event.request;
- if(req.method!=='GET'||new URL(req.url).origin!==self.location.origin)return;
+ const requestUrl=new URL(req.url);
+ if(requestUrl.pathname.startsWith('/api/'))return;
+ if(req.method!=='GET'||requestUrl.origin!==self.location.origin)return;
  const isDocument=req.mode==='navigate';
  const isAsset=/\.(?:js|css|json|webmanifest)$/.test(new URL(req.url).pathname);
  event.respondWith(
