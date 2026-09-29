@@ -16,7 +16,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
 
       - run: npm install --no-audit --no-fund
 
@@ -40,3 +40,4 @@ jobs:
             --data "{\"url\":\"https://thanaweya.sheenomatp.workers.dev/api/telegram/webhook\"}"
 
 # Telegram secrets are configured via GitHub Actions secrets.
+# Use Node 24 on GitHub Actions runners.
