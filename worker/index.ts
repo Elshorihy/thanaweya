@@ -24,10 +24,6 @@ async function ensureSchema(env:Env){
     await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_sessions_expiry ON sessions(expires_at)").run();
   })().catch(e=>{schemaReady=null;throw e});
   await schemaReady;
-  const owner=await env.DB.prepare("SELECT id FROM users WHERE email=?").bind(OWNER_EMAIL).first<{id:string}>();
-  if(!owner){
-    await env.DB.prepare("INSERT INTO users(id,email,name,password_hash,password_salt,created_at,updated_at) VALUES(?,?,?,?,?,?,?)").bind("owner-"+randomHex(12),OWNER_EMAIL,OWNER_NAME,OWNER_PASSWORD_HASH,OWNER_SALT,Date.now(),Date.now()).run();
-  }
 }
 const COOKIE = "thanaweya_session";
 const SESSION_DAYS = 30;
@@ -77,7 +73,7 @@ async function getPageViewStats(env:Env){
   const today=new Date().toISOString().slice(0,10);
   let totalUsers=0,totalVisits=0,todayVisits=0,last7DaysVisits=0;
   try{
-    const row=await env.DB.prepare("SELECT COUNT(*) AS n FROM users WHERE email<>?").bind(OWNER_EMAIL).first<any>();
+    const row=await env.DB.prepare("SELECT COUNT(*) AS n FROM users").first<any>();
     totalUsers=Number(row?.n||0);
   }catch(e){ console.error("Telegram users stats failed",e); }
   try{
