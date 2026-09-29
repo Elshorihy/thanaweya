@@ -6,10 +6,8 @@ interface Env {
   GREEN_API_INSTANCE_ID?: string;
   GREEN_API_TOKEN?: string;
   GREEN_API_URL?: string;
-  GOOGLE_CLIENT_ID?: string;
-  GOOGLE_CLIENT_SECRET?: string;
-  GOOGLE_REFRESH_TOKEN?: string;
-  GMAIL_FROM_EMAIL?: string;
+  GOOGLE_APPS_SCRIPT_URL?: string;
+  GOOGLE_APPS_SCRIPT_SECRET?: string;
 }
 
 let schemaReady:Promise<void>|null=null;
@@ -135,36 +133,19 @@ async function greenApiCall(env:Env,phone:string,message:string){
   return String(data.idMessage);
 }
 
-function base64Url(bytes:Uint8Array){return btoa(String.fromCharCode(...bytes)).replace(/\\+/g,"-").replace(/\\//g,"_").replace(/=+$/,"");}
-function textBase64Url(value:string){return base64Url(new TextEncoder().encode(value));}
-async function gmailAccessToken(env:Env){
-  if(!env.GOOGLE_CLIENT_ID||!env.GOOGLE_CLIENT_SECRET||!env.GOOGLE_REFRESH_TOKEN) throw new Error("Gmail غير مفعّل حاليًا");
-  const r=await fetch("https://oauth2.googleapis.com/token",{method:"POST",headers:{"content-type":"application/x-www-form-urlencoded"},body:new URLSearchParams({
-    client_id:env.GOOGLE_CLIENT_ID,client_secret:env.GOOGLE_CLIENT_SECRET,refresh_token:env.GOOGLE_REFRESH_TOKEN,grant_type:"refresh_token"
-  })});
-  const data=await r.json() as any;
-  if(!r.ok||!data?.access_token) throw new Error(data?.error_description||data?.error||"فشل الاتصال بـ Gmail");
-  return String(data.access_token);
-}
 async function sendEmailOtp(env:Env,email:string,code:string,type:"register"|"reset"){
-  const token=await gmailAccessToken(env);
-  const from=env.GMAIL_FROM_EMAIL;
-  if(!from) throw new Error("GMAIL_FROM_EMAIL غير مضبوط");
-  const title=type==="register"?"تأكيد البريد الإلكتروني":"استعادة كلمة السر";
-  const intro=type==="register"?"استخدم الكود التالي لتأكيد بريدك الإلكتروني وإنشاء حسابك:":"استخدم الكود التالي لإعادة تعيين كلمة السر:";
-  const body=intro+"\\n\\n"+code+"\\n\\nالكود صالح لمدة 10 دقائق. لو ما طلبتش العملية دي تجاهل الرسالة.";
-  const raw=[
-    "From: Thanaweya <"+from+">",
-    "To: "+email,
-    "Subject: Thanaweya — "+title,
-    "Content-Type: text/plain; charset=UTF-8",
-    "Content-Transfer-Encoding: 8bit",
-    "",
-    body
-  ].join("\\r\\n");
-  const r=await fetch("https://gmail.googleapis.com/gmail/v1/users/me/messages/send",{method:"POST",headers:{"authorization":"Bearer "+token,"content-type":"application/json"},body:JSON.stringify({raw:textBase64Url(raw)})});
-  const data=await r.json() as any;
-  if(!r.ok||!data?.id) throw new Error(data?.error?.message||"فشل إرسال الإيميل عبر Gmail");
+  const url=env.GOOGLE_APPS_SCRIPT_URL;
+  const secret=env.GOOGLE_APPS_SCRIPT_SECRET;
+  if(!url||!secret) throw new Error("Gmail غير مفعّل حاليًا");
+
+  const r=await fetch(url,{
+    method:"POST",
+    headers:{"content-type":"application/json"},
+    body:JSON.stringify({secret,email,code,type})
+  });
+
+  const data=await r.json().catch(()=>({})) as any;
+  if(!r.ok||!data?.ok) throw new Error(data?.error||"فشل إرسال الإيميل عبر Gmail");
 }
 
 async function ensureWhatsAppLog(env:Env){
