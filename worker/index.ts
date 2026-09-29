@@ -89,13 +89,10 @@ async function telegramCall(env:Env,method:string,payload:Record<string,unknown>
 
 function telegramStatsText(stats:{totalVisits:number;todayVisits:number;last7DaysVisits:number}){
   return [
-    "📊 إحصائيات الموقع","",
-    `👀 إجمالي الزيارات: ${stats.totalVisits.toLocaleString("ar-EG")}`,
-    `📅 زيارات اليوم: ${stats.todayVisits.toLocaleString("ar-EG")}`,
-    `🗓️ آخر 7 أيام: ${stats.last7DaysVisits.toLocaleString("ar-EG")}`,
-    "",
-    `🕐 ${new Date().toLocaleString("ar-EG",{timeZone:"Africa/Cairo"})}`
-  ].join("\\n");
+    "- 👀 إجمالي الزيارات: **"+stats.totalVisits.toLocaleString("ar-EG")+"**",
+    "- 📅 زيارات اليوم: **"+stats.todayVisits.toLocaleString("ar-EG")+"**",
+    "- 🗓️ آخر 7 أيام: **"+stats.last7DaysVisits.toLocaleString("ar-EG")+"**"
+  ].join("\n");
 }
 
 async function sendTelegramStats(env:Env,chatId:string){
