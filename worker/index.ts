@@ -1,6 +1,8 @@
 interface Env {
   DB: D1Database;
   ASSETS: Fetcher;
+  TELEGRAM_BOT_TOKEN: string;
+  TELEGRAM_CHAT_ID: string;
 }
 
 let schemaReady:Promise<void>|null=null;
@@ -67,12 +69,63 @@ async function createSession(userId:string,env:Env) {
 }
 async function body(request:Request){try{return await request.json() as any}catch{return null}}
 
+async function getPageViewStats(env:Env){
+  await ensurePageViews(env);
+  const today=new Date().toISOString().slice(0,10);
+  const total=(await env.DB.prepare("SELECT COUNT(*) AS n FROM site_page_views").first<any>())?.n||0;
+  const todayCount=(await env.DB.prepare("SELECT COUNT(*) AS n FROM site_page_views WHERE day=?").bind(today).first<any>())?.n||0;
+  const weekCount=(await env.DB.prepare("SELECT COUNT(*) AS n FROM site_page_views WHERE day>=date(?, '-6 day')").bind(today).first<any>())?.n||0;
+  return {totalVisits:Number(total),todayVisits:Number(todayCount),last7DaysVisits:Number(weekCount)};
+}
+
+async function telegramCall(env:Env,method:string,payload:Record<string,unknown>){
+  const r=await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/${method}`,{
+    method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(payload)
+  });
+  const data=await r.json() as any;
+  if(!r.ok || !data?.ok) throw new Error(data?.description||`Telegram API error: ${r.status}`);
+  return data;
+}
+
+function telegramStatsText(stats:{totalVisits:number;todayVisits:number;last7DaysVisits:number}){
+  return [
+    "📊 إحصائيات الموقع","",
+    `👀 إجمالي الزيارات: ${stats.totalVisits.toLocaleString("ar-EG")}`,
+    `📅 زيارات اليوم: ${stats.todayVisits.toLocaleString("ar-EG")}`,
+    `🗓️ آخر 7 أيام: ${stats.last7DaysVisits.toLocaleString("ar-EG")`}`,
+    "",
+    `🕐 ${new Date().toLocaleString("ar-EG",{timeZone:"Africa/Cairo"})}`
+  ].join("\\n");
+}
+
+async function sendTelegramStats(env:Env,chatId:string){
+  const stats=await getPageViewStats(env);
+  await telegramCall(env,"sendMessage",{
+    chat_id:chatId,text:telegramStatsText(stats),
+    reply_markup:{inline_keyboard:[[{text:"📊 الإحصائيات الآن",callback_data:"stats_now"}]]}
+  });
+}
+
+async function handleTelegramUpdate(env:Env,update:any){
+  const message=update?.message;
+  const callback=update?.callback_query;
+  const chatId=String(message?.chat?.id ?? callback?.message?.chat?.id ?? "");
+  if(!chatId || chatId!==String(env.TELEGRAM_CHAT_ID)) return;
+  if(callback){
+    if(callback.id) await telegramCall(env,"answerCallbackQuery",{callback_query_id:callback.id});
+    if(callback.data==="stats_now") await sendTelegramStats(env,chatId);
+    return;
+  }
+  const text=String(message?.text||"").trim();
+  if(text==="/start" || text==="/stats" || text==="📊 الإحصائيات الآن") await sendTelegramStats(env,chatId);
+}
+
 export default {
   async fetch(request:Request,env:Env):Promise<Response> {
     const url=new URL(request.url);
-    // Count page navigations. Static assets/API/owner panel are excluded.
+    // Count page navigations. Static assets and API requests are excluded.
     const staticAsset=/\.(?:js|css|map|png|jpe?g|gif|webp|svg|ico|woff2?|ttf|otf|json|xml|txt|pdf|zip)$/i.test(url.pathname);
-    if(request.method==="GET" && !url.pathname.startsWith("/api/") && url.pathname!=="/owner.html" && !staticAsset) {
+    if(request.method==="GET" && !url.pathname.startsWith("/api/") && !staticAsset) {
       try {
         await ensurePageViews(env);
         const day=new Date().toISOString().slice(0,10);
@@ -84,6 +137,12 @@ export default {
         if(request.method==="OPTIONS") return new Response(null,{status:204,headers:{"access-control-allow-origin":url.origin,"access-control-allow-credentials":"true","access-control-allow-methods":"GET,POST,PUT,OPTIONS","access-control-allow-headers":"content-type"}});
         // Owner panel uses one fixed account and its own HttpOnly cookie.
         // It does not create a user/session record and does not depend on the site's normal auth.
+        if(url.pathname==="/api/telegram/webhook" && request.method==="POST") {
+          const update=await body(request);
+          try { await handleTelegramUpdate(env,update); }
+          catch(e) { console.error("Telegram webhook error",e); }
+          return json({ok:true});
+        }
         if(url.pathname==="/api/health") {
           try { await ensureSchema(env); await env.DB.prepare("SELECT 1 AS ok").first(); return json({ok:true,db:true}); }
           catch(e) { console.error("D1 health check failed",e); return json({ok:false,db:false,error:"D1 binding/database is not available. Check the DB binding in Cloudflare."},503); }
@@ -116,13 +175,6 @@ export default {
         if(url.pathname==="/api/auth/logout" && request.method==="POST") {
           const token=cookieValue(request); if(token) await env.DB.prepare("DELETE FROM sessions WHERE token_hash=?").bind(await sha256(token)).run();
           return json({ok:true},{headers:{"set-cookie":clearCookie()}});
-        }
-        if(url.pathname==="/api/owner/stats" && request.method==="GET") {
-          await ensurePageViews(env);
-          const total=(await env.DB.prepare("SELECT COUNT(*) AS n FROM site_page_views").first<any>())?.n||0;
-          const todayCount=(await env.DB.prepare("SELECT COUNT(*) AS n FROM site_page_views WHERE day=?").bind(new Date().toISOString().slice(0,10)).first<any>())?.n||0;
-          const weekCount=(await env.DB.prepare("SELECT COUNT(*) AS n FROM site_page_views WHERE day>=date(?, '-6 day')").bind(new Date().toISOString().slice(0,10)).first<any>())?.n||0;
-          return json({totalVisits:total,todayVisits:todayCount,last7DaysVisits:weekCount});
         }
         if(url.pathname==="/api/data" && (request.method==="GET"||request.method==="PUT")) {
           const u=await userFrom(request,env); if(!u) return json({error:"يجب تسجيل الدخول"},401);
