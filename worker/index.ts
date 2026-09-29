@@ -191,12 +191,12 @@ async function handleTelegramUpdate(env:Env,update:any){
     return;
   }
   if(text.startsWith("/wa ")){
-    const parts=text.split(/\\s+/); const phone=cleanPhone(parts[1]||""); const messageText=parts.slice(2).join(" ").trim();
+    const parts=text.split(/\s+/); const phone=cleanPhone(parts[1]||""); const messageText=parts.slice(2).join(" ").trim();
     if(!validPhone(phone)||!messageText){await telegramCall(env,"sendMessage",{chat_id:chatId,text:"الاستخدام: /wa +201xxxxxxxxx رسالتك هنا"});return;}
     try{
       const row=await env.DB.prepare("SELECT user_id FROM user_phones WHERE phone=?").bind(phone).first<any>();
       const result=await sendWhatsAppToUser(env,String(row?.user_id||""),phone,messageText);
-      await telegramCall(env,"sendMessage",{chat_id:chatId,text:result.ok?"✅ تم إرسال الرسالة على واتساب إلى "+phone:"❌ فشل الإرسال إلى "+phone+"\\n"+result.error});
+      await telegramCall(env,"sendMessage",{chat_id:chatId,text:result.ok?"✅ تم إرسال الرسالة على واتساب إلى "+phone:"❌ فشل الإرسال إلى "+phone+"\n"+result.error});
     }catch(e){await telegramCall(env,"sendMessage",{chat_id:chatId,text:"⚠️ تعذر إرسال واتساب: "+(e instanceof Error?e.message:String(e)).slice(0,700)});}
     return;
   }
