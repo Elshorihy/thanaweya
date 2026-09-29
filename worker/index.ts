@@ -147,7 +147,7 @@ async function sendEmailOtp(env:Env,email:string,code:string,type:"register"|"re
   const r=await fetch(url,{
     method:"POST",
     headers:{"content-type":"application/json"},
-    body:JSON.stringify({secret,email,code,type})
+    body:JSON.stringify({secret,email,code,otpCode:code,type})
   });
 
   const data=await r.json().catch(()=>({})) as any;
