@@ -144,11 +144,24 @@ async function sendEmailOtp(env:Env,email:string,code:string,type:"register"|"re
   const secret=env.GOOGLE_APPS_SCRIPT_SECRET;
   if(!url||!secret) throw new Error("Gmail غير مفعّل حاليًا");
 
-  const r=await fetch(url,{
+  const payload=JSON.stringify({secret,email,code,otpCode:code,type});
+  let r=await fetch(url,{
     method:"POST",
+    redirect:"manual",
     headers:{"content-type":"application/json","accept":"application/json"},
-    body:JSON.stringify({secret,email,code,otpCode:code,type})
+    body:payload
   });
+
+  if([301,302,303,307,308].includes(r.status)){
+    const location=r.headers.get("location");
+    if(location){
+      r=await fetch(new URL(location,url).toString(),{
+        method:"POST",
+        headers:{"content-type":"application/json","accept":"application/json"},
+        body:payload
+      });
+    }
+  }
 
   const raw=await r.text();
   let data:any={};
