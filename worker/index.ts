@@ -46,7 +46,7 @@ function json(data: unknown, status=200, headers: Record<string,string>={}) {
 }
 function cleanEmail(v: unknown) { return String(v ?? "").trim().toLowerCase().slice(0,160); }
 function cleanName(v: unknown) { return String(v ?? "").trim().replace(/[<>]/g,"").slice(0,80); }
-function cleanPhone(v: unknown) { return String(v ?? "").replace(/[^0-9+]/g,"").replace(/^00/,"+").slice(0,20); }
+function cleanPhone(v: unknown) {\n  let p=String(v ?? "").replace(/[^0-9+]/g,"").replace(/^00/,"+");\n  if(/^01[0125]\\d{8}$/.test(p)) p="+20"+p.slice(1);\n  else if(/^201[0125]\\d{8}$/.test(p)) p="+"+p;\n  return p.slice(0,20);\n}
 function validPhone(v:string) { return /^\+?[1-9]\d{7,14}$/.test(v); }
 function bytesToHex(bytes: Uint8Array) { return [...bytes].map(b=>b.toString(16).padStart(2,"0")).join(""); }
 function randomHex(n=32) { const a=new Uint8Array(n); crypto.getRandomValues(a); return bytesToHex(a); }
