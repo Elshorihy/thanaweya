@@ -51,9 +51,7 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
           if [ -n "$TELEGRAM_BOT_TOKEN" ] && [ -n "$TELEGRAM_CHAT_ID" ]; then
-            curl -fsS -X POST "https://api.telegram.org/bot
-${TELEGRAM_BOT_TOKEN}
-/setWebhook" \
+            curl -fsS -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setWebhook" \\
               -H 'content-type: application/json' \
               --data '{"url":"https://thanaweya.sheenomatp.workers.dev/api/telegram/webhook"}'
           fi
