@@ -186,7 +186,7 @@ export default {
           const exists=await env.DB.prepare("SELECT id FROM users WHERE email=?").bind(email).first();
           if(exists) return json({error:"الإيميل مستخدم بالفعل"},409);
           if(phone && !validPhone(phone)) return json({error:"رقم واتساب غير صالح"},400);
-          if(phone){const phoneExists=await env.DB.prepare("SELECT id FROM users WHERE phone=?").bind(phone).first();if(phoneExists)return json({error:"رقم واتساب مستخدم بالفعل"},409);}
+          if(phone){const phoneExists=await env.DB.prepare("SELECT user_id FROM user_phones WHERE phone=?").bind(phone).first();if(phoneExists)return json({error:"رقم واتساب مستخدم بالفعل"},409);}
           const id=randomHex(16), salt=randomHex(16), pass=await hashPassword(password,salt);
           await env.DB.batch([
             env.DB.prepare("INSERT INTO users(id,email,name,password_hash,password_salt,created_at,updated_at) VALUES(?,?,?,?,?,?,?)").bind(id,email,name,pass,salt,Date.now(),Date.now()),
@@ -197,9 +197,15 @@ export default {
           return json({user:{id,email,name,phone:phone||null}},{headers:{"set-cookie":sessionCookie(token)}});
         }
         if(url.pathname==="/api/auth/login" && request.method==="POST") {
-          const b=await body(request), email=cleanEmail(b?.email), password=String(b?.password||"");
+          const b=await body(request), email=cleanEmail(b?.email), password=String(b?.password||""), phone=cleanPhone(b?.phone);
           const u=await env.DB.prepare("SELECT id,email,name,password_hash,password_salt FROM users WHERE email=?").bind(email).first<any>();
           if(!u||!(await verifyPassword(password,u.password_salt,u.password_hash))) return json({error:"الإيميل أو كلمة السر غير صحيحة"},401);
+          if(phone && !validPhone(phone)) return json({error:"رقم واتساب غير صالح"},400);
+          if(phone){
+            const phoneExists=await env.DB.prepare("SELECT user_id FROM user_phones WHERE phone=? AND user_id<>?").bind(phone,u.id).first<any>();
+            if(phoneExists)return json({error:"رقم واتساب مستخدم بالفعل"},409);
+            await env.DB.prepare("INSERT INTO user_phones(user_id,phone,updated_at) VALUES(?,?,?) ON CONFLICT(user_id) DO UPDATE SET phone=excluded.phone,updated_at=excluded.updated_at").bind(u.id,phone,Date.now()).run();
+          }
           const phoneRow=await env.DB.prepare("SELECT phone FROM user_phones WHERE user_id=?").bind(u.id).first<any>();
           await env.DB.prepare("DELETE FROM sessions WHERE expires_at<=?").bind(Date.now()).run();
           const token=await createSession(u.id,env);
