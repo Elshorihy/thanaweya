@@ -70,14 +70,26 @@ async function createSession(userId:string,env:Env) {
 async function body(request:Request){try{return await request.json() as any}catch{return null}}
 
 async function getPageViewStats(env:Env){
-  await ensureSchema(env);
-  await ensurePageViews(env);
   const today=new Date().toISOString().slice(0,10);
-  const total=(await env.DB.prepare("SELECT COUNT(*) AS n FROM site_page_views").first<any>())?.n||0;
-  const todayCount=(await env.DB.prepare("SELECT COUNT(*) AS n FROM site_page_views WHERE day=?").bind(today).first<any>())?.n||0;
-  const weekCount=(await env.DB.prepare("SELECT COUNT(*) AS n FROM site_page_views WHERE day>=date(?, '-6 day')").bind(today).first<any>())?.n||0;
-  const totalUsers=(await env.DB.prepare("SELECT COUNT(*) AS n FROM users WHERE email<>?").bind(OWNER_EMAIL).first<any>())?.n||0;
-  return {totalUsers:Number(totalUsers),totalVisits:Number(total),todayVisits:Number(todayCount),last7DaysVisits:Number(weekCount)};
+  let totalUsers=0,totalVisits=0,todayVisits=0,last7DaysVisits=0;
+  try{
+    const row=await env.DB.prepare("SELECT COUNT(*) AS n FROM users WHERE email<>?").bind(OWNER_EMAIL).first<any>();
+    totalUsers=Number(row?.n||0);
+  }catch(e){ console.error("Telegram users stats failed",e); }
+  try{
+    await ensurePageViews(env);
+    const row=await env.DB.prepare("SELECT COUNT(*) AS n FROM site_page_views").first<any>();
+    totalVisits=Number(row?.n||0);
+  }catch(e){ console.error("Telegram total visits stats failed",e); }
+  try{
+    const row=await env.DB.prepare("SELECT COUNT(*) AS n FROM site_page_views WHERE day=?").bind(today).first<any>();
+    todayVisits=Number(row?.n||0);
+  }catch(e){ console.error("Telegram today visits stats failed",e); }
+  try{
+    const row=await env.DB.prepare("SELECT COUNT(*) AS n FROM site_page_views WHERE day>=date(?, '-6 day')").bind(today).first<any>();
+    last7DaysVisits=Number(row?.n||0);
+  }catch(e){ console.error("Telegram 7-day visits stats failed",e); }
+  return {totalUsers,totalVisits,todayVisits,last7DaysVisits};
 }
 
 async function telegramCall(env:Env,method:string,payload:Record<string,unknown>){
