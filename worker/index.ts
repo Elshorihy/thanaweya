@@ -121,7 +121,7 @@ async function handleTelegramUpdate(env:Env,update:any){
 }
 
 export default {
-  async fetch(request:Request,env:Env):Promise<Response> {
+  async fetch(request:Request,env:Env,ctx:ExecutionContext):Promise<Response> {
     const url=new URL(request.url);
     // Count page navigations. Static assets and API requests are excluded.
     const staticAsset=/\.(?:js|css|map|png|jpe?g|gif|webp|svg|ico|woff2?|ttf|otf|json|xml|txt|pdf|zip)$/i.test(url.pathname);
@@ -142,8 +142,24 @@ export default {
         // It does not create a user/session record and does not depend on the site's normal auth.
         if(url.pathname==="/api/telegram/webhook" && request.method==="POST") {
           const update=await body(request);
-          try { await handleTelegramUpdate(env,update); }
-          catch(e) { console.error("Telegram webhook error",e); }
+          ctx.waitUntil((async()=>{
+            try {
+              await handleTelegramUpdate(env,update);
+            } catch(e) {
+              console.error("Telegram webhook error",e);
+              const chatId=String(update?.message?.chat?.id ?? update?.callback_query?.message?.chat?.id ?? "");
+              if(chatId && chatId===String(env.TELEGRAM_CHAT_ID)) {
+                try {
+                  await telegramCall(env,"sendMessage",{
+                    chat_id:chatId,
+                    text:"⚠️ حصل خطأ أثناء جلب الإحصائيات. جرّب زر الإحصائيات مرة تانية."
+                  });
+                } catch(err) {
+                  console.error("Telegram error reply failed",err);
+                }
+              }
+            }
+          })());
           return json({ok:true});
         }
         if(url.pathname==="/api/health") {
