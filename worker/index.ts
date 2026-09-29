@@ -75,7 +75,8 @@ async function getPageViewStats(env:Env){
   const total=(await env.DB.prepare("SELECT COUNT(*) AS n FROM site_page_views").first<any>())?.n||0;
   const todayCount=(await env.DB.prepare("SELECT COUNT(*) AS n FROM site_page_views WHERE day=?").bind(today).first<any>())?.n||0;
   const weekCount=(await env.DB.prepare("SELECT COUNT(*) AS n FROM site_page_views WHERE day>=date(?, '-6 day')").bind(today).first<any>())?.n||0;
-  return {totalVisits:Number(total),todayVisits:Number(todayCount),last7DaysVisits:Number(weekCount)};
+  const totalUsers=(await env.DB.prepare("SELECT COUNT(*) AS n FROM users WHERE email<>?").bind(OWNER_EMAIL).first<any>())?.n||0;
+  return {totalUsers:Number(totalUsers),totalVisits:Number(total),todayVisits:Number(todayCount),last7DaysVisits:Number(weekCount)};
 }
 
 async function telegramCall(env:Env,method:string,payload:Record<string,unknown>){
@@ -87,8 +88,9 @@ async function telegramCall(env:Env,method:string,payload:Record<string,unknown>
   return data;
 }
 
-function telegramStatsText(stats:{totalVisits:number;todayVisits:number;last7DaysVisits:number}){
+function telegramStatsText(stats:{totalUsers:number;totalVisits:number;todayVisits:number;last7DaysVisits:number}){
   return [
+    "- 👤 إجمالي المستخدمين: **"+stats.totalUsers.toLocaleString("ar-EG")+"**",
     "- 👀 إجمالي الزيارات: **"+stats.totalVisits.toLocaleString("ar-EG")+"**",
     "- 📅 زيارات اليوم: **"+stats.todayVisits.toLocaleString("ar-EG")+"**",
     "- 🗓️ آخر 7 أيام: **"+stats.last7DaysVisits.toLocaleString("ar-EG")+"**"
@@ -98,7 +100,7 @@ function telegramStatsText(stats:{totalVisits:number;todayVisits:number;last7Day
 async function sendTelegramStats(env:Env,chatId:string){
   const stats=await getPageViewStats(env);
   await telegramCall(env,"sendMessage",{
-    chat_id:chatId,text:telegramStatsText(stats),
+    chat_id:chatId,text:telegramStatsText(stats),parse_mode:"Markdown",
     reply_markup:{inline_keyboard:[[{text:"📊 الإحصائيات الآن",callback_data:"stats_now"}]]}
   });
 }
