@@ -304,3 +304,7 @@ button,input,select,textarea{max-width:100%}
   .footerContact{display:grid;grid-template-columns:1fr 1fr;width:100%}
   .footerContact>span{grid-column:1/-1}
 }
+
+.fieldError{margin:2px 0 10px!important;padding:9px 11px;border:1px solid rgba(239,68,68,.35);border-radius:9px;background:rgba(239,68,68,.1);color:#f87171;font-size:13px;font-weight:700;line-height:1.5}
+.light .fieldError{background:#fff1f2;border-color:#fecdd3;color:#dc2626}
+input:invalid,textarea:invalid,select:invalid{border-color:#ef4444}
