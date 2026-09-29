@@ -1,0 +1,1 @@
+CREATE TABLE IF NOT EXISTS site_page_views (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  day TEXT NOT NULL,\n  created_at INTEGER NOT NULL\n);\n
