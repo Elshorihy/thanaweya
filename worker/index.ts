@@ -481,10 +481,10 @@ export default {
           return json({ok:true,email});
         }
         if(url.pathname==="/api/auth/register/verify" && request.method==="POST") {
-          const b=await body(request), email=cleanEmail(b?.email), code=String(b?.code||"").replace(/\\D/g,"").slice(0,6);
+          const b=await body(request), email=cleanEmail(b?.email), code=String(b?.code||"").replace(/\D/g,"").slice(0,6);
           const row=await env.DB.prepare("SELECT * FROM auth_codes WHERE email=? AND type='register' ORDER BY created_at DESC LIMIT 1").bind(email).first<any>();
           if(!row||Number(row.expires_at)<Date.now()) return json({error:"الكود انتهت صلاحيته. اطلب كود جديد."},400);
-          if(!/^\\d{4,10}$/.test(code)) return json({error:"اكتب كود التأكيد بشكل صحيح"},400);
+          if(!/^\d{4,10}$/.test(code)) return json({error:"اكتب كود التأكيد بشكل صحيح"},400);
           if(Number(row.attempts)>=5) return json({error:"تم تجاوز عدد المحاولات. اطلب كود جديد."},429);
           const ok=(await otpHash(email,"register",code))===row.code_hash;
           if(!ok){await env.DB.prepare("UPDATE auth_codes SET attempts=attempts+1 WHERE id=?").bind(row.id).run();return json({error:"كود التأكيد غير صحيح"},400);}
@@ -504,11 +504,11 @@ export default {
           return json({ok:true});
         }
         if(url.pathname==="/api/auth/reset" && request.method==="POST") {
-          const b=await body(request), email=cleanEmail(b?.email), code=String(b?.code||"").replace(/\\D/g,"").slice(0,6), password=String(b?.password||"");
+          const b=await body(request), email=cleanEmail(b?.email), code=String(b?.code||"").replace(/\D/g,"").slice(0,6), password=String(b?.password||"");
           if(password.length<8)return json({error:"كلمة السر لازم تكون 8 أحرف على الأقل"},400);
           const row=await env.DB.prepare("SELECT * FROM auth_codes WHERE email=? AND type='reset' ORDER BY created_at DESC LIMIT 1").bind(email).first<any>();
           if(!row||Number(row.expires_at)<Date.now())return json({error:"الكود انتهت صلاحيته. اطلب كود جديد."},400);
-          if(!/^\\d{4,10}$/.test(code))return json({error:"اكتب كود التأكيد بشكل صحيح"},400);
+          if(!/^\d{4,10}$/.test(code))return json({error:"اكتب كود التأكيد بشكل صحيح"},400);
           if((await otpHash(email,"reset",code))!==row.code_hash){await env.DB.prepare("UPDATE auth_codes SET attempts=attempts+1 WHERE id=?").bind(row.id).run();return json({error:"كود التأكيد غير صحيح"},400);}
           const u=await env.DB.prepare("SELECT id FROM users WHERE email=?").bind(email).first<any>(); if(!u)return json({error:"لا يوجد حساب بهذا الإيميل"},404);
           const salt=randomHex(16), pass=await hashPassword(password,salt),now=Date.now(); await env.DB.batch([env.DB.prepare("UPDATE users SET password_hash=?,password_salt=?,updated_at=? WHERE id=?").bind(pass,salt,now,u.id),env.DB.prepare("DELETE FROM auth_codes WHERE id=?").bind(row.id)]);
