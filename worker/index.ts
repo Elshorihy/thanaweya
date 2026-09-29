@@ -135,23 +135,19 @@ async function handleTelegramUpdate(env:Env,update:any){
 export default {
   async fetch(request:Request,env:Env,ctx:ExecutionContext):Promise<Response> {
     const url=new URL(request.url);
-    // Count page navigations. Static assets and API requests are excluded.
-    const staticAsset=/\.(?:js|css|map|png|jpe?g|gif|webp|svg|ico|woff2?|ttf|otf|json|xml|txt|pdf|zip)$/i.test(url.pathname);
-    const acceptsHtml=request.headers.get("Accept")?.includes("text/html")===true;
-    const fetchDest=request.headers.get("Sec-Fetch-Dest");
-    const isDocumentRequest=fetchDest ? fetchDest==="document" : acceptsHtml;
-    if(request.method==="GET" && !url.pathname.startsWith("/api/") && !staticAsset && acceptsHtml && isDocumentRequest) {
-      try {
-        await ensurePageViews(env);
-        const day=new Date().toISOString().slice(0,10);
-        await env.DB.prepare("INSERT INTO site_page_views(day,created_at) VALUES(?,?)").bind(day,Date.now()).run();
-      } catch(e) { console.error("Page view counter failed",e); }
-    }
     if(url.pathname.startsWith("/api/")) {
       try {
         if(request.method==="OPTIONS") return new Response(null,{status:204,headers:{"access-control-allow-origin":url.origin,"access-control-allow-credentials":"true","access-control-allow-methods":"GET,POST,PUT,OPTIONS","access-control-allow-headers":"content-type"}});
         // Owner panel uses one fixed account and its own HttpOnly cookie.
         // It does not create a user/session record and does not depend on the site's normal auth.
+        if(url.pathname==="/api/pageview" && request.method==="POST") {
+          try {
+            await ensurePageViews(env);
+            const day=new Date().toISOString().slice(0,10);
+            await env.DB.prepare("INSERT INTO site_page_views(day,created_at) VALUES(?,?)").bind(day,Date.now()).run();
+          } catch(e) { console.error("Page view counter failed",e); }
+          return json({ok:true});
+        }
         if(url.pathname==="/api/telegram/webhook" && request.method==="POST") {
           const update=await body(request);
           ctx.waitUntil((async()=>{
