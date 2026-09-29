@@ -28,14 +28,12 @@ jobs:
           GREEN_API_INSTANCE_ID: ${{ secrets.GREEN_API_INSTANCE_ID }}
           GREEN_API_TOKEN: ${{ secrets.GREEN_API_TOKEN }}
           GREEN_API_URL: ${{ secrets.GREEN_API_URL }}
-          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
-          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
-          GOOGLE_REFRESH_TOKEN: ${{ secrets.GOOGLE_REFRESH_TOKEN }}
-          GMAIL_FROM_EMAIL: ${{ secrets.GMAIL_FROM_EMAIL }}
+          GOOGLE_APPS_SCRIPT_URL: ${{ secrets.GOOGLE_APPS_SCRIPT_URL }}
+          GOOGLE_APPS_SCRIPT_SECRET: ${{ secrets.GOOGLE_APPS_SCRIPT_SECRET }}
         run: |
           node <<'NODE'
           const fs = require('fs');
-          const keys = ['TELEGRAM_BOT_TOKEN','TELEGRAM_CHAT_ID','GREEN_API_INSTANCE_ID','GREEN_API_TOKEN','GREEN_API_URL','GOOGLE_CLIENT_ID','GOOGLE_CLIENT_SECRET','GOOGLE_REFRESH_TOKEN','GMAIL_FROM_EMAIL'];
+          const keys = ['TELEGRAM_BOT_TOKEN','TELEGRAM_CHAT_ID','GREEN_API_INSTANCE_ID','GREEN_API_TOKEN','GREEN_API_URL','GOOGLE_APPS_SCRIPT_URL','GOOGLE_APPS_SCRIPT_SECRET'];
           const out = {};
           for (const key of keys) if (process.env[key]) out[key] = process.env[key];
           fs.writeFileSync('.secrets.json', JSON.stringify(out));
