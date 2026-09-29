@@ -3,9 +3,9 @@ interface Env {
   ASSETS: Fetcher;
   TELEGRAM_BOT_TOKEN: string;
   TELEGRAM_CHAT_ID: string;
-  WHATSAPP_ACCESS_TOKEN?: string;
-  WHATSAPP_PHONE_NUMBER_ID?: string;
-  WHATSAPP_API_VERSION?: string;
+  GREEN_API_INSTANCE_ID?: string;
+  GREEN_API_TOKEN?: string;
+  GREEN_API_URL?: string;
 }
 
 let schemaReady:Promise<void>|null=null;
@@ -110,15 +110,17 @@ async function telegramCall(env:Env,method:string,payload:Record<string,unknown>
 }
 
 async function whatsappCall(env:Env,phone:string,message:string){
-  if(!env.WHATSAPP_ACCESS_TOKEN||!env.WHATSAPP_PHONE_NUMBER_ID) throw new Error("WhatsApp is not configured");
-  const version=env.WHATSAPP_API_VERSION||"v23.0";
-  const r=await fetch("https://graph.facebook.com/"+version+"/"+env.WHATSAPP_PHONE_NUMBER_ID+"/messages",{
-    method:"POST",headers:{"content-type":"application/json","authorization":"Bearer "+env.WHATSAPP_ACCESS_TOKEN},
-    body:JSON.stringify({messaging_product:"whatsapp",to:phone,type:"text",text:{preview_url:false,body:message}})
+  if(!env.GREEN_API_INSTANCE_ID||!env.GREEN_API_TOKEN) throw new Error("WhatsApp is not configured");
+  const apiUrl=(env.GREEN_API_URL||"https://api.greenapi.com").replace(/\/$/,"");
+  const digits=phone.replace(/\D/g,"");
+  const chatId=digits+"@c.us";
+  const r=await fetch(apiUrl+"/waInstance"+env.GREEN_API_INSTANCE_ID+"/sendMessage/"+env.GREEN_API_TOKEN,{
+    method:"POST",headers:{"content-type":"application/json"},
+    body:JSON.stringify({chatId,message,linkPreview:false})
   });
   const data=await r.json() as any;
-  if(!r.ok||!data?.messages?.[0]?.id) throw new Error(data?.error?.message||("WhatsApp API error: "+r.status));
-  return String(data.messages[0].id);
+  if(!r.ok||!data?.idMessage) throw new Error(data?.message||data?.error||("GREEN-API error: "+r.status));
+  return String(data.idMessage);
 }
 
 async function ensureWhatsAppLog(env:Env){
