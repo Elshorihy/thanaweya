@@ -119,12 +119,14 @@ function App(){
   const onFocus=(e:FocusEvent)=>{
    const el=e.target as HTMLInputElement|HTMLTextAreaElement|null;
    const key=el?.getAttribute?.('data-focus-key');
-   if(!key)return;
+   if(!el||!key)return;
    focusRestoreRef.current={key,start:typeof el.selectionStart==='number'?el.selectionStart:null,end:typeof el.selectionEnd==='number'?el.selectionEnd:null};
   };
   document.addEventListener('focusin',onFocus);
   return()=>document.removeEventListener('focusin',onFocus);
  },[]);
+ const [s,setS]=useState<Store>(load),[page,setPage]=useState(()=>{try{return localStorage.getItem('thanaweya_page')||'home'}catch{return 'home'}}),[q,setQ]=useState(''),[modal,setModal]=useState<string|null>(null),[auth,setAuth]=useState<import('./auth').AuthUser|null>(null),[authMode,setAuthMode]=useState<'login'|'register'>('login'),[authName,setAuthName]=useState(''),[authEmail,setAuthEmail]=useState(''),[authPassword,setAuthPassword]=useState(''),[authPhone,setAuthPhone]=useState(''),[authBusy,setAuthBusy]=useState(false),[authErr,setAuthErr]=useState(''),[notice,setNotice]=useState(''),[focusLeft,setFocusLeft]=useState(1500),[running,setRunning]=useState(false),[focusEnd,setFocusEnd]=useState<number|null>(null),[quiz,setQuiz]=useState<Question[]>([]),[quizIndex,setQuizIndex]=useState(0),[quizScore,setQuizScore]=useState(0),[quizDone,setQuizDone]=useState(false),[calendarDate,setCalendarDate]=useState(new Date()),[installEvent,setInstallEvent]=useState<any>(null),[filter,setFilter]=useState({subject:'',status:'',difficulty:'',priority:'',date:''}),[focusSubjectId,setFocusSubjectId]=useState(''),[focusLessonId,setFocusLessonId]=useState(''),[focusMinutes,setFocusMinutes]=useState(()=>Math.min(180,Math.max(1,Number(s.settings.focus)||25))),[focusTotalSeconds,setFocusTotalSeconds]=useState(()=>Math.min(180,Math.max(1,Number(s.settings.focus)||25))*60); const [settingsDragKey,setSettingsDragKey]=useState<string|null>(null),[settingsDropKey,setSettingsDropKey]=useState<string|null>(null);
+
  useLayoutEffect(()=>{
   const saved=focusRestoreRef.current;
   if(!saved)return;
@@ -134,9 +136,7 @@ function App(){
   if(saved.start!==null&&saved.end!==null&&typeof el.setSelectionRange==='function'){
    try{el.setSelectionRange(saved.start,saved.end)}catch{}
   }
- },[s]);
- const [s,setS]=useState<Store>(load),[page,setPage]=useState(()=>{try{return localStorage.getItem('thanaweya_page')||'home'}catch{return 'home'}}),[q,setQ]=useState(''),[modal,setModal]=useState<string|null>(null),[auth,setAuth]=useState<import('./auth').AuthUser|null>(null),[authMode,setAuthMode]=useState<'login'|'register'>('login'),[authName,setAuthName]=useState(''),[authEmail,setAuthEmail]=useState(''),[authPassword,setAuthPassword]=useState(''),[authPhone,setAuthPhone]=useState(''),[authBusy,setAuthBusy]=useState(false),[authErr,setAuthErr]=useState(''),[notice,setNotice]=useState(''),[focusLeft,setFocusLeft]=useState(1500),[running,setRunning]=useState(false),[focusEnd,setFocusEnd]=useState<number|null>(null),[quiz,setQuiz]=useState<Question[]>([]),[quizIndex,setQuizIndex]=useState(0),[quizScore,setQuizScore]=useState(0),[quizDone,setQuizDone]=useState(false),[calendarDate,setCalendarDate]=useState(new Date()),[installEvent,setInstallEvent]=useState<any>(null),[filter,setFilter]=useState({subject:'',status:'',difficulty:'',priority:'',date:''}),[focusSubjectId,setFocusSubjectId]=useState(''),[focusLessonId,setFocusLessonId]=useState(''),[focusMinutes,setFocusMinutes]=useState(()=>Math.min(180,Math.max(1,Number(s.settings.focus)||25))),[focusTotalSeconds,setFocusTotalSeconds]=useState(()=>Math.min(180,Math.max(1,Number(s.settings.focus)||25))*60); const [settingsDragKey,setSettingsDragKey]=useState<string|null>(null),[settingsDropKey,setSettingsDropKey]=useState<string|null>(null);
- useEffect(()=>localStorage.setItem(KEY,JSON.stringify(s)),[s]);
+ },[s]); useEffect(()=>localStorage.setItem(KEY,JSON.stringify(s)),[s]);
  useEffect(()=>{authMe().then(({user})=>{if(user){setAuth(user);setAuthName(user.name);update({profile:{...s.profile,name:user.name,whatsapp:user.phone||s.profile.whatsapp||''}})}}).catch(()=>{})},[]);
  useEffect(()=>{try{localStorage.setItem('thanaweya_page',page)}catch{}},[page]);
  useEffect(()=>{
