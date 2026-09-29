@@ -67,6 +67,12 @@ async function hashPassword(password:string,salt:string) {
 async function verifyPassword(password:string,salt:string,hash:string) {
   return (await hashPassword(password,salt))===hash;
 }
+function otpCode(){
+  return String(Math.floor(100000+Math.random()*900000));
+}
+async function otpHash(email:string,type:string,code:string){
+  return sha256(email+":"+type+":"+code);
+}
 function cookieValue(request:Request) {
   const raw=request.headers.get("Cookie")||"";
   for(const part of raw.split(";")) { const [k,...rest]=part.trim().split("="); if(k===COOKIE) return rest.join("="); }
