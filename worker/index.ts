@@ -122,7 +122,10 @@ export default {
     const url=new URL(request.url);
     // Count page navigations. Static assets and API requests are excluded.
     const staticAsset=/\.(?:js|css|map|png|jpe?g|gif|webp|svg|ico|woff2?|ttf|otf|json|xml|txt|pdf|zip)$/i.test(url.pathname);
-    if(request.method==="GET" && !url.pathname.startsWith("/api/") && !staticAsset) {
+    const acceptsHtml=request.headers.get("Accept")?.includes("text/html")===true;
+    const fetchDest=request.headers.get("Sec-Fetch-Dest");
+    const isDocumentRequest=fetchDest ? fetchDest==="document" : acceptsHtml;
+    if(request.method==="GET" && !url.pathname.startsWith("/api/") && !staticAsset && acceptsHtml && isDocumentRequest) {
       try {
         await ensurePageViews(env);
         const day=new Date().toISOString().slice(0,10);
