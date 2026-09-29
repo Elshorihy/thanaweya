@@ -5,18 +5,18 @@
   "compatibility_date": "2026-09-22",
   "workers_dev": true,
   "keep_vars": true,
+  "account_id": "fe6a753b5943acd9861da09a6465a5ff",
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",
     "not_found_handling": "single-page-application",
-    "run_worker_first": [
-      "/api/*"
-    ]
+    "run_worker_first": ["/api/*"]
   },
   "d1_databases": [
     {
       "binding": "DB",
-      "database_name": "thanaweya-db"
+      "database_name": "thanaweya-db",
+      "database_id": "59e44d5e-0219-4ab4-9636-abde866676c1"
     }
   ]
 }
