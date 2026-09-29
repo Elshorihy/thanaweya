@@ -194,7 +194,7 @@ export default {
             ...(phone ? [env.DB.prepare("INSERT INTO user_phones(user_id,phone,updated_at) VALUES(?,?,?)").bind(id,phone,Date.now())] : [])
           ]);
           const token=await createSession(id,env);
-          return json({user:{id,email,name,phone:phone||null}},{headers:{"set-cookie":sessionCookie(token)}});
+          return json({user:{id,email,name,phone:phone||null}},200,{"set-cookie":sessionCookie(token)});
         }
         if(url.pathname==="/api/auth/login" && request.method==="POST") {
           const b=await body(request), email=cleanEmail(b?.email), password=String(b?.password||""), phone=cleanPhone(b?.phone);
@@ -209,7 +209,7 @@ export default {
           const phoneRow=await env.DB.prepare("SELECT phone FROM user_phones WHERE user_id=?").bind(u.id).first<any>();
           await env.DB.prepare("DELETE FROM sessions WHERE expires_at<=?").bind(Date.now()).run();
           const token=await createSession(u.id,env);
-          return json({user:{id:u.id,email:u.email,name:u.name,phone:phoneRow?.phone||null}},{headers:{"set-cookie":sessionCookie(token)}});
+          return json({user:{id:u.id,email:u.email,name:u.name,phone:phoneRow?.phone||null}},200,{"set-cookie":sessionCookie(token)});
         }
         if(url.pathname==="/api/account/whatsapp" && (request.method==="GET"||request.method==="PUT")) {
           const u=await userFrom(request,env); if(!u) return json({error:"يجب تسجيل الدخول"},401);
@@ -235,7 +235,7 @@ export default {
         }
         if(url.pathname==="/api/auth/logout" && request.method==="POST") {
           const token=cookieValue(request); if(token) await env.DB.prepare("DELETE FROM sessions WHERE token_hash=?").bind(await sha256(token)).run();
-          return json({ok:true},{headers:{"set-cookie":clearCookie()}});
+          return json({ok:true},200,{"set-cookie":clearCookie()});
         }
         if(url.pathname==="/api/data" && (request.method==="GET"||request.method==="PUT")) {
           const u=await userFrom(request,env); if(!u) return json({error:"يجب تسجيل الدخول"},401);
