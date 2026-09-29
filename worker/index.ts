@@ -6,9 +6,6 @@ interface Env {
   GREEN_API_INSTANCE_ID?: string;
   GREEN_API_TOKEN?: string;
   GREEN_API_URL?: string;
-  TWILIO_ACCOUNT_SID?: string;
-  TWILIO_AUTH_TOKEN?: string;
-  TWILIO_VERIFY_SERVICE_SID?: string;
   RESEND_API_KEY?: string;
   RESEND_FROM_EMAIL?: string;
 }
@@ -136,34 +133,14 @@ async function greenApiCall(env:Env,phone:string,message:string){
   return String(data.idMessage);
 }
 
-async function twilioVerifyCall(env:Env,phone:string){
-  if(!env.TWILIO_ACCOUNT_SID||!env.TWILIO_AUTH_TOKEN||!env.TWILIO_VERIFY_SERVICE_SID) throw new Error("Twilio Verify WhatsApp is not configured");
-  const auth=btoa(env.TWILIO_ACCOUNT_SID+":"+env.TWILIO_AUTH_TOKEN);
-  const endpoint="https://verify.twilio.com/v2/Services/"+env.TWILIO_VERIFY_SERVICE_SID+"/Verifications";
-  const form=new URLSearchParams();
-  form.set("To",phone); form.set("Channel","whatsapp");
-  const r=await fetch(endpoint,{method:"POST",headers:{"content-type":"application/x-www-form-urlencoded","authorization":"Basic "+auth},body:form.toString()});
+async function sendEmailOtp(env:Env,email:string,code:string,type:"register"|"reset"){
+  if(!env.RESEND_API_KEY) throw new Error("البريد الإلكتروني غير مفعّل حاليًا");
+  const from="Thanaweya <onboarding@resend.dev>";
+  const title=type==="register"?"تأكيد البريد الإلكتروني":"استعادة كلمة السر";
+  const intro=type==="register"?"استخدم الكود التالي لتأكيد بريدك الإلكتروني وإنشاء حسابك:":"استخدم الكود التالي لإعادة تعيين كلمة السر:";
+  const r=await fetch("https://api.resend.com/emails",{method:"POST",headers:{"content-type":"application/json","authorization":"Bearer "+env.RESEND_API_KEY},body:JSON.stringify({from,to:[email],subject:"Thanaweya — "+title,text:intro+"\n\n"+code+"\n\nالكود صالح لمدة 10 دقائق. لو ما طلبتش العملية دي تجاهل الرسالة."})});
   const data=await r.json() as any;
-  if(!r.ok||data?.status==="failed") throw new Error(String(data?.message||data?.detail||("Twilio Verify error: "+r.status)));
-  return String(data?.sid||"sent");
-}
-async function twilioVerifyCheck(env:Env,phone:string,code:string){
-  if(!env.TWILIO_ACCOUNT_SID||!env.TWILIO_AUTH_TOKEN||!env.TWILIO_VERIFY_SERVICE_SID) throw new Error("Twilio Verify WhatsApp is not configured");
-  const auth=btoa(env.TWILIO_ACCOUNT_SID+":"+env.TWILIO_AUTH_TOKEN);
-  const endpoint="https://verify.twilio.com/v2/Services/"+env.TWILIO_VERIFY_SERVICE_SID+"/VerificationCheck";
-  const form=new URLSearchParams();
-  form.set("To",phone); form.set("Code",code);
-  const r=await fetch(endpoint,{method:"POST",headers:{"content-type":"application/x-www-form-urlencoded","authorization":"Basic "+auth},body:form.toString()});
-  const data=await r.json() as any;
-  if(!r.ok) throw new Error(String(data?.message||data?.detail||("Twilio Verify error: "+r.status)));
-  return data?.status==="approved";
-}
-
-function otpCode(){ const a=new Uint32Array(1); crypto.getRandomValues(a); return String(a[0]%1000000).padStart(6,"0"); }
-async function otpHash(email:string,type:string,code:string){ return sha256(email+"|"+type+"|"+code); }
-async function sendWhatsAppOtp(env:Env,phone:string){
-  const result=await twilioVerifyCall(env,phone);
-  if(!result) throw new Error("تعذر إرسال كود واتساب");
+  if(!r.ok||!data?.id) throw new Error(data?.message||data?.error||("Email provider error: "+r.status));
 }
 
 async function ensureWhatsAppLog(env:Env){
@@ -482,10 +459,10 @@ export default {
           const exists=await env.DB.prepare("SELECT id FROM users WHERE email=?").bind(email).first(); if(exists) return json({error:"الإيميل مستخدم بالفعل"},409);
           if(!validPhone(phone)) return json({error:"رقم واتساب غير صالح"},400);
           if(phone){const phoneExists=await env.DB.prepare("SELECT user_id FROM user_phones WHERE phone=?").bind(phone).first();if(phoneExists)return json({error:"رقم واتساب مستخدم بالفعل"},409);}
-          const salt=randomHex(16), pass=await hashPassword(password,salt), now=Date.now(), expires=now+10*60*1000, payload=JSON.stringify({name,password_hash:pass,password_salt:salt,phone:phone||null});
+          const salt=randomHex(16), pass=await hashPassword(password,salt), code=otpCode(), now=Date.now(), expires=now+10*60*1000, payload=JSON.stringify({name,password_hash:pass,password_salt:salt,phone:phone||null});
           await env.DB.prepare("DELETE FROM auth_codes WHERE email=? AND type='register'").bind(email).run();
-          await env.DB.prepare("INSERT INTO auth_codes(id,email,type,code_hash,payload_json,expires_at,attempts,created_at) VALUES(?,?,?,?,?,?,?,?)").bind(randomHex(16),email,"register","twilio",payload,expires,0,now).run();
-          try { await sendWhatsAppOtp(env,phone); } catch(e){ await env.DB.prepare("DELETE FROM auth_codes WHERE email=? AND type='register'").bind(email).run(); throw e; }
+          await env.DB.prepare("INSERT INTO auth_codes(id,email,type,code_hash,payload_json,expires_at,attempts,created_at) VALUES(?,?,?,?,?,?,?,?)").bind(randomHex(16),email,"register",await otpHash(email,"register",code),payload,expires,0,now).run();
+          try { await sendEmailOtp(env,email,code,"register"); } catch(e){ await env.DB.prepare("DELETE FROM auth_codes WHERE email=? AND type='register'").bind(email).run(); throw e; }
           return json({ok:true,email});
         }
         if(url.pathname==="/api/auth/register/verify" && request.method==="POST") {
@@ -493,9 +470,10 @@ export default {
           const row=await env.DB.prepare("SELECT * FROM auth_codes WHERE email=? AND type='register' ORDER BY created_at DESC LIMIT 1").bind(email).first<any>();
           if(!row||Number(row.expires_at)<Date.now()) return json({error:"الكود انتهت صلاحيته. اطلب كود جديد."},400);
           if(!/^\\d{4,10}$/.test(code)) return json({error:"اكتب كود التأكيد بشكل صحيح"},400);
+          if(Number(row.attempts)>=5) return json({error:"تم تجاوز عدد المحاولات. اطلب كود جديد."},429);
+          const ok=(await otpHash(email,"register",code))===row.code_hash;
+          if(!ok){await env.DB.prepare("UPDATE auth_codes SET attempts=attempts+1 WHERE id=?").bind(row.id).run();return json({error:"كود التأكيد غير صحيح"},400);}
           const p=JSON.parse(row.payload_json||"{}");
-          const twilioOk=await twilioVerifyCheck(env,String(p.phone||""),code);
-          if(!twilioOk)return json({error:"كود التأكيد غير صحيح أو انتهت صلاحيته"},400);
           const exists=await env.DB.prepare("SELECT id FROM users WHERE email=?").bind(email).first(); if(exists){await env.DB.prepare("DELETE FROM auth_codes WHERE id=?").bind(row.id).run();return json({error:"الإيميل مستخدم بالفعل"},409);}
           const id=randomHex(16), now=Date.now();
           await env.DB.batch([env.DB.prepare("INSERT INTO users(id,email,name,password_hash,password_salt,email_verified_at,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)").bind(id,email,p.name,p.password_hash,p.password_salt,now,now,now),env.DB.prepare("INSERT INTO user_data(user_id,data_json,updated_at) VALUES(?,?,?)").bind(id,"",now),...(p.phone?[env.DB.prepare("INSERT INTO user_phones(user_id,phone,updated_at) VALUES(?,?,?)").bind(id,p.phone,now)]:[]),env.DB.prepare("DELETE FROM auth_codes WHERE id=?").bind(row.id)]);
@@ -504,9 +482,10 @@ export default {
         if(url.pathname==="/api/auth/forgot/start" && request.method==="POST") {
           const b=await body(request), email=cleanEmail(b?.email), u=await env.DB.prepare("SELECT id FROM users WHERE email=?").bind(email).first<any>();
           if(u){
-            const phoneRow=await env.DB.prepare("SELECT phone FROM user_phones WHERE user_id=?").bind(u.id).first<any>();
-            if(!phoneRow?.phone) throw new Error("لا يوجد رقم واتساب مرتبط بالحساب");
-            const now=Date.now();await env.DB.prepare("DELETE FROM auth_codes WHERE email=? AND type='reset'").bind(email).run();await env.DB.prepare("INSERT INTO auth_codes(id,email,type,code_hash,payload_json,expires_at,attempts,created_at) VALUES(?,?,?,?,?,?,?,?)").bind(randomHex(16),email,"reset","twilio",null,now+10*60*1000,0,now).run();try{await sendWhatsAppOtp(env,String(phoneRow.phone));}catch(e){await env.DB.prepare("DELETE FROM auth_codes WHERE email=? AND type='reset'").bind(email).run();throw e;}}
+            const code=otpCode(),now=Date.now();
+            await env.DB.prepare("DELETE FROM auth_codes WHERE email=? AND type='reset'").bind(email).run();
+            await env.DB.prepare("INSERT INTO auth_codes(id,email,type,code_hash,payload_json,expires_at,attempts,created_at) VALUES(?,?,?,?,?,?,?,?)").bind(randomHex(16),email,"reset",await otpHash(email,"reset",code),null,now+10*60*1000,0,now).run();
+            try{await sendEmailOtp(env,email,code,"reset");}catch(e){await env.DB.prepare("DELETE FROM auth_codes WHERE email=? AND type='reset'").bind(email).run();throw e;}}
           return json({ok:true});
         }
         if(url.pathname==="/api/auth/reset" && request.method==="POST") {
@@ -515,10 +494,7 @@ export default {
           const row=await env.DB.prepare("SELECT * FROM auth_codes WHERE email=? AND type='reset' ORDER BY created_at DESC LIMIT 1").bind(email).first<any>();
           if(!row||Number(row.expires_at)<Date.now())return json({error:"الكود انتهت صلاحيته. اطلب كود جديد."},400);
           if(!/^\\d{4,10}$/.test(code))return json({error:"اكتب كود التأكيد بشكل صحيح"},400);
-          const phoneRow=await env.DB.prepare("SELECT phone FROM user_phones WHERE user_id=(SELECT id FROM users WHERE email=?)").bind(email).first<any>();
-          if(!phoneRow?.phone)return json({error:"لا يوجد رقم واتساب مرتبط بالحساب"},400);
-          const twilioOk=await twilioVerifyCheck(env,String(phoneRow.phone),code);
-          if(!twilioOk)return json({error:"كود التأكيد غير صحيح أو انتهت صلاحيته"},400);
+          if((await otpHash(email,"reset",code))!==row.code_hash){await env.DB.prepare("UPDATE auth_codes SET attempts=attempts+1 WHERE id=?").bind(row.id).run();return json({error:"كود التأكيد غير صحيح"},400);}
           const u=await env.DB.prepare("SELECT id FROM users WHERE email=?").bind(email).first<any>(); if(!u)return json({error:"لا يوجد حساب بهذا الإيميل"},404);
           const salt=randomHex(16), pass=await hashPassword(password,salt),now=Date.now(); await env.DB.batch([env.DB.prepare("UPDATE users SET password_hash=?,password_salt=?,updated_at=? WHERE id=?").bind(pass,salt,now,u.id),env.DB.prepare("DELETE FROM auth_codes WHERE id=?").bind(row.id)]);
           return json({ok:true});
