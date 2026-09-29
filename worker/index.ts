@@ -155,10 +155,12 @@ async function sendEmailOtp(env:Env,email:string,code:string,type:"register"|"re
   if([301,302,303,307,308].includes(r.status)){
     const location=r.headers.get("location");
     if(location){
+      // Google Apps Script executes doPost on the first request, then
+      // redirects to a generated URL that must be fetched with GET.
+      // Re-sending POST to that redirect causes HTTP 405.
       r=await fetch(new URL(location,url).toString(),{
-        method:"POST",
-        headers:{"content-type":"application/json","accept":"application/json"},
-        body:payload
+        method:"GET",
+        headers:{"accept":"application/json"}
       });
     }
   }
