@@ -4,6 +4,13 @@ interface Env {
 }
 
 let schemaReady:Promise<void>|null=null;
+let pageViewsReady:Promise<void>|null=null;
+async function ensurePageViews(env:Env){
+  if(!pageViewsReady) pageViewsReady=(async()=>{
+    await env.DB.prepare("CREATE TABLE IF NOT EXISTS site_page_views (id INTEGER PRIMARY KEY AUTOINCREMENT, day TEXT NOT NULL, created_at INTEGER NOT NULL)").run();
+  })().catch(e=>{pageViewsReady=null;throw e});
+  await pageViewsReady;
+}
 async function ensureSchema(env:Env){
   if(!schemaReady) schemaReady=(async()=>{
     await env.DB.prepare("CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY,email TEXT NOT NULL UNIQUE,name TEXT NOT NULL,password_hash TEXT NOT NULL,password_salt TEXT NOT NULL,created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL)").run();
@@ -63,11 +70,11 @@ async function body(request:Request){try{return await request.json() as any}catc
 export default {
   async fetch(request:Request,env:Env):Promise<Response> {
     const url=new URL(request.url);
-    // Count every real HTML page view (not assets/API), excluding the private owner page.
-    const acceptsHtml=(request.headers.get("accept")||"").includes("text/html");
-    if(request.method==="GET" && !url.pathname.startsWith("/api/") && url.pathname!=="/owner.html" && acceptsHtml) {
+    // Count page navigations. Static assets/API/owner panel are excluded.
+    const staticAsset=/\.(?:js|css|map|png|jpe?g|gif|webp|svg|ico|woff2?|ttf|otf|json|xml|txt|pdf|zip)$/i.test(url.pathname);
+    if(request.method==="GET" && !url.pathname.startsWith("/api/") && url.pathname!=="/owner.html" && !staticAsset) {
       try {
-        await env.DB.prepare("CREATE TABLE IF NOT EXISTS site_page_views (id INTEGER PRIMARY KEY AUTOINCREMENT, day TEXT NOT NULL, created_at INTEGER NOT NULL)").run();
+        await ensurePageViews(env);
         const day=new Date().toISOString().slice(0,10);
         await env.DB.prepare("INSERT INTO site_page_views(day,created_at) VALUES(?,?)").bind(day,Date.now()).run();
       } catch(e) { console.error("Page view counter failed",e); }
@@ -111,7 +118,7 @@ export default {
           return json({ok:true},{headers:{"set-cookie":clearCookie()}});
         }
         if(url.pathname==="/api/owner/stats" && request.method==="GET") {
-          await env.DB.prepare("CREATE TABLE IF NOT EXISTS site_page_views (id INTEGER PRIMARY KEY AUTOINCREMENT, day TEXT NOT NULL, created_at INTEGER NOT NULL)").run();
+          await ensurePageViews(env);
           const total=(await env.DB.prepare("SELECT COUNT(*) AS n FROM site_page_views").first<any>())?.n||0;
           const todayCount=(await env.DB.prepare("SELECT COUNT(*) AS n FROM site_page_views WHERE day=?").bind(new Date().toISOString().slice(0,10)).first<any>())?.n||0;
           const weekCount=(await env.DB.prepare("SELECT COUNT(*) AS n FROM site_page_views WHERE day>=date(?, '-6 day')").bind(new Date().toISOString().slice(0,10)).first<any>())?.n||0;
