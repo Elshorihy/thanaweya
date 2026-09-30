@@ -721,20 +721,26 @@ async function sendTelegramGlobalNotifications(env:Env,chatId:string){
   const devices=await env.DB.prepare("SELECT COUNT(*) AS n FROM push_subscriptions").first<any>();
   const rows=await env.DB.prepare("SELECT id,title,message,type,created_at FROM global_notifications ORDER BY created_at DESC LIMIT 10").all<any>();
   const items=rows.results||[];
-  const lines=items.map((x:any,i:number)=>(i+1)+". "+(x.type==="urgent"?"🚨":x.type==="success"?"✅":x.type==="warning"?"⚠️":"📢")+" "+String(x.title)+"\n   "+String(x.message).slice(0,220));
-  await telegramCall(env,"sendMessage",{chat_id:chatId,text:[
+  const lines=items.map((x:any,i:number)=>{
+    const icon=x.type==="urgent"?"🚨":x.type==="success"?"✅":x.type==="warning"?"⚠️":"📢";
+    return (i+1)+". "+icon+" "+String(x.title)+"\n   "+String(x.message).slice(0,220);
+  });
+  const text=[
     "📲 مركز إشعارات الأجهزة",
     "",
     "الإشعارات هنا Push حقيقية وتوصل للموبايل والتابلت والكمبيوتر بعد تفعيلها من المستخدم.",
     "",
     "📱 الأجهزة المفعّلة: "+Number(devices?.n||0).toLocaleString("ar-EG"),
     "",
-    ...(lines.length?["🕐 آخر الإشعارات:",...lines]:["لا توجد إشعارات مرسلة حتى الآن."])
-  ].join("\n"),reply_markup:{inline_keyboard:[
+    lines.length?"🕐 آخر الإشعارات:":"لا توجد إشعارات مرسلة حتى الآن.",
+    ...lines
+  ].join("\n");
+  const keyboard=[
     [{text:"➕ إرسال Push جديد",callback_data:"global_notification_add"}],
     [{text:"🔄 تحديث",callback_data:"dash_global_notifications"}],
     [{text:"⬅️ لوحة التحكم",callback_data:"dash_home"}]
-  }}});
+  ];
+  await telegramCall(env,"sendMessage",{chat_id:chatId,text,reply_markup:{inline_keyboard:keyboard}});
 }
 async function createGlobalNotification(env:Env,chatId:string,payload:any){
   const title=String(payload?.title||"").trim().slice(0,140);
