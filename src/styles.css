@@ -380,3 +380,6 @@ input:invalid,textarea:invalid,select:invalid{border-color:#ef4444}
  .siteAnnouncementModal .siteAnnouncementBody strong{font-size:20px}
  .siteAnnouncementModal .siteAnnouncementBody p{font-size:14px}
 }
+
+/* Central admin notifications */
+.globalNotificationStack{position:fixed;top:78px;right:18px;z-index:1000;width:min(430px,calc(100vw - 36px));display:grid;gap:10px;pointer-events:none}.globalNotification{pointer-events:auto;display:flex;align-items:flex-start;gap:10px;padding:14px 15px;border:1px solid var(--border,#2b3340);border-radius:16px;background:var(--card,#151a22);box-shadow:0 12px 30px rgba(0,0,0,.22)}.globalNotificationIcon{font-size:22px;line-height:1.2}.globalNotificationBody{flex:1;min-width:0}.globalNotificationBody strong{display:block;margin-bottom:4px}.globalNotificationBody p{margin:0;white-space:pre-wrap;line-height:1.6;color:var(--muted,#9aa4b2)}.globalNotification button{border:0;background:transparent;color:inherit;cursor:pointer;padding:3px}.globalNotification-urgent{border-color:#b94a48}.globalNotification-warning{border-color:#b88a2d}.globalNotification-success{border-color:#3f8f63}@media(max-width:600px){.globalNotificationStack{top:64px;right:10px;width:calc(100vw - 20px)}.globalNotification{border-radius:13px;padding:12px}.globalNotificationBody p{font-size:13px}}
