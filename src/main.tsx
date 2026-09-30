@@ -441,16 +441,12 @@ function Dashboard(){const due=s.lessons.filter(l=>l.nextReviewAt&&l.nextReviewA
     setFocusLeft(remaining);
     return;
    }
-   if(!focusSubjectId){
-    notify(s.settings.language==='ar'?'اختار المادة الأول عشان نحفظ تقدمك بشكل صحيح.':'Choose a subject first so your progress is saved correctly.');
-    return;
-   }
    const seconds=Math.min(180*60,Math.max(1,Number(focusLeft)||focusMinutes*60));
    setFocusTotalSeconds(focusMinutes*60);
    const end=Date.now()+seconds*1000;
    setFocusLeft(seconds);setFocusEnd(end);
    try{localStorage.setItem('thanaweya_focus_end',String(end))}catch{}
-   notify((s.settings.language==='ar'?'⏱️ بدأت جلسة ':'⏱️ Started a ')+selectedSubject+' session.');setRunning(true);
+   notify((s.settings.language==='ar'?'⏱️ بدأت جلسة':'⏱️ Started')+(selectedSubject?' • '+selectedSubject:'')+'.');setRunning(true);
   };
   const reset=()=>{setRunning(false);setFocusEnd(null);try{localStorage.removeItem('thanaweya_focus_end')}catch{};setFocusLeft(focusMinutes*60);setFocusTotalSeconds(focusMinutes*60)};
   const quickDurations=[25,50,60,90,120];
@@ -462,7 +458,7 @@ function Dashboard(){const due=s.lessons.filter(l=>l.nextReviewAt&&l.nextReviewA
    <h1>{mm}:{ss}</h1>
    <div className="focuscontext card">
     <label>المادة <select value={focusSubjectId} disabled={running} onChange={e=>{setFocusSubjectId(e.target.value);setFocusLessonId('')}}>
-      <option value="">اختار المادة أولًا</option>{s.subjects.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}
+      <option value="">بدون مادة (اختياري)</option>{s.subjects.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}
     </select></label>
     <label>الدرس (اختياري) <select value={focusLessonId} disabled={running||!focusSubjectId} onChange={e=>setFocusLessonId(e.target.value)}>
       <option value="">بدون درس محدد</option>{focusLessons.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}
@@ -478,10 +474,10 @@ function Dashboard(){const due=s.lessons.filter(l=>l.nextReviewAt&&l.nextReviewA
    <p>{selectedSubject?selectedSubject:'لا توجد مادة محددة'}{selectedLesson?' • '+selectedLesson:''}</p>
    <div className="focusring"><Timer size={44}/></div>
    <div className="focuscontrols">
-    <button className="primary" onClick={startFocus} disabled={!running&&!focusSubjectId}>{running?<Pause/>:<Play/>}{running?'إيقاف':'ابدأ'}</button>
+    <button className="primary" onClick={startFocus} disabled={false}>{running?<Pause/>:<Play/>}{running?'إيقاف':'ابدأ'}</button>
     <button onClick={reset}><RotateCcw/> إعادة</button>
    </div>
-   <p className="muted">عند إنهاء الجلسة، هيتحفظ الوقت على المادة المختارة تلقائيًا. مدة الراحة: {s.settings.break} دقيقة</p>
+   <p className="muted">عند إنهاء الجلسة، الوقت هيتسجل للجلسة تلقائيًا، ولو اخترت مادة هيتحسب وقتها عليها. مدة الراحة: {s.settings.break} دقيقة</p>
   </section>
  } function Stats(){const bySub=s.subjects.map(x=>({name:x.name,min:s.sessions.filter(a=>a.subjectId===x.id).reduce((z,a)=>z+a.duration,0)}));const byDay=Array.from({length:7},(_,i)=>{const ds=addDays(today(),-6+i);return {ds,min:s.sessions.filter(a=>a.date===ds).reduce((z,a)=>z+a.duration,0)}});return <section><Title title="الإحصائيات" sub="كل الأرقام مبنية على بياناتك الفعلية."/><div className="statsgrid"><Stat title="إجمالي الوقت" value={totalMin+' دقيقة'} icon={<Timer/>}/><Stat title="الدروس المكتملة" value={s.lessons.filter(x=>x.status==='completed').length} icon={<BookOpen/>}/><Stat title="المهام المكتملة" value={s.tasks.filter(x=>x.status==='completed').length} icon={<CheckSquare/>}/><Stat title="الأسئلة" value={s.questions.length} icon={<FileQuestion/>}/><Stat title="Current Streak" value={streak} icon={<Trophy/>}/><Stat title="Longest Streak" value={longestStreak(s)} icon={<Trophy/>}/><Stat title="Overall Progress" value={progress+'%'} icon={<BarChart3/>}/></div><Card title="وقت المذاكرة حسب المادة">{bySub.map(x=><div className="barrow" key={x.name}><span>{x.name}</span><div><i style={{width:(totalMin?x.min/totalMin*100:0)+'%'}}/></div><b>{x.min}د</b></div>)}</Card><Card title="وقت المذاكرة آخر 7 أيام"><div className="weeklybars">{byDay.map(x=><div key={x.ds}><div className="vbar"><i style={{height:Math.min(100,x.min/Math.max(1,...byDay.map(y=>y.min))*100)+'%'}}/></div><small>{x.min}د</small></div>)}</div></Card></section>}
  function Achievements(){const doneTasks=s.tasks.filter(x=>x.status==='completed').length,defs=[['first','أول جلسة مذاكرة',s.sessions.length>0],['tasks10','أول 10 مهام',doneTasks>=10],['questions100','أول 100 سؤال',s.questions.length>=100],['streak3','3 أيام Streak',streak>=3],['streak7','7 أيام Streak',streak>=7],['streak30','30 يوم Streak',streak>=30],['week','أول أسبوع كامل',longestStreak(s)>=7],['subject','إنهاء أول مادة',s.subjects.some(sub=>{const ls=s.lessons.filter(l=>s.units.find(u=>u.id===l.unitId)?.subjectId===sub.id);return ls.length>0&&ls.every(l=>l.status==='completed')})],['half','إنهاء 50% من المنهج',progress>=50],['finish','إنهاء المنهج',progress===100&&s.lessons.length>0]];return <section><Title title="إنجازاتي" sub="تفتح تلقائيًا حسب بياناتك الحقيقية."/><div className="achievementGrid">{defs.map(([k,n,ok])=><div className={'achievement card '+(ok?'unlocked':'')} key={String(k)}><Trophy/><b>{n}</b><span>{ok?'مفتوح':'مغلق'}</span></div>)}</div></section>}
