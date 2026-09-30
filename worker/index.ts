@@ -904,6 +904,14 @@ async function handleTelegramUpdate(env:Env,update:any){
     if(data==="dash_recent"){await clearTelegramAdminMode(env,chatId);await sendTelegramRecentUsers(env,chatId);return;}    if(data==="dash_search"){await setTelegramAdminMode(env,chatId,"user_search");await telegramCall(env,"sendMessage",{chat_id:chatId,text:"🔎 ابعت الاسم أو الإيميل أو رقم الواتساب اللي عايز تدور عليه.",reply_markup:{inline_keyboard:[[ {text:"❌ إلغاء",callback_data:"dash_cancel"} ]] }});return;}
     if(data==="dash_traffic"){await clearTelegramAdminMode(env,chatId);await sendTelegramTraffic(env,chatId);return;}
     if(data==="dash_traffic30"){await clearTelegramAdminMode(env,chatId);await sendTelegramTrafficDetailed(env,chatId);return;}
+    if(data.startsWith("global_notification_type:")){
+      const type=data.slice("global_notification_type:").toLowerCase();
+      if(!["info","success","warning","urgent"].includes(type))return;
+      const current=await getTelegramAdminState(env,chatId);
+      await setTelegramAdminMode(env,chatId,"global_notification_hours",{...(current.payload||{}),type});
+      await telegramCall(env,"sendMessage",{chat_id:chatId,text:"⏱️ كام ساعة يفضل الإشعار ظاهر؟\nاكتب 0 لو بدون انتهاء.",reply_markup:{inline_keyboard:[[{text:"❌ إلغاء",callback_data:"dash_cancel"}]]}});
+      return;
+    }
     if(data==="dash_global_notifications"){await clearTelegramAdminMode(env,chatId);await sendTelegramGlobalNotifications(env,chatId);return;}
     if(data==="global_notification_add"){
       await setTelegramAdminMode(env,chatId,"global_notification_title",{});
