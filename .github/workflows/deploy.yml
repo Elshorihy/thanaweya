@@ -70,7 +70,7 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
         run: |
           if [ -n "$TELEGRAM_BOT_TOKEN" ]; then
-            node -e 'const token=process.env.TELEGRAM_BOT_TOKEN; const url="https://thanaweya.sheenomatp.workers.dev/api/telegram/webhook"; fetch("https://api.telegram.org/bot"+token+"/setWebhook",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({url})}).then(async r=>{const text=await r.text(); console.log(text); if(!r.ok) process.exit(1)}).catch(err=>{console.error(err);process.exit(1)})'
+            node -e 'const token=process.env.TELEGRAM_BOT_TOKEN; const url="https://thanaweya.sheenomatp.workers.dev/api/telegram/webhook"; fetch("https://api.telegram.org/bot"+token+"/setWebhook",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({url,allowed_updates:["message","callback_query"],drop_pending_updates:false})}).then(async r=>{const text=await r.text(); console.log(text); if(!r.ok) process.exit(1)}).catch(err=>{console.error(err);process.exit(1)})'
           fi
  
 # Telegram secrets are configured via GitHub Actions secrets.
