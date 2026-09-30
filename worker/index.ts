@@ -240,6 +240,7 @@ async function sendWhatsAppToUser(env:Env,userId:string,phone:string,message:str
   }catch(e){
     const error=e instanceof Error?e.message:String(e);
     await env.DB.prepare("INSERT INTO whatsapp_messages(id,user_id,phone,message,status,provider_id,error,created_at) VALUES(?,?,?,?,?,?,?,?)").bind(randomHex(16),userId,phone,message,"failed",null,error.slice(0,500),Date.now()).run();
+    await sendAdminAlert(env,"❌ فشل إرسال واتساب","📱 "+phone+"\n⚠️ "+error.slice(0,300),"whatsapp_failure",5*60*1000);
     return {ok:false,error};
   }
 }
