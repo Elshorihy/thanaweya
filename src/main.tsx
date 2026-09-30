@@ -120,6 +120,7 @@ function SiteAnnouncementBanner({userId}:{userId?:string}){
  const [closed,setClosed]=useState(false);
  useEffect(()=>{
   let cancelled=false;
+  let timer:number|undefined;
   fetch('/api/announcement',{credentials:'include'}).then(r=>r.ok?r.json():null).then(x=>{
    if(cancelled||!x?.announcement)return;
    const next=x.announcement as SiteAnnouncement;
@@ -128,11 +129,15 @@ function SiteAnnouncementBanner({userId}:{userId?:string}){
    }
    setA(next);
    if(next.placement==='modal'&&next.durationSec>0){
-    const t=window.setTimeout(()=>setClosed(true),next.durationSec*1000);
-    return()=>window.clearTimeout(t);
+    timer=window.setTimeout(()=>{
+      if(next.type==='first'){
+       try{localStorage.setItem('thanaweya_announcement_seen_'+(userId||'guest')+'_'+next.id,'1')}catch{}
+      }
+      setClosed(true);
+    },next.durationSec*1000);
    }
   }).catch(()=>{});
-  return()=>{cancelled=true};
+  return()=>{cancelled=true;if(timer!==undefined)window.clearTimeout(timer)};
  },[userId]);
  if(!a||closed)return null;
  const close=()=>{
