@@ -35,6 +35,8 @@ async function ensureSchema(env:Env){
     await env.DB.prepare("CREATE TABLE IF NOT EXISTS user_data (user_id TEXT PRIMARY KEY,data_json TEXT NOT NULL DEFAULT '{}',updated_at INTEGER NOT NULL,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE)").run();
     await env.DB.prepare("CREATE TABLE IF NOT EXISTS global_lectures (id TEXT PRIMARY KEY,title TEXT NOT NULL,subject_name TEXT NOT NULL,url TEXT NOT NULL,description TEXT NOT NULL DEFAULT '',kind TEXT NOT NULL DEFAULT 'link',enabled INTEGER NOT NULL DEFAULT 1,created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL)").run();
     await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_global_lectures_subject ON global_lectures(subject_name,enabled)").run();
+    await env.DB.prepare("CREATE TABLE IF NOT EXISTS global_notifications (id TEXT PRIMARY KEY,title TEXT NOT NULL,message TEXT NOT NULL,type TEXT NOT NULL DEFAULT 'info',enabled INTEGER NOT NULL DEFAULT 1,expires_at INTEGER,created_at INTEGER NOT NULL)").run();
+    await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_global_notifications_active ON global_notifications(enabled,expires_at,created_at)").run();
     await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token_hash)").run();
     await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_sessions_expiry ON sessions(expires_at)").run();
   })().catch(e=>{schemaReady=null;throw e});
@@ -662,6 +664,29 @@ async function createGlobalLecture(env:Env,chatId:string,payload:any){
   await clearTelegramAdminMode(env,chatId);
   await telegramCall(env,"sendMessage",{chat_id:chatId,text:"✅ تم إضافة المصدر العام.\n\n📚 "+title+"\n📖 المادة: "+subject+"\n🔗 "+url+"\n\nسيظهر الآن لكل المستخدمين داخل قسم المحاضرات.",reply_markup:{inline_keyboard:[[{text:"📚 مصادر المحاضرات",callback_data:"dash_global_lectures"}],[{text:"🎛️ لوحة التحكم",callback_data:"dash_home"}]]}});
 }
+async function ensureGlobalNotifications(env:Env){
+  await env.DB.prepare("CREATE TABLE IF NOT EXISTS global_notifications (id TEXT PRIMARY KEY,title TEXT NOT NULL,message TEXT NOT NULL,type TEXT NOT NULL DEFAULT 'info',enabled INTEGER NOT NULL DEFAULT 1,expires_at INTEGER,created_at INTEGER NOT NULL)").run();
+}
+async function sendTelegramGlobalNotifications(env:Env,chatId:string){
+  await ensureGlobalNotifications(env);
+  const rows=await env.DB.prepare("SELECT id,title,message,type,expires_at,created_at FROM global_notifications WHERE enabled=1 ORDER BY created_at DESC LIMIT 30").all<any>();
+  const items=rows.results||[];
+  const lines=items.map((x:any,i:number)=>(i+1)+". "+(x.type==="urgent"?"🚨":x.type==="success"?"✅":x.type==="warning"?"⚠️":"📢")+" "+String(x.title)+"\n   "+String(x.message).slice(0,250));
+  const buttons=items.slice(0,15).map((x:any)=>[{text:"🗑️ "+String(x.title).slice(0,30),callback_data:"global_notification_delete:"+String(x.id)}]);
+  await telegramCall(env,"sendMessage",{chat_id:chatId,text:["📢 مركز الإشعارات","","الإشعارات هنا عامة وتظهر لكل المستخدمين.",...(lines.length?["",...lines]:["","لا توجد إشعارات منشورة."])].join("\n"),reply_markup:{inline_keyboard:[[{text:"➕ إشعار جديد",callback_data:"global_notification_add"}],...buttons,[{text:"⬅️ لوحة التحكم",callback_data:"dash_home"}]]}});
+}
+async function createGlobalNotification(env:Env,chatId:string,payload:any){
+  await ensureGlobalNotifications(env);
+  const title=String(payload?.title||"").trim().slice(0,140);
+  const message=String(payload?.message||"").trim().slice(0,2000);
+  const type=["info","success","warning","urgent"].includes(String(payload?.type||""))?String(payload.type):"info";
+  const hours=Number(payload?.hours||0);
+  if(!title||!message||!Number.isFinite(hours)||hours<0||hours>720){await telegramCall(env,"sendMessage",{chat_id:chatId,text:"❌ البيانات غير صحيحة."});return;}
+  const now=Date.now(),expiresAt=hours>0?now+Math.round(hours*3600000):null;
+  await env.DB.prepare("INSERT INTO global_notifications(id,title,message,type,enabled,expires_at,created_at) VALUES(?,?,?,?,?,?,?)").bind(randomHex(16),title,message,type,1,expiresAt,now).run();
+  await clearTelegramAdminMode(env,chatId);
+  await telegramCall(env,"sendMessage",{chat_id:chatId,text:"✅ تم نشر الإشعار لكل المستخدمين.\n\n📢 "+title+"\n"+message+(expiresAt?"\n\n⏱️ ينتهي خلال "+hours+" ساعة":"\n\n📌 بدون انتهاء تلقائي."),reply_markup:{inline_keyboard:[[{text:"📢 مركز الإشعارات",callback_data:"dash_global_notifications"}],[{text:"🎛️ لوحة التحكم",callback_data:"dash_home"}]]}});
+}
 function telegramDashboardKeyboard(){
   return {inline_keyboard:[
     [{text:"⚡ مركز القيادة",callback_data:"dash_center"}],
@@ -672,6 +697,7 @@ function telegramDashboardKeyboard(){
     [{text:"🔐 الدخول و OTP",callback_data:"dash_auth"},{text:"📱 واتساب",callback_data:"dash_wa"}],
     [{text:"🛠️ أدوات الإدارة",callback_data:"dash_tools"}],
     [{text:"📚 مصادر المحاضرات",callback_data:"dash_global_lectures"}],
+    [{text:"📢 مركز الإشعارات",callback_data:"dash_global_notifications"}],
     [{text:"📢 إرسال واتساب",callback_data:"dash_broadcast"},{text:"📧 إرسال Gmail",callback_data:"dash_email_broadcast"}],
     [{text:"🔄 تحديث اللوحة",callback_data:"dash_home"}]
   ]};
@@ -878,6 +904,18 @@ async function handleTelegramUpdate(env:Env,update:any){
     if(data==="dash_recent"){await clearTelegramAdminMode(env,chatId);await sendTelegramRecentUsers(env,chatId);return;}    if(data==="dash_search"){await setTelegramAdminMode(env,chatId,"user_search");await telegramCall(env,"sendMessage",{chat_id:chatId,text:"🔎 ابعت الاسم أو الإيميل أو رقم الواتساب اللي عايز تدور عليه.",reply_markup:{inline_keyboard:[[ {text:"❌ إلغاء",callback_data:"dash_cancel"} ]] }});return;}
     if(data==="dash_traffic"){await clearTelegramAdminMode(env,chatId);await sendTelegramTraffic(env,chatId);return;}
     if(data==="dash_traffic30"){await clearTelegramAdminMode(env,chatId);await sendTelegramTrafficDetailed(env,chatId);return;}
+    if(data==="dash_global_notifications"){await clearTelegramAdminMode(env,chatId);await sendTelegramGlobalNotifications(env,chatId);return;}
+    if(data==="global_notification_add"){
+      await setTelegramAdminMode(env,chatId,"global_notification_title",{});
+      await telegramCall(env,"sendMessage",{chat_id:chatId,text:"📢 إضافة إشعار عام\n\nابعت عنوان الإشعار.",reply_markup:{inline_keyboard:[[{text:"❌ إلغاء",callback_data:"dash_cancel"}]]}});
+      return;
+    }
+    if(data.startsWith("global_notification_delete:")){
+      const id=data.slice("global_notification_delete:".length);
+      await env.DB.prepare("UPDATE global_notifications SET enabled=0 WHERE id=?").bind(id).run();
+      await sendTelegramGlobalNotifications(env,chatId);
+      return;
+    }
     if(data==="dash_global_lectures"){await clearTelegramAdminMode(env,chatId);await sendTelegramGlobalLectures(env,chatId);return;}
     if(data==="global_lecture_add"){
       await setTelegramAdminMode(env,chatId,"global_lecture_title",{});
@@ -994,6 +1032,31 @@ async function handleTelegramUpdate(env:Env,update:any){
   const text=String(message?.text||"").trim();
   await ensureAdminTools(env);
   const state=await getTelegramAdminState(env,chatId);
+  if(state.mode==="global_notification_title" && text){
+    await setTelegramAdminMode(env,chatId,"global_notification_message",{title:text.slice(0,140)});
+    await telegramCall(env,"sendMessage",{chat_id:chatId,text:"📝 ابعت نص الإشعار.",reply_markup:{inline_keyboard:[[{text:"❌ إلغاء",callback_data:"dash_cancel"}]]}});
+    return;
+  }
+  if(state.mode==="global_notification_message" && text){
+    await setTelegramAdminMode(env,chatId,"global_notification_type",{...state.payload,message:text.slice(0,2000)});
+    await telegramCall(env,"sendMessage",{chat_id:chatId,text:"🎨 اختار نوع الإشعار:",reply_markup:{inline_keyboard:[
+      [{text:"📢 عادي",callback_data:"global_notification_type:info"},{text:"✅ نجاح",callback_data:"global_notification_type:success"}],
+      [{text:"⚠️ تنبيه",callback_data:"global_notification_type:warning"},{text:"🚨 عاجل",callback_data:"global_notification_type:urgent"}],
+      [{text:"❌ إلغاء",callback_data:"dash_cancel"}]
+    ]}});
+    return;
+  }
+  if(state.mode==="global_notification_type" && text){
+    await setTelegramAdminMode(env,chatId,"global_notification_hours",{...state.payload,type:text});
+    await telegramCall(env,"sendMessage",{chat_id:chatId,text:"⏱️ كام ساعة يفضل الإشعار ظاهر؟\nاكتب 0 لو بدون انتهاء.",reply_markup:{inline_keyboard:[[{text:"❌ إلغاء",callback_data:"dash_cancel"}]]}});
+    return;
+  }
+  if(state.mode==="global_notification_hours" && text){
+    const hours=Number(text.replace(/[^0-9.]/g,""));
+    if(!Number.isFinite(hours)||hours<0||hours>720){await telegramCall(env,"sendMessage",{chat_id:chatId,text:"❌ اكتب رقم من 0 إلى 720."});return;}
+    await createGlobalNotification(env,chatId,{...state.payload,hours});
+    return;
+  }
   if(state.mode==="global_lecture_title" && text){
     await setTelegramAdminMode(env,chatId,"global_lecture_subject",{title:text.slice(0,160)});
     await telegramCall(env,"sendMessage",{chat_id:chatId,text:"📖 اكتب اسم المادة.",reply_markup:{inline_keyboard:[[{text:"❌ إلغاء",callback_data:"dash_cancel"}]]}});
@@ -1112,6 +1175,15 @@ export default {
         }
         // Owner panel uses one fixed account and its own HttpOnly cookie.
         // It does not create a user/session record and does not depend on the site's normal auth.
+        if(url.pathname==="/api/global-notifications" && request.method==="GET") {
+          try {
+            await ensureGlobalNotifications(env);
+            const now=Date.now();
+            await env.DB.prepare("UPDATE global_notifications SET enabled=0 WHERE enabled=1 AND expires_at IS NOT NULL AND expires_at<=?").bind(now).run();
+            const rows=await env.DB.prepare("SELECT id,title,message,type,expires_at,created_at FROM global_notifications WHERE enabled=1 AND (expires_at IS NULL OR expires_at>?) ORDER BY created_at DESC LIMIT 20").bind(now).all<any>();
+            return json({notifications:(rows.results||[]).map((x:any)=>({id:String(x.id),title:String(x.title||""),message:String(x.message||""),type:String(x.type||"info"),expiresAt:x.expires_at?Number(x.expires_at):null,createdAt:Number(x.created_at||0)}))});
+          } catch(e) { console.error("Global notifications API failed",e); return json({notifications:[]}); }
+        }
         if(url.pathname==="/api/global-lectures" && request.method==="GET") {
           try { const items=await getGlobalLectures(env); return json({lectures:items.map((x:any)=>({id:String(x.id),title:String(x.title||""),subjectName:String(x.subject_name||""),url:String(x.url||""),description:String(x.description||""),kind:String(x.kind||"link"),createdAt:Number(x.created_at||0)}))}); }
           catch(e) { console.error("Global lectures API failed",e); return json({lectures:[]}); }
