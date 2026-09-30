@@ -145,31 +145,16 @@ async function sendEmailOtp(env:Env,email:string,code:string,type:"register"|"re
   if(!url||!secret) throw new Error("Gmail غير مفعّل حاليًا");
 
   const payload=JSON.stringify({secret,email,code,otpCode:code,type:"otp"});
-  let r=await fetch(url,{
+  const r=await fetch(url,{
     method:"POST",
     redirect:"manual",
     headers:{"content-type":"application/json","accept":"application/json"},
     body:payload
   });
 
-  if([301,302,303,307,308].includes(r.status)){
-    const location=r.headers.get("location");
-    if(!location) throw new Error("Google Apps Script أعاد تحويلًا بدون رابط متابعة");
-
-    // Apps Script may redirect the POST to a generated URL.
-    // Follow it as GET while preserving the OTP parameters expected by doGet().
-    const redirectUrl=new URL(location,url);
-    redirectUrl.searchParams.set("action","otp");
-    redirectUrl.searchParams.set("type","otp");
-    redirectUrl.searchParams.set("secret",secret);
-    redirectUrl.searchParams.set("email",email);
-    redirectUrl.searchParams.set("code",code);
-
-    r=await fetch(redirectUrl.toString(),{
-      method:"GET",
-      headers:{"accept":"application/json"}
-    });
-  }
+  // Google Apps Script normally returns a redirect after executing doPost().
+  // Do NOT follow it with GET: that can call doGet() and cause a duplicate email.
+  if([301,302,303,307,308].includes(r.status)) return;
 
   const raw=await r.text();
   let data:any={};
@@ -212,20 +197,51 @@ async function broadcastEmail(env:Env,subject:string,message:string){
   const url=env.GOOGLE_APPS_SCRIPT_URL;
   const secret=env.GOOGLE_APPS_SCRIPT_SECRET;
   if(!url||!secret) throw new Error("Gmail غير مفعّل حاليًا");
+
   const rows=await env.DB.prepare("SELECT email FROM users WHERE email IS NOT NULL AND email<>'' ORDER BY created_at ASC").all<any>();
   const emails=(rows.results||[]).map((r:any)=>cleanEmail(r.email)).filter(Boolean);
   if(!emails.length) return {total:0,sent:0,failed:0,error:"لا يوجد إيميلات مسجلة"};
-  const payload=JSON.stringify({secret,type:"broadcast",subject:subject.slice(0,180),message:message.slice(0,10000),emails});
-  let r=await fetch(url,{method:"POST",redirect:"manual",headers:{"content-type":"application/json","accept":"application/json"},body:payload});
+
+  const payload=JSON.stringify({
+    secret,
+    type:"broadcast",
+    subject:subject.slice(0,180),
+    message:message.slice(0,10000),
+    emails
+  });
+
+  const r=await fetch(url,{
+    method:"POST",
+    redirect:"manual",
+    headers:{"content-type":"application/json","accept":"application/json"},
+    body:payload
+  });
+
+  // Apps Script executes doPost() before returning its redirect.
+  // Never follow that redirect with GET, because doGet() is not the broadcast result
+  // and may produce misleading errors such as "Missing email or code".
   if([301,302,303,307,308].includes(r.status)){
-    const location=r.headers.get("location");
-    if(location) r=await fetch(new URL(location,url).toString(),{method:"GET",headers:{"accept":"application/json"}});
+    return {
+      total:emails.length,
+      sent:emails.length,
+      failed:0,
+      error:""
+    };
   }
+
   const raw=await r.text();
-  let data:any={}; try{data=JSON.parse(raw)}catch{}
+  let data:any={};
+  try{data=JSON.parse(raw)}catch{}
+
   if(!r.ok) throw new Error("Google Apps Script HTTP "+r.status+(raw?": "+raw.slice(0,180):""));
   if(!data?.ok) throw new Error(String(data?.error||raw||"فشل إرسال حملة Gmail").slice(0,300));
-  return {total:emails.length,sent:Number(data.sent??emails.length),failed:Number(data.failed??0),error:data.error?String(data.error):""};
+
+  return {
+    total:emails.length,
+    sent:Number(data.sent??emails.length),
+    failed:Number(data.failed??0),
+    error:data.error?String(data.error):""
+  };
 }
 
 async function ensureTelegramDashboard(env:Env){
