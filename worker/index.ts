@@ -217,15 +217,15 @@ async function broadcastEmail(env:Env,subject:string,message:string){
     body:payload
   });
 
-  // Apps Script executes doPost() before returning its redirect.
-  // Never follow that redirect with GET, because doGet() is not the broadcast result
-  // and may produce misleading errors such as "Missing email or code".
+  // Apps Script web apps normally answer POST requests with a redirect.
+  // A redirect is NOT proof that GmailApp.sendEmail() succeeded for every recipient.
+  // Never report those recipients as "sent" unless Apps Script returns a real result.
   if([301,302,303,307,308].includes(r.status)){
     return {
       total:emails.length,
-      sent:emails.length,
+      sent:0,
       failed:0,
-      error:""
+      error:"تم قبول الطلب من Google Apps Script، لكن تعذر تأكيد الإرسال من Gmail. لم نعدّ الرسائل كمُرسلة."
     };
   }
 
