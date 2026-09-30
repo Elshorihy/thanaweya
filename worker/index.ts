@@ -402,7 +402,7 @@ async function createSiteAnnouncement(env:Env,chatId:string,payload:any){
     buttonUrl:String(payload?.buttonUrl||"").trim().slice(0,500),
     enabled:true,
     createdAt:Date.now(),
-    expiresAt:type==="temporary"?Date.now()+hours*3600000:null
+    expiresAt:type==="temporary"?Date.now()+Number(hours||0)*3600000:null
   };
   if(!a.title||!a.message)throw new Error("عنوان ورسالة الإعلان مطلوبان");
   if(a.buttonText&&!/^https?:\/\//i.test(a.buttonUrl)) throw new Error("رابط الزر يجب أن يبدأ بـ https:// أو http://");
