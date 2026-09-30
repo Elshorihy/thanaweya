@@ -608,19 +608,22 @@ async function sendTelegramCampaigns(env:Env,chatId:string){
   ]}});
 }
 function telegramDashboardKeyboard(){
-  return {    inline_keyboard:[
-      [{text:"⚡ مركز القيادة",callback_data:"dash_center"},{text:"📊 الرئيسية والإحصائيات",callback_data:"dash_stats"}],
-      [{text:"👥 المستخدمين",callback_data:"dash_users"},{text:"📈 النمو",callback_data:"dash_growth"}],
-      [{text:"🔎 بحث عن مستخدم",callback_data:"dash_search"},{text:"🕐 آخر المستخدمين",callback_data:"dash_recent"}],
-      [{text:"📈 الزيارات",callback_data:"dash_traffic"},{text:"🔐 الدخول و OTP",callback_data:"dash_auth"}],
-      [{text:"📱 واتساب",callback_data:"dash_wa"},{text:"🩺 حالة النظام",callback_data:"dash_system"}],
-      [{text:"🛠️ أدوات الإدارة",callback_data:"dash_tools"},{text:"📈 تحليلات 30 يوم",callback_data:"dash_traffic30"}],
-      [{text:"📢 إرسال واتساب",callback_data:"dash_broadcast"},{text:"📧 إرسال Gmail",callback_data:"dash_email_broadcast"}],
-      [{text:"🔄 تحديث اللوحة",callback_data:"dash_home"}]
-    ]
-  };
+  return {inline_keyboard:[
+    [{text:"⚡ مركز القيادة",callback_data:"dash_center"}],
+    [{text:"📊 الرئيسية والإحصائيات",callback_data:"dash_stats"},{text:"🩺 حالة النظام",callback_data:"dash_system"}],
+    [{text:"👥 المستخدمين",callback_data:"dash_users"},{text:"🔎 بحث عن مستخدم",callback_data:"dash_search"}],
+    [{text:"🕐 آخر المستخدمين",callback_data:"dash_recent"},{text:"📈 النمو",callback_data:"dash_growth"}],
+    [{text:"📈 الزيارات",callback_data:"dash_traffic"},{text:"📊 تحليلات 30 يوم",callback_data:"dash_traffic30"}],
+    [{text:"🔐 الدخول و OTP",callback_data:"dash_auth"},{text:"📱 واتساب",callback_data:"dash_wa"}],
+    [{text:"🛠️ أدوات الإدارة",callback_data:"dash_tools"}],
+    [{text:"📢 إرسال واتساب",callback_data:"dash_broadcast"},{text:"📧 إرسال Gmail",callback_data:"dash_email_broadcast"}],
+    [{text:"🔄 تحديث اللوحة",callback_data:"dash_home"}]
+  ]};
 }
-const dashBack=()=>({inline_keyboard:[[ {text:"⬅️ رجوع للوحة",callback_data:"dash_home"} ]]});
+const dashBack=()=>({inline_keyboard:[
+  [{text:"⚡ مركز القيادة",callback_data:"dash_center"}],
+  [{text:"⬅️ لوحة التحكم",callback_data:"dash_home"}]
+]});
 
 async function sendTelegramDashboard(env:Env,chatId:string){
   const stats=await getPageViewStats(env);
