@@ -350,14 +350,25 @@ async function saveSiteAnnouncement(env:Env,a:any){
 async function sendTelegramAnnouncements(env:Env,chatId:string){
   const a=await getSiteAnnouncement(env);
   const typeLabel=a?.type==="first"?"👋 أول دخول":a?.type==="temporary"?"⏱️ مؤقت":"📌 ثابت";
+  const placeLabel=a?.placement==="center"?"🎯 وسط الصفحة":a?.placement==="modal"?"🚨 Popup كبير":"⬆️ أعلى الصفحة";
   const status=a?.enabled?"🟢 شغال":"🔴 متوقف";
   const text=a
-    ?["📢 إعلان الموقع","", "📌 العنوان: "+String(a.title||"—"),"📝 الرسالة: "+String(a.message||"—"),"📍 النوع: "+typeLabel,status,
-      a.expiresAt?"⏳ ينتهي: "+adminFormatDate(a.expiresAt):"",""].join("\n")
+    ?["📢 إعلان الموقع","",
+      "📌 العنوان: "+String(a.title||"—"),
+      "📝 الرسالة: "+String(a.message||"—"),
+      "📍 المكان: "+placeLabel,
+      "📦 النوع: "+typeLabel,
+      a.durationSec?"⏱️ مدة الـPopup: "+Number(a.durationSec)+" ثواني":"",
+      a.buttonText?"🔘 الزر: "+String(a.buttonText):"🔘 بدون زر",
+      status,
+      a.expiresAt?"⏳ ينتهي: "+adminFormatDate(a.expiresAt):""
+    ].filter(Boolean).join("\n")
     : "📢 إعلان الموقع\n\nلا يوجد إعلان حاليًا.";
   const buttons=[
     [{text:"➕ إضافة/تعديل إعلان",callback_data:"announcement_add"}],
-    ...(a?[[{text:a.enabled?"🔴 إيقاف الإعلان":"🟢 تشغيل الإعلان",callback_data:"announcement_toggle"},{text:"🗑️ حذف الإعلان",callback_data:"announcement_delete"}]]:[]),
+    ...(a?[
+      [{text:a.enabled?"🔴 إيقاف الإعلان":"🟢 تشغيل الإعلان",callback_data:"announcement_toggle"},{text:"🗑️ حذف الإعلان",callback_data:"announcement_delete"}]
+    ]:[]),
     [{text:"⬅️ أدوات الإدارة",callback_data:"dash_tools"}]
   ];
   await telegramCall(env,"sendMessage",{chat_id:chatId,text,reply_markup:{inline_keyboard:buttons}});
@@ -377,19 +388,26 @@ async function toggleSiteAnnouncement(env:Env,chatId:string){
 }
 async function createSiteAnnouncement(env:Env,chatId:string,payload:any){
   const type=String(payload?.type||"fixed");
+  const placement=payload?.placement==="center"||payload?.placement==="modal"?payload.placement:"top";
   const hours=type==="temporary"?Math.max(1,Math.min(720,Number(payload?.hours)||24)):null;
+  const durationSec=placement==="modal"?Math.max(1,Math.min(60,Number(payload?.durationSec)||5)):0;
   const a={
     id:randomHex(12),
     title:String(payload?.title||"").trim().slice(0,120),
     message:String(payload?.message||"").trim().slice(0,2000),
     type:type==="first"||type==="temporary"?"fixed"===type?"fixed":type:"fixed",
+    placement,
+    durationSec,
+    buttonText:String(payload?.buttonText||"").trim().slice(0,50),
+    buttonUrl:String(payload?.buttonUrl||"").trim().slice(0,500),
     enabled:true,
     createdAt:Date.now(),
     expiresAt:type==="temporary"?Date.now()+hours*3600000:null
   };
   if(!a.title||!a.message)throw new Error("عنوان ورسالة الإعلان مطلوبان");
+  if(a.buttonText&&!/^https?:\\/\\//i.test(a.buttonUrl)) throw new Error("رابط الزر يجب أن يبدأ بـ https:// أو http://");
   await saveSiteAnnouncement(env,a);
-  await adminLog(env,chatId,"SAVE_SITE_ANNOUNCEMENT",a.type,a.title);
+  await adminLog(env,chatId,"SAVE_SITE_ANNOUNCEMENT",a.type,a.title+" | "+a.placement);
   await clearTelegramAdminMode(env,chatId);
   await sendTelegramAnnouncements(env,chatId);
 }
@@ -639,10 +657,58 @@ async function handleTelegramUpdate(env:Env,update:any){
     if(data==="admin_report"){await clearTelegramAdminMode(env,chatId);await sendTelegramAdminReport(env,chatId);return;}
     if(data==="admin_maintenance"){await clearTelegramAdminMode(env,chatId);await toggleMaintenance(env,chatId);return;}
     if(data==="admin_announcements"){await clearTelegramAdminMode(env,chatId);await sendTelegramAnnouncements(env,chatId);return;}
-    if(data==="announcement_add"){await setTelegramAdminMode(env,chatId,"announcement_title");await telegramCall(env,"sendMessage",{chat_id:chatId,text:"📢 إضافة إعلان للموقع\n\nابعت عنوان الإعلان.",reply_markup:{inline_keyboard:[[ {text:"❌ إلغاء",callback_data:"dash_cancel"} ]] }});return;}
-    if(data==="announcement_type_first"){const state=await getTelegramAdminState(env,chatId);await createSiteAnnouncement(env,chatId,{...state.payload,type:"first"});return;}
-    if(data==="announcement_type_fixed"){const state=await getTelegramAdminState(env,chatId);await createSiteAnnouncement(env,chatId,{...state.payload,type:"fixed"});return;}
-    if(data==="announcement_type_temporary"){await setTelegramAdminMode(env,chatId,"announcement_duration");await telegramCall(env,"sendMessage",{chat_id:chatId,text:"⏱️ الإعلان المؤقت\n\nابعت مدة ظهور الإعلان بالساعات.\nمثال: 24",reply_markup:{inline_keyboard:[[ {text:"❌ إلغاء",callback_data:"dash_cancel"} ]] }});return;}
+    if(data==="announcement_add"){
+      await setTelegramAdminMode(env,chatId,"announcement_title");
+      await telegramCall(env,"sendMessage",{chat_id:chatId,text:"📢 إضافة إعلان للموقع\n\nابعت عنوان الإعلان.",reply_markup:{inline_keyboard:[[ {text:"❌ إلغاء",callback_data:"dash_cancel"} ]] }});
+      return;
+    }
+    if(data==="announcement_location_top"||data==="announcement_location_center"||data==="announcement_location_modal"){
+      const state=await getTelegramAdminState(env,chatId);
+      const placement=data.endsWith("top")?"top":data.endsWith("center")?"center":"modal";
+      const payload={...state.payload,placement};
+      if(placement==="modal"){
+        await setTelegramAdminMode(env,chatId,"announcement_duration",payload);
+        await telegramCall(env,"sendMessage",{chat_id:chatId,text:"🚨 Popup كبير\n\nكام ثانية يفضل ظاهر؟\nاكتب رقم من 1 إلى 60.\nمثال: 5",reply_markup:{inline_keyboard:[[ {text:"⚡ 5 ثواني",callback_data:"announcement_duration_5"},{text:"⚡ 10 ثواني",callback_data:"announcement_duration_10"}],[{text:"❌ إلغاء",callback_data:"dash_cancel"}]] }});
+      }else{
+        await setTelegramAdminMode(env,chatId,"announcement_type",payload);
+        await telegramCall(env,"sendMessage",{chat_id:chatId,text:"📦 اختار نوع الظهور:",reply_markup:{inline_keyboard:[
+          [{text:"👋 أول دخول فقط",callback_data:"announcement_type_first"}],
+          [{text:"📌 ثابت",callback_data:"announcement_type_fixed"}],
+          [{text:"⏱️ مؤقت",callback_data:"announcement_type_temporary"}],
+          [{text:"❌ إلغاء",callback_data:"dash_cancel"}]
+        ]}});
+      }
+      return;
+    }
+    if(data==="announcement_duration_5"||data==="announcement_duration_10"){
+      const state=await getTelegramAdminState(env,chatId);
+      const durationSec=data.endsWith("_5")?5:10;
+      await setTelegramAdminMode(env,chatId,"announcement_type",{...state.payload,durationSec});
+      await telegramCall(env,"sendMessage",{chat_id:chatId,text:"📦 اختار نوع الظهور:",reply_markup:{inline_keyboard:[
+        [{text:"👋 أول دخول فقط",callback_data:"announcement_type_first"}],
+        [{text:"📌 ثابت",callback_data:"announcement_type_fixed"}],
+        [{text:"⏱️ مؤقت",callback_data:"announcement_type_temporary"}],
+        [{text:"❌ إلغاء",callback_data:"dash_cancel"}]
+      ]}});
+      return;
+    }
+    if(data==="announcement_type_first"||data==="announcement_type_fixed"){
+      const state=await getTelegramAdminState(env,chatId);
+      await setTelegramAdminMode(env,chatId,"announcement_button_text",{...state.payload,type:data.endsWith("_first")?"first":"fixed"});
+      await telegramCall(env,"sendMessage",{chat_id:chatId,text:"🔘 زر اختياري\n\nابعت اسم الزر، أو اضغط تخطي لو مش عايز زر.",reply_markup:{inline_keyboard:[[ {text:"⏭️ تخطي",callback_data:"announcement_skip_button"} ],[ {text:"❌ إلغاء",callback_data:"dash_cancel"} ]] }});
+      return;
+    }
+    if(data==="announcement_type_temporary"){
+      const state=await getTelegramAdminState(env,chatId);
+      await setTelegramAdminMode(env,chatId,"announcement_duration_hours",{...state.payload,type:"temporary"});
+      await telegramCall(env,"sendMessage",{chat_id:chatId,text:"⏱️ الإعلان المؤقت\n\nابعت مدة ظهور الإعلان بالساعات.\nمثال: 24",reply_markup:{inline_keyboard:[[ {text:"❌ إلغاء",callback_data:"dash_cancel"} ]] }});
+      return;
+    }
+    if(data==="announcement_skip_button"){
+      const state=await getTelegramAdminState(env,chatId);
+      await createSiteAnnouncement(env,chatId,{...state.payload,buttonText:"",buttonUrl:""});
+      return;
+    }
     if(data==="announcement_toggle"){await clearTelegramAdminMode(env,chatId);await toggleSiteAnnouncement(env,chatId);return;}
     if(data==="announcement_delete"){await clearTelegramAdminMode(env,chatId);await deleteSiteAnnouncement(env,chatId);return;}
     
@@ -696,8 +762,23 @@ async function handleTelegramUpdate(env:Env,update:any){
     return;
   }
   if(state.mode==="announcement_message" && text){
-    await setTelegramAdminMode(env,chatId,"announcement_type",{title:String(state.payload?.title||""),message:text.slice(0,2000)});
-    await telegramCall(env,"sendMessage",{chat_id:chatId,text:"📍 اختار نوع الإعلان:",reply_markup:{inline_keyboard:[
+    await setTelegramAdminMode(env,chatId,"announcement_location",{title:String(state.payload?.title||""),message:text.slice(0,2000)});
+    await telegramCall(env,"sendMessage",{chat_id:chatId,text:"📍 حدد مكان الإعلان:",reply_markup:{inline_keyboard:[
+      [{text:"⬆️ أعلى الصفحة",callback_data:"announcement_location_top"}],
+      [{text:"🎯 نص الصفحة",callback_data:"announcement_location_center"}],
+      [{text:"🚨 إعلان كبير Popup",callback_data:"announcement_location_modal"}],
+      [{text:"❌ إلغاء",callback_data:"dash_cancel"}]
+    ]}});
+    return;
+  }
+  if(state.mode==="announcement_duration" && text){
+    const seconds=Number(text.replace(/[^0-9.]/g,""));
+    if(!Number.isFinite(seconds)||seconds<1||seconds>60){
+      await telegramCall(env,"sendMessage",{chat_id:chatId,text:"❌ اكتب عدد ثواني بين 1 و60."});
+      return;
+    }
+    await setTelegramAdminMode(env,chatId,"announcement_type",{...state.payload,durationSec:Math.round(seconds)});
+    await telegramCall(env,"sendMessage",{chat_id:chatId,text:"📦 اختار نوع الظهور:",reply_markup:{inline_keyboard:[
       [{text:"👋 أول دخول فقط",callback_data:"announcement_type_first"}],
       [{text:"📌 ثابت",callback_data:"announcement_type_fixed"}],
       [{text:"⏱️ مؤقت",callback_data:"announcement_type_temporary"}],
@@ -705,13 +786,24 @@ async function handleTelegramUpdate(env:Env,update:any){
     ]}});
     return;
   }
-  if(state.mode==="announcement_duration" && text){
+  if(state.mode==="announcement_duration_hours" && text){
     const hours=Number(text.replace(/[^0-9.]/g,""));
     if(!Number.isFinite(hours)||hours<1||hours>720){
       await telegramCall(env,"sendMessage",{chat_id:chatId,text:"❌ اكتب عدد ساعات بين 1 و720."});
       return;
     }
-    await createSiteAnnouncement(env,chatId,{...state.payload,type:"temporary",hours});
+    await setTelegramAdminMode(env,chatId,"announcement_button_text",{...state.payload,hours});
+    await telegramCall(env,"sendMessage",{chat_id:chatId,text:"🔘 زر اختياري\n\nابعت اسم الزر، أو اضغط تخطي لو مش عايز زر.",reply_markup:{inline_keyboard:[[ {text:"⏭️ تخطي",callback_data:"announcement_skip_button"} ],[ {text:"❌ إلغاء",callback_data:"dash_cancel"} ]] }});
+    return;
+  }
+  if(state.mode==="announcement_button_text" && text){
+    await setTelegramAdminMode(env,chatId,"announcement_button_url",{...state.payload,buttonText:text.slice(0,50)});
+    await telegramCall(env,"sendMessage",{chat_id:chatId,text:"🔗 ابعت الرابط اللي يفتحه الزر.\nمثال: https://example.com",reply_markup:{inline_keyboard:[[ {text:"❌ إلغاء",callback_data:"dash_cancel"} ]] }});
+    return;
+  }
+  if(state.mode==="announcement_button_url" && text){
+    if(!/^https?:\\/\\//i.test(text)){await telegramCall(env,"sendMessage",{chat_id:chatId,text:"❌ الرابط لازم يبدأ بـ https:// أو http://"});return;}
+    await createSiteAnnouncement(env,chatId,{...state.payload,buttonUrl:text.slice(0,500)});
     return;
   }
   if(state.mode==="email_broadcast_subject" && text){
@@ -775,7 +867,12 @@ export default {
             await saveSiteAnnouncement(env,a);
             return json({announcement:null});
           }
-          return json({announcement:{id:String(a.id||""),title:String(a.title||""),message:String(a.message||""),type:String(a.type||"fixed"),expiresAt:a.expiresAt?Number(a.expiresAt):null}});
+          return json({announcement:{
+            id:String(a.id||""),title:String(a.title||""),message:String(a.message||""),
+            type:String(a.type||"fixed"),placement:String(a.placement||"top"),
+            durationSec:Number(a.durationSec||0),buttonText:String(a.buttonText||""),
+            buttonUrl:String(a.buttonUrl||""),expiresAt:a.expiresAt?Number(a.expiresAt):null
+          }});
         }
         if(url.pathname==="/api/pageview" && request.method==="POST") {
           try {
