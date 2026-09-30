@@ -202,6 +202,26 @@ async function broadcastWhatsApp(env:Env,message:string){
   return {total:(rows.results||[]).length,sent,failed,errors};
 }
 
+async function broadcastEmail(env:Env,subject:string,message:string){
+  const url=env.GOOGLE_APPS_SCRIPT_URL;
+  const secret=env.GOOGLE_APPS_SCRIPT_SECRET;
+  if(!url||!secret) throw new Error("Gmail غير مفعّل حاليًا");
+  const rows=await env.DB.prepare("SELECT email FROM users WHERE email IS NOT NULL AND email<>'' ORDER BY created_at ASC").all<any>();
+  const emails=(rows.results||[]).map((r:any)=>cleanEmail(r.email)).filter(Boolean);
+  if(!emails.length) return {total:0,sent:0,failed:0,error:"لا يوجد إيميلات مسجلة"};
+  const payload=JSON.stringify({secret,type:"broadcast",subject:subject.slice(0,180),message:message.slice(0,10000),emails});
+  let r=await fetch(url,{method:"POST",redirect:"manual",headers:{"content-type":"application/json","accept":"application/json"},body:payload});
+  if([301,302,303,307,308].includes(r.status)){
+    const location=r.headers.get("location");
+    if(location) r=await fetch(new URL(location,url).toString(),{method:"GET",headers:{"accept":"application/json"}});
+  }
+  const raw=await r.text();
+  let data:any={}; try{data=JSON.parse(raw)}catch{}
+  if(!r.ok) throw new Error("Google Apps Script HTTP "+r.status+(raw?": "+raw.slice(0,180):""));
+  if(!data?.ok) throw new Error(String(data?.error||raw||"فشل إرسال حملة Gmail").slice(0,300));
+  return {total:emails.length,sent:Number(data.sent??emails.length),failed:Number(data.failed??0),error:data.error?String(data.error):""};
+}
+
 async function ensureTelegramDashboard(env:Env){
   await env.DB.prepare("CREATE TABLE IF NOT EXISTS telegram_admin_state (chat_id TEXT PRIMARY KEY, mode TEXT NOT NULL, payload_json TEXT, updated_at INTEGER NOT NULL)").run();
   try { await env.DB.prepare("ALTER TABLE telegram_admin_state ADD COLUMN payload_json TEXT").run(); } catch {}
@@ -330,7 +350,7 @@ async function sendTelegramAdminTools(env:Env,chatId:string){
   await telegramCall(env,"sendMessage",{chat_id:chatId,text,reply_markup:{inline_keyboard:[
     [{text:maintenance==="1"?"🟢 إيقاف الصيانة":"🔴 تفعيل الصيانة",callback_data:"admin_maintenance"}],
     [{text:"🧾 سجل العمليات",callback_data:"admin_activity"},{text:"📋 تقرير شامل",callback_data:"admin_report"}],
-    [{text:"📢 رسالة إعلان",callback_data:"dash_broadcast"}],
+    [{text:"📢 رسالة واتساب",callback_data:"dash_broadcast"},{text:"📧 رسالة Gmail",callback_data:"dash_email_broadcast"}],
     [{text:"⬅️ اللوحة",callback_data:"dash_home"}]
   ]}});
 }
@@ -380,7 +400,7 @@ function telegramDashboardKeyboard(){
       [{text:"📈 الزيارات",callback_data:"dash_traffic"},{text:"🔐 الدخول و OTP",callback_data:"dash_auth"}],
       [{text:"📱 واتساب",callback_data:"dash_wa"},{text:"🩺 حالة النظام",callback_data:"dash_system"}],
       [{text:"🛠️ أدوات الإدارة",callback_data:"dash_tools"},{text:"📈 تحليلات 30 يوم",callback_data:"dash_traffic30"}],
-      [{text:"📢 إرسال للجميع",callback_data:"dash_broadcast"}],
+      [{text:"📢 إرسال واتساب",callback_data:"dash_broadcast"},{text:"📧 إرسال Gmail",callback_data:"dash_email_broadcast"}],
       [{text:"🔄 تحديث اللوحة",callback_data:"dash_home"}]
     ]
   };
@@ -572,6 +592,21 @@ async function handleTelegramUpdate(env:Env,update:any){
     if(data.startsWith("user_delete:")){await clearTelegramAdminMode(env,chatId);await sendTelegramUserActionConfirm(env,chatId,data.slice(12),"delete");return;}
     if(data.startsWith("user_delete_confirm:")){await clearTelegramAdminMode(env,chatId);await deleteUser(env,chatId,data.slice(20));return;}
     if(data==="dash_broadcast"){await setTelegramAdminMode(env,chatId,"broadcast");await telegramCall(env,"sendMessage",{chat_id:chatId,text:"📢 ابعتلي الرسالة اللي عايز تبعتها لكل أرقام واتساب المسجلة.\n\n⚠️ بعد ما تبعتها هعرض عليك تأكيد قبل الإرسال للجميع.",reply_markup:{inline_keyboard:[[ {text:"❌ إلغاء",callback_data:"dash_cancel"} ]] }});return;}
+    if(data==="dash_email_broadcast"){await setTelegramAdminMode(env,chatId,"email_broadcast_subject");await telegramCall(env,"sendMessage",{chat_id:chatId,text:"📧 إرسال رسالة Gmail\n\nابعت عنوان الرسالة (Subject).\n\n⚠️ سيتم الإرسال إلى كل الإيميلات المسجلة.",reply_markup:{inline_keyboard:[[ {text:"❌ إلغاء",callback_data:"dash_cancel"} ]] }});return;}
+    if(data==="dash_email_broadcast_confirm"){
+      const state=await getTelegramAdminState(env,chatId);
+      const subject=String(state.payload?.subject||"").trim();
+      const pending=String(state.payload?.message||"").trim();
+      if(!subject||!pending){await clearTelegramAdminMode(env,chatId);await sendTelegramDashboard(env,chatId);return;}
+      await clearTelegramAdminMode(env,chatId);
+      await telegramCall(env,"sendMessage",{chat_id:chatId,text:"⏳ جاري إرسال حملة Gmail لكل الإيميلات المسجلة..."});
+      try{
+        const result=await broadcastEmail(env,subject,pending);
+        await adminLog(env,chatId,"EMAIL_BROADCAST","all",subject+" — "+pending);
+        await telegramCall(env,"sendMessage",{chat_id:chatId,text:["📧 نتيجة حملة Gmail","","👥 إجمالي الإيميلات: "+result.total,"✅ تم الإرسال: "+result.sent,"❌ فشل: "+result.failed,result.error?"\n⚠️ "+result.error:""].join("\n"),reply_markup:{inline_keyboard:[[ {text:"🎛️ لوحة التحكم",callback_data:"dash_home"} ]] }});
+      }catch(e){await telegramCall(env,"sendMessage",{chat_id:chatId,text:"⚠️ تعذر تنفيذ حملة Gmail: "+(e instanceof Error?e.message:String(e)).slice(0,700),reply_markup:{inline_keyboard:[[ {text:"🎛️ لوحة التحكم",callback_data:"dash_home"} ]] }});}
+      return;
+    }
     if(data==="dash_broadcast_confirm"){
       const state=await getTelegramAdminState(env,chatId);
       const pending=String(state.payload?.message||"").trim();
@@ -592,6 +627,16 @@ async function handleTelegramUpdate(env:Env,update:any){
   const text=String(message?.text||"").trim();
   await ensureAdminTools(env);
   const state=await getTelegramAdminState(env,chatId);
+  if(state.mode==="email_broadcast_subject" && text){
+    await setTelegramAdminMode(env,chatId,"email_broadcast_message",{subject:text.slice(0,180)});
+    await telegramCall(env,"sendMessage",{chat_id:chatId,text:"✉️ تمام. دلوقتي ابعت نص الرسالة اللي هيتبعت على Gmail لكل المستخدمين.",reply_markup:{inline_keyboard:[[ {text:"❌ إلغاء",callback_data:"dash_cancel"} ]] }});
+    return;
+  }
+  if(state.mode==="email_broadcast_message" && text){
+    await setTelegramAdminMode(env,chatId,"email_broadcast_pending",{subject:String(state.payload?.subject||""),message:text});
+    await telegramCall(env,"sendMessage",{chat_id:chatId,text:"📝 معاينة رسالة Gmail\n\n📌 العنوان: "+String(state.payload?.subject||"—")+"\n\n"+text+"\n\nهل أنت متأكد من الإرسال لكل الإيميلات المسجلة؟",reply_markup:{inline_keyboard:[[ {text:"📧 تأكيد الإرسال",callback_data:"dash_email_broadcast_confirm"},{text:"❌ إلغاء",callback_data:"dash_cancel"} ]] }});
+    return;
+  }
   if(state.mode==="broadcast" && text){
     await setTelegramAdminMode(env,chatId,"broadcast_pending",{message:text});
     await telegramCall(env,"sendMessage",{chat_id:chatId,text:"📝 الرسالة جاهزة للإرسال:\n\n"+text+"\n\nهل أنت متأكد إنك عايز تبعتها لكل أرقام واتساب؟",reply_markup:{inline_keyboard:[[ {text:"✅ تأكيد الإرسال",callback_data:"dash_broadcast_confirm"},{text:"❌ إلغاء",callback_data:"dash_cancel"} ]] }});
