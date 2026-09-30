@@ -363,8 +363,9 @@ async function sendTelegramRecentUsers(env:Env,chatId:string){
       "\n   📱 "+String(u.phone||"—")+
       "\n   🕐 "+created;
   });
+  const buttons=items.slice(0,10).map((u:any,i:number)=>[{text:"👤 "+String(u.name||"بدون اسم").slice(0,24),callback_data:"user_view:"+String(u.id)}]);
   const text=["🕐 آخر 10 حسابات", "", ...(lines.length?lines:["لا يوجد مستخدمون حتى الآن."])].join("\n");
-  await telegramCall(env,"sendMessage",{chat_id:chatId,text,reply_markup:dashBack()});
+  await telegramCall(env,"sendMessage",{chat_id:chatId,text,reply_markup:{inline_keyboard:[...buttons,[{text:"⬅️ رجوع للوحة",callback_data:"dash_home"}]]}});
 }
 
 async function sendTelegramUserSearch(env:Env,chatId:string,query:string){
@@ -378,8 +379,9 @@ async function sendTelegramUserSearch(env:Env,chatId:string,query:string){
       "\n   📱 "+String(u.phone||"—")+
       "\n   🕐 "+date;
   });
+  const buttons=items.slice(0,10).map((u:any)=>[{text:"👤 "+String(u.name||"بدون اسم").slice(0,24),callback_data:"user_view:"+String(u.id)}]);
   const text=["🔎 نتائج البحث عن: "+query,"",...(lines.length?lines:["لا توجد نتائج مطابقة."])].join("\n");
-  await telegramCall(env,"sendMessage",{chat_id:chatId,text,reply_markup:{inline_keyboard:[[ {text:"🔎 بحث جديد",callback_data:"dash_search"} ],[ {text:"⬅️ رجوع",callback_data:"dash_home"} ]] }});
+  await telegramCall(env,"sendMessage",{chat_id:chatId,text,reply_markup:{inline_keyboard:[...buttons,[{text:"🔎 بحث جديد",callback_data:"dash_search"}],[{text:"⬅️ رجوع",callback_data:"dash_home"}]]}});
 }
 
 async function sendTelegramTraffic(env:Env,chatId:string){
