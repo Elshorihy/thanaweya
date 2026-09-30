@@ -33,6 +33,8 @@ async function ensureSchema(env:Env){
     await env.DB.prepare("CREATE TABLE IF NOT EXISTS auth_codes (id TEXT PRIMARY KEY,email TEXT NOT NULL,type TEXT NOT NULL,code_hash TEXT NOT NULL,payload_json TEXT,expires_at INTEGER NOT NULL,attempts INTEGER NOT NULL DEFAULT 0,created_at INTEGER NOT NULL)").run();
     await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_auth_codes_lookup ON auth_codes(email,type,expires_at)").run();
     await env.DB.prepare("CREATE TABLE IF NOT EXISTS user_data (user_id TEXT PRIMARY KEY,data_json TEXT NOT NULL DEFAULT '{}',updated_at INTEGER NOT NULL,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE)").run();
+    await env.DB.prepare("CREATE TABLE IF NOT EXISTS global_lectures (id TEXT PRIMARY KEY,title TEXT NOT NULL,subject_name TEXT NOT NULL,url TEXT NOT NULL,description TEXT NOT NULL DEFAULT '',kind TEXT NOT NULL DEFAULT 'link',enabled INTEGER NOT NULL DEFAULT 1,created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL)").run();
+    await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_global_lectures_subject ON global_lectures(subject_name,enabled)").run();
     await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token_hash)").run();
     await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_sessions_expiry ON sessions(expires_at)").run();
   })().catch(e=>{schemaReady=null;throw e});
@@ -633,6 +635,33 @@ async function sendTelegramCampaigns(env:Env,chatId:string){
     [{text:"⬅️ مركز القيادة",callback_data:"dash_center"}]
   ]}});
 }
+async function ensureGlobalLectures(env:Env){
+  await env.DB.prepare("CREATE TABLE IF NOT EXISTS global_lectures (id TEXT PRIMARY KEY,title TEXT NOT NULL,subject_name TEXT NOT NULL,url TEXT NOT NULL,description TEXT NOT NULL DEFAULT '',kind TEXT NOT NULL DEFAULT 'link',enabled INTEGER NOT NULL DEFAULT 1,created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL)").run();
+  await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_global_lectures_subject ON global_lectures(subject_name,enabled)").run();
+}
+async function getGlobalLectures(env:Env){
+  await ensureGlobalLectures(env);
+  const rows=await env.DB.prepare("SELECT id,title,subject_name,url,description,kind,created_at,updated_at FROM global_lectures WHERE enabled=1 ORDER BY subject_name ASC,created_at DESC").all<any>();
+  return rows.results||[];
+}
+async function sendTelegramGlobalLectures(env:Env,chatId:string){
+  const rows=await env.DB.prepare("SELECT id,title,subject_name,url,description,created_at FROM global_lectures WHERE enabled=1 ORDER BY subject_name ASC,created_at DESC").all<any>();
+  const items=rows.results||[];
+  const lines=items.map((x:any,i:number)=>(i+1)+". 📚 "+String(x.title)+"\n   المادة: "+String(x.subject_name)+"\n   🔗 "+String(x.url));
+  const buttons=items.slice(0,20).map((x:any)=>[{text:"🗑️ حذف: "+String(x.title).slice(0,25),callback_data:"global_lecture_delete:"+String(x.id)}]);
+  await telegramCall(env,"sendMessage",{chat_id:chatId,text:["📚 مصادر المحاضرات العامة","","هذه المصادر ثابتة وتظهر لكل المستخدمين.","",...(lines.length?lines:["لا توجد مصادر عامة حتى الآن."])].join("\n"),reply_markup:{inline_keyboard:[[{text:"➕ إضافة مصدر",callback_data:"global_lecture_add"}],...buttons,[{text:"⬅️ لوحة التحكم",callback_data:"dash_home"}]]}});
+}
+async function createGlobalLecture(env:Env,chatId:string,payload:any){
+  await ensureGlobalLectures(env);
+  const title=String(payload?.title||"").trim().slice(0,160);
+  const subject=String(payload?.subject_name||"").trim().slice(0,100);
+  const url=String(payload?.url||"").trim().slice(0,1000);
+  if(!title||!subject||!/^https?:\/\//i.test(url)){await telegramCall(env,"sendMessage",{chat_id:chatId,text:"❌ البيانات غير مكتملة أو الرابط غير صحيح."});return;}
+  const now=Date.now();
+  await env.DB.prepare("INSERT INTO global_lectures(id,title,subject_name,url,description,kind,enabled,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?)").bind(randomHex(16),title,subject,url,"","link",1,now,now).run();
+  await clearTelegramAdminMode(env,chatId);
+  await telegramCall(env,"sendMessage",{chat_id:chatId,text:"✅ تم إضافة المصدر العام.\n\n📚 "+title+"\n📖 المادة: "+subject+"\n🔗 "+url+"\n\nسيظهر الآن لكل المستخدمين داخل قسم المحاضرات.",reply_markup:{inline_keyboard:[[{text:"📚 مصادر المحاضرات",callback_data:"dash_global_lectures"}],[{text:"🎛️ لوحة التحكم",callback_data:"dash_home"}]]}});
+}
 function telegramDashboardKeyboard(){
   return {inline_keyboard:[
     [{text:"⚡ مركز القيادة",callback_data:"dash_center"}],
@@ -642,6 +671,7 @@ function telegramDashboardKeyboard(){
     [{text:"📈 الزيارات",callback_data:"dash_traffic"},{text:"📊 تحليلات 30 يوم",callback_data:"dash_traffic30"}],
     [{text:"🔐 الدخول و OTP",callback_data:"dash_auth"},{text:"📱 واتساب",callback_data:"dash_wa"}],
     [{text:"🛠️ أدوات الإدارة",callback_data:"dash_tools"}],
+    [{text:"📚 مصادر المحاضرات",callback_data:"dash_global_lectures"}],
     [{text:"📢 إرسال واتساب",callback_data:"dash_broadcast"},{text:"📧 إرسال Gmail",callback_data:"dash_email_broadcast"}],
     [{text:"🔄 تحديث اللوحة",callback_data:"dash_home"}]
   ]};
@@ -848,6 +878,18 @@ async function handleTelegramUpdate(env:Env,update:any){
     if(data==="dash_recent"){await clearTelegramAdminMode(env,chatId);await sendTelegramRecentUsers(env,chatId);return;}    if(data==="dash_search"){await setTelegramAdminMode(env,chatId,"user_search");await telegramCall(env,"sendMessage",{chat_id:chatId,text:"🔎 ابعت الاسم أو الإيميل أو رقم الواتساب اللي عايز تدور عليه.",reply_markup:{inline_keyboard:[[ {text:"❌ إلغاء",callback_data:"dash_cancel"} ]] }});return;}
     if(data==="dash_traffic"){await clearTelegramAdminMode(env,chatId);await sendTelegramTraffic(env,chatId);return;}
     if(data==="dash_traffic30"){await clearTelegramAdminMode(env,chatId);await sendTelegramTrafficDetailed(env,chatId);return;}
+    if(data==="dash_global_lectures"){await clearTelegramAdminMode(env,chatId);await sendTelegramGlobalLectures(env,chatId);return;}
+    if(data==="global_lecture_add"){
+      await setTelegramAdminMode(env,chatId,"global_lecture_title",{});
+      await telegramCall(env,"sendMessage",{chat_id:chatId,text:"📚 إضافة مصدر عام\n\nابعت اسم المصدر.",reply_markup:{inline_keyboard:[[{text:"❌ إلغاء",callback_data:"dash_cancel"}]]}});
+      return;
+    }
+    if(data.startsWith("global_lecture_delete:")){
+      const id=data.slice("global_lecture_delete:".length);
+      const row=await env.DB.prepare("SELECT title FROM global_lectures WHERE id=?").bind(id).first<any>();
+      if(row){await env.DB.prepare("UPDATE global_lectures SET enabled=0,updated_at=? WHERE id=?").bind(Date.now(),id).run();await telegramCall(env,"sendMessage",{chat_id:chatId,text:"🗑️ تم إخفاء المصدر العام: "+String(row.title),reply_markup:{inline_keyboard:[[{text:"📚 مصادر المحاضرات",callback_data:"dash_global_lectures"}]]}});} else await sendTelegramGlobalLectures(env,chatId);
+      return;
+    }
     if(data==="dash_tools"){await clearTelegramAdminMode(env,chatId);await sendTelegramAdminTools(env,chatId);return;}
     if(data==="admin_activity"){await clearTelegramAdminMode(env,chatId);await sendTelegramAdminActivity(env,chatId);return;}
     if(data==="admin_report"){await clearTelegramAdminMode(env,chatId);await sendTelegramAdminReport(env,chatId);return;}
@@ -952,6 +994,21 @@ async function handleTelegramUpdate(env:Env,update:any){
   const text=String(message?.text||"").trim();
   await ensureAdminTools(env);
   const state=await getTelegramAdminState(env,chatId);
+  if(state.mode==="global_lecture_title" && text){
+    await setTelegramAdminMode(env,chatId,"global_lecture_subject",{title:text.slice(0,160)});
+    await telegramCall(env,"sendMessage",{chat_id:chatId,text:"📖 اكتب اسم المادة.",reply_markup:{inline_keyboard:[[{text:"❌ إلغاء",callback_data:"dash_cancel"}]]}});
+    return;
+  }
+  if(state.mode==="global_lecture_subject" && text){
+    await setTelegramAdminMode(env,chatId,"global_lecture_url",{...state.payload,subject_name:text.slice(0,100)});
+    await telegramCall(env,"sendMessage",{chat_id:chatId,text:"🔗 ابعت رابط المصدر.\nلازم يبدأ بـ https:// أو http://",reply_markup:{inline_keyboard:[[{text:"❌ إلغاء",callback_data:"dash_cancel"}]]}});
+    return;
+  }
+  if(state.mode==="global_lecture_url" && text){
+    if(!/^https?:\/\//i.test(text)){await telegramCall(env,"sendMessage",{chat_id:chatId,text:"❌ الرابط لازم يبدأ بـ https:// أو http://"});return;}
+    await createGlobalLecture(env,chatId,{...state.payload,url:text});
+    return;
+  }
   if(state.mode==="announcement_title" && text){
     await setTelegramAdminMode(env,chatId,"announcement_message",{title:text.slice(0,120)});
     await telegramCall(env,"sendMessage",{chat_id:chatId,text:"📝 تمام. ابعت نص الإعلان اللي هيظهر للمستخدمين.",reply_markup:{inline_keyboard:[[ {text:"❌ إلغاء",callback_data:"dash_cancel"} ]] }});
@@ -1055,6 +1112,10 @@ export default {
         }
         // Owner panel uses one fixed account and its own HttpOnly cookie.
         // It does not create a user/session record and does not depend on the site's normal auth.
+        if(url.pathname==="/api/global-lectures" && request.method==="GET") {
+          try { const items=await getGlobalLectures(env); return json({lectures:items.map((x:any)=>({id:String(x.id),title:String(x.title||""),subjectName:String(x.subject_name||""),url:String(x.url||""),description:String(x.description||""),kind:String(x.kind||"link"),createdAt:Number(x.created_at||0)}))}); }
+          catch(e) { console.error("Global lectures API failed",e); return json({lectures:[]}); }
+        }
         if(url.pathname==="/api/announcement" && request.method==="GET") {
           const a=await getSiteAnnouncement(env);
           if(!a||!a.enabled)return json({announcement:null});
