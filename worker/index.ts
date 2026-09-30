@@ -144,26 +144,36 @@ async function sendEmailOtp(env:Env,email:string,code:string,type:"register"|"re
   const secret=env.GOOGLE_APPS_SCRIPT_SECRET;
   if(!url||!secret) throw new Error("Gmail غير مفعّل حاليًا");
 
-  const payload=JSON.stringify({secret,email,code,otpCode:code,type:"otp"});
-  const r=await fetch(url,{
-    method:"POST",
-    redirect:"manual",
-    headers:{"content-type":"application/json","accept":"application/json"},
-    body:payload
-  });
+  const requestId=randomHex(20);
+  const payload=JSON.stringify({secret,email,code,otpCode:code,type:"otp",requestId});
+  const r=await fetch(url,{method:"POST",redirect:"manual",headers:{"content-type":"application/json","accept":"application/json"},body:payload});
 
-  // Google Apps Script normally returns a redirect after executing doPost().
-  // Do NOT follow it with GET: that can call doGet() and cause a duplicate email.
-  if([301,302,303,307,308].includes(r.status)) return;
+  if(![301,302,303,307,308].includes(r.status) && !r.ok){
+    const raw=await r.text();
+    throw new Error("Google Apps Script HTTP "+r.status+(raw?": "+raw.slice(0,180):""));
+  }
 
-  const raw=await r.text();
-  let data:any={};
-  try { data=JSON.parse(raw); } catch {}
+  const statusUrl=new URL(url);
+  statusUrl.searchParams.set("action","status");
+  statusUrl.searchParams.set("requestId",requestId);
 
-  if(!r.ok) throw new Error("Google Apps Script HTTP "+r.status+(raw?": "+raw.slice(0,180):""));
-  if(!data?.ok) throw new Error(String(data?.error||raw||"فشل إرسال الإيميل عبر Gmail").slice(0,240));
+  for(let i=0;i<8;i++){
+    await new Promise(resolve=>setTimeout(resolve,750));
+    try{
+      const sr=await fetch(statusUrl.toString(),{method:"GET",headers:{"accept":"application/json"}});
+      const raw=await sr.text();
+      let data:any={}; try{data=JSON.parse(raw)}catch{}
+      if(data?.status==="done"){
+        if(!data.ok) throw new Error(String(data.error||"فشل إرسال كود التحقق عبر Gmail").slice(0,300));
+        return;
+      }
+    }catch(e){
+      if(e instanceof Error && /فشل إرسال|Gmail/.test(e.message)) throw e;
+    }
+  }
+
+  throw new Error("تم إرسال طلب Gmail لكن لم يصل تأكيد التنفيذ. تأكد من نشر Google Apps Script كـ Web App وتشغيله بحسابك.");
 }
-
 async function ensureWhatsAppLog(env:Env){
   await env.DB.prepare("CREATE TABLE IF NOT EXISTS whatsapp_messages (id TEXT PRIMARY KEY,user_id TEXT,phone TEXT NOT NULL,message TEXT NOT NULL,status TEXT NOT NULL,provider_id TEXT,error TEXT,created_at INTEGER NOT NULL,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE SET NULL)").run();
   await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_whatsapp_messages_created ON whatsapp_messages(created_at)").run();
@@ -202,48 +212,37 @@ async function broadcastEmail(env:Env,subject:string,message:string){
   const emails=(rows.results||[]).map((r:any)=>cleanEmail(r.email)).filter(Boolean);
   if(!emails.length) return {total:0,sent:0,failed:0,error:"لا يوجد إيميلات مسجلة"};
 
-  const payload=JSON.stringify({
-    secret,
-    type:"broadcast",
-    subject:subject.slice(0,180),
-    message:message.slice(0,10000),
-    emails
-  });
+  const requestId=randomHex(20);
+  const payload=JSON.stringify({secret,type:"broadcast",subject:subject.slice(0,180),message:message.slice(0,10000),emails,requestId});
+  const r=await fetch(url,{method:"POST",redirect:"manual",headers:{"content-type":"application/json","accept":"application/json"},body:payload});
 
-  const r=await fetch(url,{
-    method:"POST",
-    redirect:"manual",
-    headers:{"content-type":"application/json","accept":"application/json"},
-    body:payload
-  });
-
-  // Apps Script web apps normally answer POST requests with a redirect.
-  // A redirect is NOT proof that GmailApp.sendEmail() succeeded for every recipient.
-  // Never report those recipients as "sent" unless Apps Script returns a real result.
-  if([301,302,303,307,308].includes(r.status)){
-    return {
-      total:emails.length,
-      sent:0,
-      failed:0,
-      error:"تم قبول الطلب من Google Apps Script، لكن تعذر تأكيد الإرسال من Gmail. لم نعدّ الرسائل كمُرسلة."
-    };
+  if(![301,302,303,307,308].includes(r.status) && !r.ok){
+    const raw=await r.text();
+    throw new Error("Google Apps Script HTTP "+r.status+(raw?": "+raw.slice(0,180):""));
   }
 
-  const raw=await r.text();
-  let data:any={};
-  try{data=JSON.parse(raw)}catch{}
+  const statusUrl=new URL(url);
+  statusUrl.searchParams.set("action","status");
+  statusUrl.searchParams.set("requestId",requestId);
 
-  if(!r.ok) throw new Error("Google Apps Script HTTP "+r.status+(raw?": "+raw.slice(0,180):""));
-  if(!data?.ok) throw new Error(String(data?.error||raw||"فشل إرسال حملة Gmail").slice(0,300));
+  for(let i=0;i<12;i++){
+    await new Promise(resolve=>setTimeout(resolve,750));
+    const sr=await fetch(statusUrl.toString(),{method:"GET",headers:{"accept":"application/json"}});
+    const raw=await sr.text();
+    let data:any={}; try{data=JSON.parse(raw)}catch{}
+    if(data?.status==="done"){
+      if(!data.ok) throw new Error(String(data.error||"فشل إرسال حملة Gmail").slice(0,500));
+      return {total:Number(data.total??emails.length),sent:Number(data.sent??0),failed:Number(data.failed??0),error:data.error?String(data.error):""};
+    }
+  }
 
   return {
     total:emails.length,
-    sent:Number(data.sent??emails.length),
-    failed:Number(data.failed??0),
-    error:data.error?String(data.error):""
+    sent:0,
+    failed:0,
+    error:"تم استلام الطلب من Google Apps Script لكن لم يصل تأكيد التنفيذ. لم نعتبر أي رسالة مُرسلة."
   };
 }
-
 async function ensureTelegramDashboard(env:Env){
   await env.DB.prepare("CREATE TABLE IF NOT EXISTS telegram_admin_state (chat_id TEXT PRIMARY KEY, mode TEXT NOT NULL, payload_json TEXT, updated_at INTEGER NOT NULL)").run();
   try { await env.DB.prepare("ALTER TABLE telegram_admin_state ADD COLUMN payload_json TEXT").run(); } catch {}
