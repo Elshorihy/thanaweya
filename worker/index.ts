@@ -1277,7 +1277,7 @@ export default {
     const url=new URL(request.url);
     if(url.pathname.startsWith("/api/")) {
       try {
-        if(request.method==="OPTIONS") return new Response(null,{status:204,headers:{"access-control-allow-origin":url.origin,"access-control-allow-credentials":"true","access-control-allow-methods":"GET,POST,PUT,OPTIONS","access-control-allow-headers":"content-type"}});
+        if(request.method==="OPTIONS") return new Response(null,{status:204,headers:{"access-control-allow-origin":url.origin,"access-control-allow-credentials":"true","access-control-allow-methods":"GET,POST,PUT,DELETE,OPTIONS","access-control-allow-headers":"content-type"}});
         if(url.pathname!=="/api/pageview" && url.pathname!=="/api/telegram/webhook" && url.pathname!=="/api/health"){
           const maintenance=await getAdminSetting(env,"maintenance","0");
           if(maintenance==="1") return json({error:"الموقع في وضع الصيانة حاليًا. حاول مرة أخرى لاحقًا."},503,{"retry-after":"300"});
@@ -1289,12 +1289,14 @@ export default {
           return json({publicKey:env.VAPID_PUBLIC_KEY});
         }
         if(url.pathname==="/api/push/status" && request.method==="GET") {
+          await ensureSchema(env);
           const u=await userFrom(request,env); if(!u) return json({error:"يجب تسجيل الدخول"},401);
           await ensurePushSubscriptions(env);
           const row=await env.DB.prepare("SELECT COUNT(*) AS n FROM push_subscriptions WHERE user_id=?").bind(u.id).first<any>();
           return json({enabled:Number(row?.n||0)>0,devices:Number(row?.n||0)});
         }
         if(url.pathname==="/api/push/subscribe" && request.method==="POST") {
+          await ensureSchema(env);
           const u=await userFrom(request,env); if(!u) return json({error:"يجب تسجيل الدخول"},401);
           const b=await body(request), sub=validatePushSubscription(b?.subscription);
           if(!sub) return json({error:"اشتراك Push غير صالح"},400);
@@ -1304,6 +1306,7 @@ export default {
           return json({ok:true});
         }
         if(url.pathname==="/api/push/subscribe" && request.method==="DELETE") {
+          await ensureSchema(env);
           const u=await userFrom(request,env); if(!u) return json({error:"يجب تسجيل الدخول"},401);
           const b=await body(request), endpoint=String(b?.endpoint||"").trim();
           if(endpoint) await env.DB.prepare("DELETE FROM push_subscriptions WHERE user_id=? AND endpoint=?").bind(u.id,endpoint).run();
