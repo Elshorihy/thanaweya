@@ -21,6 +21,32 @@ jobs:
       - run: npm install --no-audit --no-fund --before=2026-09-30T00:00:00Z
 
       - run: npm run build
+      - name: Ensure VAPID secrets exist in Cloudflare
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          SECRET_LIST="$(npx wrangler secret list --format json)"
+          if node -e 'const x=JSON.parse(process.argv[1]); const names=new Set((x||[]).map(s=>s.name)); process.exit(["VAPID_PUBLIC_KEY","VAPID_PRIVATE_KEY","VAPID_SUBJECT"].every(n=>names.has(n))?0:1)' "$SECRET_LIST"; then
+            echo "VAPID secrets already exist in Cloudflare."
+          else
+            echo "Generating VAPID keys once and storing them in Cloudflare Secrets..."
+            node --input-type=module <<'NODE'
+            import fs from 'fs';
+            import { generateVAPIDKeys } from 'web-push-neo';
+            const keys = await generateVAPIDKeys();
+            fs.writeFileSync('.vapid-secrets.json', JSON.stringify({
+              VAPID_PUBLIC_KEY: keys.publicKey,
+              VAPID_PRIVATE_KEY: keys.privateKey,
+              VAPID_SUBJECT: 'https://thanaweya.sheenomatp.workers.dev'
+            }));
+            NODE
+            npx wrangler secret bulk .vapid-secrets.json
+            rm -f .vapid-secrets.json
+            echo "VAPID secrets created successfully."
+          fi
+
       - name: Prepare optional messaging secrets
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
