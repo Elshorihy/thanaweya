@@ -1002,9 +1002,9 @@ async function handleTelegramUpdate(env:Env,update:any){
       }
       try{
         const current=await getTelegramAdminState(env,chatId);
-        await setTelegramAdminMode(env,chatId,"global_notification_confirm",{...(current.payload||{}),type});
-        await telegramCall(env,"answerCallbackQuery",{callback_query_id:callback.id,text:"✅ تم اختيار النوع"});
-        await telegramCall(env,"sendMessage",{chat_id:chatId,text:"🎯 الإشعار جاهز للإرسال كـ Push حقيقي على الأجهزة.\n\nاضغط إرسال الآن.",reply_markup:{inline_keyboard:[
+        const payload={...(current.payload||{}),type};
+        await setTelegramAdminMode(env,chatId,"global_notification_confirm",payload);
+        await telegramCall(env,"sendMessage",{chat_id:chatId,text:"✅ تم اختيار نوع الإشعار: "+type+"\n\n🎯 الإشعار جاهز للإرسال كـ Push حقيقي على الأجهزة.\n\nاضغط إرسال الآن.",reply_markup:{inline_keyboard:[
           [{text:"🚀 إرسال الآن",callback_data:"global_notification_send"}],
           [{text:"❌ إلغاء",callback_data:"dash_cancel"}]
         ]}});
