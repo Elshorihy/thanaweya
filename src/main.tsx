@@ -386,7 +386,7 @@ async function exportData(){try{const files:any[]=[];for(const v of [...s.lectur
  const list=all.filter(match);
  const formatSize=(n=0)=>n<1024*1024?Math.max(1,Math.round(n/1024))+' KB':(n/(1024*1024)).toFixed(1)+' MB';
  const subjectName=(x:any)=>x.global?x.subjectName:(subMap[x.subjectId]?.name||'بدون مادة');
- const filtered=list.filter((x:any)=>!filter.subject||x.global?x.subjectName===subMap[filter.subject]?.name:x.subjectId===filter.subject).filter((x:any)=>!(filter as any).kind||x.kind===(filter as any).kind);
+ const filtered=list.filter((x:any)=>!filter.subject||(x.global?x.subjectName===subMap[filter.subject]?.name:x.subjectId===filter.subject)).filter((x:any)=>!(filter as any).kind||x.kind===(filter as any).kind);
  const remove=async(x:Lecture)=>{if(!window.confirm('نقل المصدر إلى سلة المحذوفات؟'))return;update({lectures:s.lectures.filter(y=>y.id!==x.id),trashLectures:[...s.trashLectures,x]});notify('تم نقل المصدر إلى سلة المحذوفات 🗑️')};
  return <section>
   <Title title="📚 المحاضرات والمصادر" sub="مصادر عامة ثابتة من الإدارة + مصادرك الشخصية، وكلها مرتبطة بالمنهج." action={<div className="actions"><button onClick={()=>setModal('trash')}>🗑️ السلة ({s.trashLectures.length})</button><button className="primary" onClick={()=>setModal('lecture')}><Plus/> إضافة مصدر</button></div>}/>
