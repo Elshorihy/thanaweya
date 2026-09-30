@@ -262,6 +262,7 @@ async function deleteUser(env:Env,chatId:string,userId:string){
     env.DB.prepare("DELETE FROM user_data WHERE user_id=?").bind(userId),
     env.DB.prepare("DELETE FROM users WHERE id=?").bind(userId)
   ]);
+  await adminLog(env,chatId,"DELETE_USER",userId,String(u.email||""));
   await telegramCall(env,"sendMessage",{chat_id:chatId,text:"🗑️ تم حذف الحساب نهائيًا.\n\n👤 "+String(u.name||"—")+"\n✉️ "+String(u.email||"—"),reply_markup:{inline_keyboard:[[ {text:"👥 المستخدمين",callback_data:"dash_users"} ],[ {text:"🎛️ اللوحة",callback_data:"dash_home"} ]] }});
 }
 async function sendTelegramTrafficDetailed(env:Env,chatId:string){
@@ -628,6 +629,10 @@ export default {
     if(url.pathname.startsWith("/api/")) {
       try {
         if(request.method==="OPTIONS") return new Response(null,{status:204,headers:{"access-control-allow-origin":url.origin,"access-control-allow-credentials":"true","access-control-allow-methods":"GET,POST,PUT,OPTIONS","access-control-allow-headers":"content-type"}});
+        if(url.pathname!=="/api/pageview" && url.pathname!=="/api/telegram/webhook" && url.pathname!=="/api/health"){
+          const maintenance=await getAdminSetting(env,"maintenance","0");
+          if(maintenance==="1") return json({error:"الموقع في وضع الصيانة حاليًا. حاول مرة أخرى لاحقًا."},503,{"retry-after":"300"});
+        }
         // Owner panel uses one fixed account and its own HttpOnly cookie.
         // It does not create a user/session record and does not depend on the site's normal auth.
         if(url.pathname==="/api/pageview" && request.method==="POST") {
