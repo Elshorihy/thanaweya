@@ -32,16 +32,7 @@ jobs:
             echo "VAPID secrets already exist in Cloudflare."
           else
             echo "Generating VAPID keys once and storing them in Cloudflare Secrets..."
-            node --input-type=module <<'NODE'
-import fs from 'fs';
-import { generateVAPIDKeys } from 'web-push-neo';
-const keys = await generateVAPIDKeys();
-fs.writeFileSync('.vapid-secrets.json', JSON.stringify({
-  VAPID_PUBLIC_KEY: keys.publicKey,
-  VAPID_PRIVATE_KEY: keys.privateKey,
-  VAPID_SUBJECT: 'https://thanaweya.sheenomatp.workers.dev'
-}));
-NODE
+            node --input-type=module -e "import fs from 'fs'; import { generateVAPIDKeys } from 'web-push-neo'; const keys=await generateVAPIDKeys(); fs.writeFileSync('.vapid-secrets.json', JSON.stringify({VAPID_PUBLIC_KEY:keys.publicKey,VAPID_PRIVATE_KEY:keys.privateKey,VAPID_SUBJECT:'https://thanaweya.sheenomatp.workers.dev'}));"
             npx wrangler secret bulk .vapid-secrets.json
             rm -f .vapid-secrets.json
             echo "VAPID secrets created successfully."
