@@ -745,7 +745,7 @@ async function sendTelegramGlobalNotifications(env:Env,chatId:string){
 async function createGlobalNotification(env:Env,chatId:string,payload:any){
   const title=String(payload?.title||"").trim().slice(0,140);
   const message=String(payload?.message||"").trim().slice(0,2000);
-  const type=["info","success","warning","urgent"].includes(String(payload?.type||""))?String(payload.type):"info";
+  const type="info";
   if(!title||!message){await telegramCall(env,"sendMessage",{chat_id:chatId,text:"❌ عنوان الإشعار ونصه مطلوبان."});return;}
   await clearTelegramAdminMode(env,chatId);
   try{
@@ -1003,25 +1003,7 @@ async function handleTelegramUpdate(env:Env,update:any){
     if(data==="dash_recent"){await clearTelegramAdminMode(env,chatId);await sendTelegramRecentUsers(env,chatId);return;}    if(data==="dash_search"){await setTelegramAdminMode(env,chatId,"user_search");await telegramCall(env,"sendMessage",{chat_id:chatId,text:"🔎 ابعت الاسم أو الإيميل أو رقم الواتساب اللي عايز تدور عليه.",reply_markup:{inline_keyboard:[[ {text:"❌ إلغاء",callback_data:"dash_cancel"} ]] }});return;}
     if(data==="dash_traffic"){await clearTelegramAdminMode(env,chatId);await sendTelegramTraffic(env,chatId);return;}
     if(data==="dash_traffic30"){await clearTelegramAdminMode(env,chatId);await sendTelegramTrafficDetailed(env,chatId);return;}
-    if(data.startsWith("global_notification_type:")){
-      const type=data.slice("global_notification_type:").trim().toLowerCase();
-      if(!["info","success","warning","urgent"].includes(type)){
-        await safeTelegramAnswer(env,callback.id,"❌ نوع إشعار غير صالح",true);
-        return;
-      }
-      try{
-        const current=await getTelegramAdminState(env,chatId);
-        const payload={...(current.payload||{}),type};
-        await setTelegramAdminMode(env,chatId,"global_notification_confirm",payload);
-        await telegramCall(env,"sendMessage",{chat_id:chatId,text:"✅ تم اختيار نوع الإشعار: "+type+"\n\n🎯 الإشعار جاهز للإرسال كـ Push حقيقي على الأجهزة.\n\nاضغط إرسال الآن.",reply_markup:{inline_keyboard:[
-          [{text:"🚀 إرسال الآن",callback_data:"global_notification_send"}],
-          [{text:"❌ إلغاء",callback_data:"dash_cancel"}]
-        ]}});
-      }catch(e){
-        await safeTelegramAnswer(env,callback.id,"⚠️ حصل خطأ أثناء الحفظ",true);
-      }
-      return;
-    }
+
     if(data==="global_notification_send"){
       const state=await getTelegramAdminState(env,chatId);
       if(state.mode!=="global_notification_confirm"){await sendTelegramGlobalNotifications(env,chatId);return;}
@@ -1163,18 +1145,7 @@ async function handleTelegramUpdate(env:Env,update:any){
     return;
   }
   if(state.mode==="global_notification_message" && text){
-    await setTelegramAdminMode(env,chatId,"global_notification_type",{...state.payload,message:text.slice(0,2000)});
-    await telegramCall(env,"sendMessage",{chat_id:chatId,text:"🎨 اختار نوع الإشعار:",reply_markup:{inline_keyboard:[
-      [{text:"📢 عادي",callback_data:"global_notification_type:info"},{text:"✅ نجاح",callback_data:"global_notification_type:success"}],
-      [{text:"⚠️ تنبيه",callback_data:"global_notification_type:warning"},{text:"🚨 عاجل",callback_data:"global_notification_type:urgent"}],
-      [{text:"❌ إلغاء",callback_data:"dash_cancel"}]
-    ]}});
-    return;
-  }
-  if(state.mode==="global_notification_type" && text){
-    const type=text.trim().toLowerCase();
-    if(!["info","success","warning","urgent"].includes(type)){await telegramCall(env,"sendMessage",{chat_id:chatId,text:"❌ اختار نوع الإشعار من الأزرار."});return;}
-    await setTelegramAdminMode(env,chatId,"global_notification_confirm",{...state.payload,type});
+    await setTelegramAdminMode(env,chatId,"global_notification_confirm",{...state.payload,message:text.slice(0,2000)});
     await telegramCall(env,"sendMessage",{chat_id:chatId,text:"🎯 الإشعار جاهز للإرسال كـ Push حقيقي على الأجهزة.\n\nاضغط إرسال الآن.",reply_markup:{inline_keyboard:[
       [{text:"🚀 إرسال الآن",callback_data:"global_notification_send"}],
       [{text:"❌ إلغاء",callback_data:"dash_cancel"}]
