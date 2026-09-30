@@ -424,10 +424,36 @@ async function ensureAdminTools(env:Env){
   await env.DB.prepare("CREATE TABLE IF NOT EXISTS admin_settings (key TEXT PRIMARY KEY,value TEXT NOT NULL,updated_at INTEGER NOT NULL)").run();
   await env.DB.prepare("CREATE TABLE IF NOT EXISTS admin_activity (id INTEGER PRIMARY KEY AUTOINCREMENT,chat_id TEXT NOT NULL,action TEXT NOT NULL,target TEXT,message TEXT,created_at INTEGER NOT NULL)").run();
   await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_admin_activity_created ON admin_activity(created_at)").run();
+  await env.DB.prepare("CREATE TABLE IF NOT EXISTS user_activity (user_id TEXT PRIMARY KEY,last_seen INTEGER NOT NULL,last_path TEXT NOT NULL,last_method TEXT NOT NULL,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE)").run();
+  await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_user_activity_seen ON user_activity(last_seen)").run();
 }
 async function adminLog(env:Env,chatId:string,action:string,target="",message=""){
   await ensureAdminTools(env);
   await env.DB.prepare("INSERT INTO admin_activity(chat_id,action,target,message,created_at) VALUES(?,?,?,?,?)").bind(chatId,action,target,message.slice(0,1000),Date.now()).run();
+}
+async function touchUserActivity(env:Env,userId:string,path:string,method:string){
+  try{
+    await ensureAdminTools(env);
+    await env.DB.prepare("INSERT INTO user_activity(user_id,last_seen,last_path,last_method) VALUES(?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET last_seen=excluded.last_seen,last_path=excluded.last_path,last_method=excluded.last_method")
+      .bind(userId,Date.now(),path.slice(0,160),method.slice(0,12)).run();
+  }catch(e){ console.error("User activity tracking failed",e); }
+}
+async function sendAdminAlert(env:Env,title:string,message:string,key="",cooldownMs=0){
+  try{
+    if(key&&cooldownMs>0){
+      const last=Number(await getAdminSetting(env,"alert_last_"+key,"0")||0);
+      if(Date.now()-last<cooldownMs)return;
+      await setAdminSetting(env,"alert_last_"+key,String(Date.now()));
+    }
+    await telegramCall(env,"sendMessage",{
+      chat_id:env.TELEGRAM_CHAT_ID,
+      text:["🚨 تنبيه إدارة Thanaweya","",title,message,"","🕐 "+new Date().toLocaleString("ar-EG")].join("\n"),
+      reply_markup:{inline_keyboard:[
+        [{text:"🚨 مركز التنبيهات",callback_data:"dash_alerts"}],
+        [{text:"🎛️ لوحة التحكم",callback_data:"dash_home"}]
+      ]}
+    });
+  }catch(e){ console.error("Admin alert delivery failed",e); }
 }
 async function getAdminSetting(env:Env,key:string,defaultValue=""){
   await ensureAdminTools(env);
@@ -585,7 +611,7 @@ async function sendTelegramCommandCenter(env:Env,chatId:string){
     "اختر مركز التحكم:",
   ].join("\n");
   await telegramCall(env,"sendMessage",{chat_id:chatId,text,reply_markup:{inline_keyboard:[
-    [{text:"🟢 Live الآن",callback_data:"dash_live"},{text:"📈 النمو",callback_data:"dash_growth"}],
+    [{text:"🟢 نشاط المستخدمين",callback_data:"dash_live"},{text:"📈 النمو",callback_data:"dash_growth"}],
     [{text:"🛡️ الأمان",callback_data:"dash_security"},{text:"📚 البيانات",callback_data:"dash_data"}],
     [{text:"🧾 Audit Log",callback_data:"admin_activity"},{text:"🚨 التنبيهات",callback_data:"dash_alerts"}],
     [{text:"📢 الحملات",callback_data:"dash_campaigns"},{text:"📣 الإعلانات",callback_data:"admin_announcements"}],
@@ -594,12 +620,21 @@ async function sendTelegramCommandCenter(env:Env,chatId:string){
   ]}});
 }
 async function sendTelegramLive(env:Env,chatId:string){
-  const active=await env.DB.prepare("SELECT COUNT(*) AS n FROM sessions WHERE expires_at>?").bind(Date.now()).first<any>();
-  const recent=await env.DB.prepare("SELECT name,email,created_at FROM users ORDER BY created_at DESC LIMIT 5").all<any>();
-  const text=["🟢 Live Activity","",
-    "👥 جلسات فعالة الآن: "+Number(active?.n||0),
-    "🆕 آخر 5 حسابات:",...(recent.results||[]).map((u:any)=>"• "+String(u.name||"—")+" — "+adminFormatDate(u.created_at)),
-    "","🔄 اضغط تحديث لرؤية الحالة الحالية."
+  const cutoff=Date.now()-5*60*1000;
+  const active=await env.DB.prepare("SELECT COUNT(*) AS n FROM user_activity WHERE last_seen>=?").bind(cutoff).first<any>();
+  const recent=await env.DB.prepare("SELECT u.id,u.name,u.email,a.last_seen,a.last_path FROM user_activity a JOIN users u ON u.id=a.user_id WHERE a.last_seen>=? ORDER BY a.last_seen DESC LIMIT 10").bind(cutoff).all<any>();
+  const signups=await env.DB.prepare("SELECT COUNT(*) AS n FROM users WHERE created_at>=?").bind(Date.now()-86400000).first<any>();
+  const lines=(recent.results||[]).map((u:any,i:number)=>
+    (i+1)+". 👤 "+String(u.name||"—")+"\n   ✉️ "+String(u.email||"—")+"\n   🕐 "+adminFormatDate(u.last_seen)+"\n   📍 "+String(u.last_path||"/")
+  );
+  const text=["🟢 نشاط المستخدمين — Live","",
+    "🟢 متواجدون خلال آخر 5 دقائق: "+Number(active?.n||0),
+    "🆕 تسجيلات آخر 24 ساعة: "+Number(signups?.n||0),
+    "",
+    ...(lines.length?lines:["لا يوجد مستخدم نشط حاليًا."]),
+    "",
+    "ℹ️ النشاط يتحدث تلقائيًا أثناء استخدام الموقع.",
+    "🔄 اضغط تحديث لرؤية الحالة الحالية."
   ].join("\n");
   await telegramCall(env,"sendMessage",{chat_id:chatId,text,reply_markup:{inline_keyboard:[
     [{text:"🔄 تحديث Live",callback_data:"dash_live"}],
@@ -779,7 +814,7 @@ function telegramDashboardKeyboard(){
     [{text:"⚡ مركز القيادة",callback_data:"dash_center"}],
     [{text:"📊 الرئيسية والإحصائيات",callback_data:"dash_stats"},{text:"🩺 حالة النظام",callback_data:"dash_system"}],
     [{text:"👥 المستخدمين",callback_data:"dash_users"},{text:"🔎 بحث عن مستخدم",callback_data:"dash_search"}],
-    [{text:"🕐 آخر المستخدمين",callback_data:"dash_recent"},{text:"📈 النمو",callback_data:"dash_growth"}],
+    [{text:"🟢 نشاط المستخدمين",callback_data:"dash_live"},{text:"🕐 آخر المستخدمين",callback_data:"dash_recent"}],
     [{text:"📈 الزيارات",callback_data:"dash_traffic"},{text:"📊 تحليلات 30 يوم",callback_data:"dash_traffic30"}],
     [{text:"🔐 الدخول و OTP",callback_data:"dash_auth"},{text:"📱 واتساب",callback_data:"dash_wa"}],
     [{text:"🛠️ أدوات الإدارة",callback_data:"dash_tools"}],
@@ -1362,6 +1397,12 @@ export default {
           catch(e) { console.error("D1 health check failed",e); return json({ok:false,db:false,error:"D1 binding/database is not available. Check the DB binding in Cloudflare."},503); }
         }
         await ensureSchema(env);
+        if(url.pathname!=="/api/telegram/webhook" && url.pathname!=="/api/pageview" && url.pathname!=="/api/health"){
+          try{
+            const currentUser=await userFrom(request,env);
+            if(currentUser) ctx.waitUntil(touchUserActivity(env,currentUser.id,url.pathname,request.method));
+          }catch{}
+        }
         if(url.pathname==="/api/auth/register/start" && request.method==="POST") {
           const b=await body(request), email=cleanEmail(b?.email), name=cleanName(b?.name), password=String(b?.password||""), phone=cleanPhone(b?.phone);
           if(!name||!email||password.length<8||!phone) return json({error:"الاسم والإيميل وكلمة السر (8 أحرف على الأقل) ورقم واتساب مطلوبة"},400);
@@ -1386,6 +1427,7 @@ export default {
           const exists=await env.DB.prepare("SELECT id FROM users WHERE email=?").bind(email).first(); if(exists){await env.DB.prepare("DELETE FROM auth_codes WHERE id=?").bind(row.id).run();return json({error:"الإيميل مستخدم بالفعل"},409);}
           const id=randomHex(16), now=Date.now();
           await env.DB.batch([env.DB.prepare("INSERT INTO users(id,email,name,password_hash,password_salt,email_verified_at,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)").bind(id,email,p.name,p.password_hash,p.password_salt,now,now,now),env.DB.prepare("INSERT INTO user_data(user_id,data_json,updated_at) VALUES(?,?,?)").bind(id,"",now),...(p.phone?[env.DB.prepare("INSERT INTO user_phones(user_id,phone,updated_at) VALUES(?,?,?)").bind(id,p.phone,now)]:[]),env.DB.prepare("DELETE FROM auth_codes WHERE id=?").bind(row.id)]);
+          ctx.waitUntil(sendAdminAlert(env,"👤 تسجيل مستخدم جديد","👤 "+p.name+"\n✉️ "+email+"\n📱 "+String(p.phone||"غير مرتبط"),"new_user",0));
           const token=await createSession(id,env); return json({user:{id,email,name:p.name,phone:p.phone||null}},200,{"set-cookie":sessionCookie(token)});
         }
         if(url.pathname==="/api/auth/forgot/start" && request.method==="POST") {
@@ -1479,6 +1521,9 @@ export default {
       } catch(e) {
         console.error("API error", url.pathname, e);
         const message=e instanceof Error ? e.message : String(e);
+        if(url.pathname!=="/api/telegram/webhook" && url.pathname!=="/api/health"){
+          ctx.waitUntil(sendAdminAlert(env,"❌ خطأ في الخادم","📍 "+url.pathname+"\n⚠️ "+message.slice(0,300),"server_error",5*60*1000));
+        }
         return json({error:"حدث خطأ في الخادم",detail:message.slice(0,240)},500);
       }
     }
