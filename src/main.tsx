@@ -14,7 +14,7 @@ type Lecture={id:string;title:string;subjectId:string;unitId?:string;lessonId?:s
 type Question={id:string;subjectId:string;lessonId?:string;question:string;answer:string;difficulty:'easy'|'medium'|'hard';type:'mcq'|'tf'|'written'};
 type Mistake={id:string;questionId?:string;subjectId:string;question:string;reason:string;correctAnswer:string;notes:string;status?:'needs_review'|'fixed'}; type Note={id:string;subjectId:string;lessonId?:string;title:string;content:string;updatedAt:string};
 type Settings={navOrder?:string[];theme:'dark'|'light'|'system';language:'ar'|'en';dailyStudyMinutes:number;restDays:number[];notificationTime:string;startTime:string;sessionMinutes:number;minDailyMinutes:number;dailyTasks:number;focus:number;break:number;morning:boolean;study:boolean;overdue:boolean;review:boolean;endDay:boolean};
-type SiteAnnouncement={id:string;title:string;message:string;type:'first'|'fixed'|'temporary';expiresAt:number|null};
+type SiteAnnouncement={id:string;title:string;message:string;type:'first'|'fixed'|'temporary';placement:'top'|'center'|'modal';durationSec:number;buttonText:string;buttonUrl:string;expiresAt:number|null};
 type Store={profile:{name:string;grade:string;section:string;school:string;goal:string;whatsapp?:string};subjects:Subject[];units:Unit[];lessons:Lesson[];tasks:Task[];sessions:Session[];questions:Question[];mistakes:Mistake[];notes:Note[];lectures:Lecture[];trashLectures:Lecture[];xp:number;settings:Settings;onboarded:boolean;onboardStep:number;planStart:string;planEnd:string;sentNotifications:string[]};
 const KEY='thanaweya-os-v3',id=()=>crypto.randomUUID(),today=()=>new Date().toISOString().slice(0,10);
 const initial:Store={profile:{name:'',grade:'الصف الثالث الثانوي',section:'',school:'',goal:'',whatsapp:''},subjects:[],units:[],lessons:[],tasks:[],sessions:[],questions:[],mistakes:[],notes:[],lectures:[],trashLectures:[],xp:0,onboarded:false,onboardStep:1,planStart:today(),planEnd:'',sentNotifications:[],settings:{navOrder:['home','focus','curriculum','plan','tasks','review','questions','mistakes','notes','lectures','mission','dna','memory','time','rpg','calendar','stats','achievements','settings'],theme:'dark',language:'ar',dailyStudyMinutes:180,restDays:[5],notificationTime:'19:00',startTime:'17:00',sessionMinutes:45,minDailyMinutes:30,dailyTasks:3,focus:25,break:5,morning:true,study:true,overdue:true,review:true,endDay:true}};
@@ -127,9 +127,13 @@ function SiteAnnouncementBanner({userId}:{userId?:string}){
     try{if(localStorage.getItem('thanaweya_announcement_seen_'+(userId||'guest')+'_'+next.id)==='1'){setClosed(true);return}}catch{}
    }
    setA(next);
+   if(next.placement==='modal'&&next.durationSec>0){
+    const t=window.setTimeout(()=>setClosed(true),next.durationSec*1000);
+    return()=>window.clearTimeout(t);
+   }
   }).catch(()=>{});
   return()=>{cancelled=true};
- },[]);
+ },[userId]);
  if(!a||closed)return null;
  const close=()=>{
   if(a.type==='first'){
@@ -137,11 +141,9 @@ function SiteAnnouncementBanner({userId}:{userId?:string}){
   }
   setClosed(true);
  };
- return <div className="siteAnnouncement" role="alert">
-   <div className="siteAnnouncementIcon">📢</div>
-   <div className="siteAnnouncementBody"><strong>{a.title}</strong><p>{a.message}</p>{a.type==='temporary'&&a.expiresAt&&<small>إعلان مؤقت</small>}</div>
-   <button onClick={close} aria-label="إغلاق"><X size={18}/></button>
- </div>;
+ const button=a.buttonText&&a.buttonUrl?<a className="siteAnnouncementButton" href={a.buttonUrl} target="_blank" rel="noreferrer">{a.buttonText}</a>:null;
+ if(a.placement==='modal')return <div className="siteAnnouncementOverlay" role="dialog" aria-modal="true"><div className="siteAnnouncementModal"><div className="siteAnnouncementIcon">📢</div><div className="siteAnnouncementBody"><strong>{a.title}</strong><p>{a.message}</p>{button}</div><button onClick={close} aria-label="إغلاق"><X size={20}/></button><span className="siteAnnouncementTimer">{a.durationSec}ث</span></div></div>;
+ return <div className={'siteAnnouncement siteAnnouncement-'+a.placement} role="alert"><div className="siteAnnouncementIcon">📢</div><div className="siteAnnouncementBody"><strong>{a.title}</strong><p>{a.message}</p>{button}{a.type==='temporary'&&a.expiresAt&&<small>إعلان مؤقت</small>}</div><button onClick={close} aria-label="إغلاق"><X size={18}/></button></div>;
 }
 function App(){
  const focusRestoreRef=useRef<{key:string;start:number|null;end:number|null}|null>(null);
