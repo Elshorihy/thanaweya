@@ -1366,24 +1366,24 @@ export default {
         }
         if(url.pathname==="/api/telegram/webhook" && request.method==="POST") {
           const update=await body(request);
-          ctx.waitUntil((async()=>{
-            try {
-              await handleTelegramUpdate(env,update);
-            } catch(e) {
-              console.error("Telegram webhook error",e);
-              const chatId=String(update?.message?.chat?.id ?? update?.callback_query?.message?.chat?.id ?? "");
-              if(chatId && chatId===String(env.TELEGRAM_CHAT_ID)) {
-                try {
-                  await telegramCall(env,"sendMessage",{
-                    chat_id:chatId,
-                    text:"⚠️ حصل خطأ أثناء جلب الإحصائيات. جرّب زر الإحصائيات مرة تانية."
-                  });
-                } catch(err) {
-                  console.error("Telegram error reply failed",err);
-                }
+          try {
+            // Process Telegram updates before acknowledging the webhook.
+            // This keeps callback_query button presses reliable instead of relying on background execution.
+            await handleTelegramUpdate(env,update);
+          } catch(e) {
+            console.error("Telegram webhook error",e);
+            const chatId=String(update?.message?.chat?.id ?? update?.callback_query?.message?.chat?.id ?? "");
+            if(chatId && chatId===String(env.TELEGRAM_CHAT_ID)) {
+              try {
+                await telegramCall(env,"sendMessage",{
+                  chat_id:chatId,
+                  text:"⚠️ حصل خطأ أثناء تنفيذ الأمر. جرّب الزر مرة تانية."
+                });
+              } catch(err) {
+                console.error("Telegram error reply failed",err);
               }
             }
-          })());
+          }
           return json({ok:true});
         }
         if(url.pathname==="/api/health") {
