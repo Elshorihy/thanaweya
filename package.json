@@ -18,6 +18,9 @@
     "react-dom": "latest",
     "lucide-react": "latest"
   },
+  "overrides": {
+    "source-map-js": "1.2.1"
+  },
   "devDependencies": {
     "@types/react": "latest",
     "@types/react-dom": "latest"
