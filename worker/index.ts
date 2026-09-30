@@ -207,12 +207,106 @@ async function ensureTelegramDashboard(env:Env){
   try { await env.DB.prepare("ALTER TABLE telegram_admin_state ADD COLUMN payload_json TEXT").run(); } catch {}
 }
 
+function adminFormatDate(v:any){
+  return new Date(Number(v||0)).toLocaleString("ar-EG",{dateStyle:"short",timeStyle:"short"});
+}
+function adminUserKeyboard(id:string){
+  return {inline_keyboard:[
+    [{text:"👤 التفاصيل",callback_data:"user_view:"+id}],
+    [{text:"🚪 تسجيل خروج الكل",callback_data:"user_logout:"+id},{text:"🗑️ حذف الحساب",callback_data:"user_delete:"+id}],
+    [{text:"⬅️ رجوع",callback_data:"dash_users"}]
+  ]};
+}
+async function sendTelegramUserDetails(env:Env,chatId:string,userId:string){
+  const u=await env.DB.prepare("SELECT u.id,u.name,u.email,u.email_verified_at,u.created_at,u.updated_at,p.phone FROM users u LEFT JOIN user_phones p ON p.user_id=u.id WHERE u.id=?").bind(userId).first<any>();
+  if(!u){await telegramCall(env,"sendMessage",{chat_id:chatId,text:"❌ المستخدم غير موجود.",reply_markup:dashBack()});return;}
+  const sessions=await env.DB.prepare("SELECT COUNT(*) AS n FROM sessions WHERE user_id=? AND expires_at>?").bind(userId,Date.now()).first<any>();
+  const data=await env.DB.prepare("SELECT updated_at,LENGTH(data_json) AS size FROM user_data WHERE user_id=?").bind(userId).first<any>();
+  const text=[
+    "👤 ملف المستخدم",
+    "",
+    "🆔 "+String(u.id),
+    "👤 الاسم: "+String(u.name||"—"),
+    "✉️ الإيميل: "+String(u.email||"—"),
+    "📱 واتساب: "+String(u.phone||"غير مرتبط"),
+    "🔐 التحقق: "+(u.email_verified_at?"✅ مؤكد":"⏳ غير مؤكد"),
+    "🗓️ التسجيل: "+adminFormatDate(u.created_at),
+    "📝 آخر تحديث: "+adminFormatDate(u.updated_at),
+    "🟢 جلسات فعالة: "+Number(sessions?.n||0),
+    "☁️ بيانات الحساب: "+(data?Number(data.size||0).toLocaleString("ar-EG")+" بايت":"لا توجد")
+  ].join("\n");
+  await telegramCall(env,"sendMessage",{chat_id:chatId,text,reply_markup:adminUserKeyboard(String(u.id))});
+}
+async function sendTelegramUserActionConfirm(env:Env,chatId:string,userId:string,action:"delete"){
+  const u=await env.DB.prepare("SELECT name,email FROM users WHERE id=?").bind(userId).first<any>();
+  if(!u){await sendTelegramDashboard(env,chatId);return;}
+  await telegramCall(env,"sendMessage",{chat_id:chatId,text:(action==="delete"?"⚠️ حذف حساب المستخدم\n\n":"")+
+    "👤 "+String(u.name||"—")+"\n✉️ "+String(u.email||"—")+"\n\n"+
+    "هذا الإجراء لا يمكن التراجع عنه. هل أنت متأكد؟",
+    reply_markup:{inline_keyboard:[
+      [{text:"🗑️ نعم، احذف الحساب",callback_data:"user_delete_confirm:"+userId}],
+      [{text:"❌ إلغاء",callback_data:"user_view:"+userId}]
+    ]}});
+}
+async function logoutUserSessions(env:Env,chatId:string,userId:string){
+  const r=await env.DB.prepare("DELETE FROM sessions WHERE user_id=?").bind(userId).run();
+  await telegramCall(env,"sendMessage",{chat_id:chatId,text:"🚪 تم إنهاء جلسات المستخدم بالكامل.\n\n🧹 الجلسات المحذوفة: "+Number(r.meta?.changes||0),reply_markup:{inline_keyboard:[[ {text:"👤 فتح الملف",callback_data:"user_view:"+userId} ],[ {text:"🎛️ اللوحة",callback_data:"dash_home"} ]] }});
+}
+async function deleteUser(env:Env,chatId:string,userId:string){
+  const u=await env.DB.prepare("SELECT name,email FROM users WHERE id=?").bind(userId).first<any>();
+  if(!u){await sendTelegramDashboard(env,chatId);return;}
+  await env.DB.batch([
+    env.DB.prepare("DELETE FROM sessions WHERE user_id=?").bind(userId),
+    env.DB.prepare("DELETE FROM auth_codes WHERE email=?").bind(String(u.email||"")),
+    env.DB.prepare("DELETE FROM user_phones WHERE user_id=?").bind(userId),
+    env.DB.prepare("DELETE FROM user_data WHERE user_id=?").bind(userId),
+    env.DB.prepare("DELETE FROM users WHERE id=?").bind(userId)
+  ]);
+  await telegramCall(env,"sendMessage",{chat_id:chatId,text:"🗑️ تم حذف الحساب نهائيًا.\n\n👤 "+String(u.name||"—")+"\n✉️ "+String(u.email||"—"),reply_markup:{inline_keyboard:[[ {text:"👥 المستخدمين",callback_data:"dash_users"} ],[ {text:"🎛️ اللوحة",callback_data:"dash_home"} ]] }});
+}
+async function sendTelegramTrafficDetailed(env:Env,chatId:string){
+  await ensurePageViews(env);
+  const today=new Date().toISOString().slice(0,10);
+  const rows=await env.DB.prepare("SELECT day,COUNT(*) AS n FROM site_page_views WHERE day>=date(?, '-29 day') GROUP BY day ORDER BY day DESC").bind(today).all<any>();
+  const items=rows.results||[];
+  const total=items.reduce((a:any,x:any)=>a+Number(x.n||0),0);
+  const todayRow=items.find((x:any)=>String(x.day)===today);
+  const peak=items.reduce((a:any,x:any)=>Number(x.n||0)>Number(a?.n||0)?x:a,null);
+  const text=["📈 تحليلات الزيارات — 30 يومًا","",
+    "👀 إجمالي الفترة: "+total.toLocaleString("ar-EG"),
+    "📅 اليوم: "+Number(todayRow?.n||0).toLocaleString("ar-EG"),
+    "🔥 أعلى يوم: "+(peak?String(peak.day)+" — "+Number(peak.n||0).toLocaleString("ar-EG")+" زيارة":"—"),
+    "","آخر الأيام:",...items.slice(0,14).map((x:any)=>"• "+String(x.day)+" — "+Number(x.n||0).toLocaleString("ar-EG"))
+  ].join("\n");
+  await telegramCall(env,"sendMessage",{chat_id:chatId,text,reply_markup:dashBack()});
+}
+async function sendTelegramMaintenanceTools(env:Env,chatId:string){
+  const expiredSessions=await env.DB.prepare("SELECT COUNT(*) AS n FROM sessions WHERE expires_at<=?").bind(Date.now()).first<any>();
+  const expiredCodes=await env.DB.prepare("SELECT COUNT(*) AS n FROM auth_codes WHERE expires_at<=?").bind(Date.now()).first<any>();
+  const text=["🧰 أدوات الإدارة والصيانة","",
+    "🧹 جلسات منتهية يمكن تنظيفها: "+Number(expiredSessions?.n||0),
+    "🧹 أكواد OTP منتهية يمكن تنظيفها: "+Number(expiredCodes?.n||0),
+    "","الأدوات الآمنة المتاحة من هنا:"
+  ].join("\n");
+  await telegramCall(env,"sendMessage",{chat_id:chatId,text,reply_markup:{inline_keyboard:[
+    [{text:"🧹 تنظيف البيانات المنتهية",callback_data:"dash_cleanup"}],
+    [{text:"🔄 فحص النظام",callback_data:"dash_system"}],
+    [{text:"⬅️ اللوحة",callback_data:"dash_home"}]
+  ]}});
+}
+async function cleanupAdminData(env:Env,chatId:string){
+  const now=Date.now();
+  const a=await env.DB.prepare("DELETE FROM sessions WHERE expires_at<=?").bind(now).run();
+  const b=await env.DB.prepare("DELETE FROM auth_codes WHERE expires_at<=?").bind(now).run();
+  await telegramCall(env,"sendMessage",{chat_id:chatId,text:"🧹 تم التنظيف بنجاح\n\n🚪 جلسات محذوفة: "+Number(a.meta?.changes||0)+"\n🔐 أكواد OTP محذوفة: "+Number(b.meta?.changes||0),reply_markup:{inline_keyboard:[[ {text:"🧰 أدوات الإدارة",callback_data:"dash_tools"} ],[ {text:"🎛️ اللوحة",callback_data:"dash_home"} ]] }});
+}
 function telegramDashboardKeyboard(){
   return {    inline_keyboard:[
       [{text:"📊 الرئيسية والإحصائيات",callback_data:"dash_stats"},{text:"👥 المستخدمين",callback_data:"dash_users"}],
       [{text:"🔎 بحث عن مستخدم",callback_data:"dash_search"},{text:"🕐 آخر المستخدمين",callback_data:"dash_recent"}],
       [{text:"📈 الزيارات",callback_data:"dash_traffic"},{text:"🔐 الدخول و OTP",callback_data:"dash_auth"}],
       [{text:"📱 واتساب",callback_data:"dash_wa"},{text:"🩺 حالة النظام",callback_data:"dash_system"}],
+      [{text:"🛠️ أدوات الإدارة",callback_data:"dash_tools"},{text:"📈 تحليلات 30 يوم",callback_data:"dash_traffic30"}],
       [{text:"📢 إرسال للجميع",callback_data:"dash_broadcast"}],
       [{text:"🔄 تحديث اللوحة",callback_data:"dash_home"}]
     ]
@@ -389,9 +483,16 @@ async function handleTelegramUpdate(env:Env,update:any){
     if(data==="dash_users"){await clearTelegramAdminMode(env,chatId);await sendTelegramUsers(env,chatId);return;}
     if(data==="dash_recent"){await clearTelegramAdminMode(env,chatId);await sendTelegramRecentUsers(env,chatId);return;}    if(data==="dash_search"){await setTelegramAdminMode(env,chatId,"user_search");await telegramCall(env,"sendMessage",{chat_id:chatId,text:"🔎 ابعت الاسم أو الإيميل أو رقم الواتساب اللي عايز تدور عليه.",reply_markup:{inline_keyboard:[[ {text:"❌ إلغاء",callback_data:"dash_cancel"} ]] }});return;}
     if(data==="dash_traffic"){await clearTelegramAdminMode(env,chatId);await sendTelegramTraffic(env,chatId);return;}
+    if(data==="dash_traffic30"){await clearTelegramAdminMode(env,chatId);await sendTelegramTrafficDetailed(env,chatId);return;}
+    if(data==="dash_tools"){await clearTelegramAdminMode(env,chatId);await sendTelegramMaintenanceTools(env,chatId);return;}
+    if(data==="dash_cleanup"){await clearTelegramAdminMode(env,chatId);await cleanupAdminData(env,chatId);return;}
     if(data==="dash_auth"){await clearTelegramAdminMode(env,chatId);await sendTelegramAuthStats(env,chatId);return;}
     if(data==="dash_wa"){await clearTelegramAdminMode(env,chatId);await sendTelegramWhatsAppStats(env,chatId);return;}
     if(data==="dash_system"){await clearTelegramAdminMode(env,chatId);await sendTelegramSystem(env,chatId);return;}
+    if(data.startsWith("user_view:")){await clearTelegramAdminMode(env,chatId);await sendTelegramUserDetails(env,chatId,data.slice(10));return;}
+    if(data.startsWith("user_logout:")){await clearTelegramAdminMode(env,chatId);await logoutUserSessions(env,chatId,data.slice(11));return;}
+    if(data.startsWith("user_delete:")){await clearTelegramAdminMode(env,chatId);await sendTelegramUserActionConfirm(env,chatId,data.slice(12),"delete");return;}
+    if(data.startsWith("user_delete_confirm:")){await clearTelegramAdminMode(env,chatId);await deleteUser(env,chatId,data.slice(20));return;}
     if(data==="dash_broadcast"){await setTelegramAdminMode(env,chatId,"broadcast");await telegramCall(env,"sendMessage",{chat_id:chatId,text:"📢 ابعتلي الرسالة اللي عايز تبعتها لكل أرقام واتساب المسجلة.\n\n⚠️ بعد ما تبعتها هعرض عليك تأكيد قبل الإرسال للجميع.",reply_markup:{inline_keyboard:[[ {text:"❌ إلغاء",callback_data:"dash_cancel"} ]] }});return;}
     if(data==="dash_broadcast_confirm"){
       const state=await getTelegramAdminState(env,chatId);
