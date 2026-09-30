@@ -339,6 +339,60 @@ async function setAdminSetting(env:Env,key:string,value:string){
   await ensureAdminTools(env);
   await env.DB.prepare("INSERT INTO admin_settings(key,value,updated_at) VALUES(?,?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=excluded.updated_at").bind(key,value,Date.now()).run();
 }
+async function getSiteAnnouncement(env:Env){
+  const raw=await getAdminSetting(env,"site_announcement","");
+  if(!raw)return null;
+  try{return JSON.parse(raw)}catch{return null}
+}
+async function saveSiteAnnouncement(env:Env,a:any){
+  await setAdminSetting(env,"site_announcement",JSON.stringify(a));
+}
+async function sendTelegramAnnouncements(env:Env,chatId:string){
+  const a=await getSiteAnnouncement(env);
+  const typeLabel=a?.type==="first"?"👋 أول دخول":a?.type==="temporary"?"⏱️ مؤقت":"📌 ثابت";
+  const status=a?.enabled?"🟢 شغال":"🔴 متوقف";
+  const text=a
+    ?["📢 إعلان الموقع","", "📌 العنوان: "+String(a.title||"—"),"📝 الرسالة: "+String(a.message||"—"),"📍 النوع: "+typeLabel,status,
+      a.expiresAt?"⏳ ينتهي: "+adminFormatDate(a.expiresAt):"",""].join("\n")
+    : "📢 إعلان الموقع\n\nلا يوجد إعلان حاليًا.";
+  const buttons=[
+    [{text:"➕ إضافة/تعديل إعلان",callback_data:"announcement_add"}],
+    ...(a?[[{text:a.enabled?"🔴 إيقاف الإعلان":"🟢 تشغيل الإعلان",callback_data:"announcement_toggle"},{text:"🗑️ حذف الإعلان",callback_data:"announcement_delete"}]]:[]),
+    [{text:"⬅️ أدوات الإدارة",callback_data:"dash_tools"}]
+  ];
+  await telegramCall(env,"sendMessage",{chat_id:chatId,text,reply_markup:{inline_keyboard:buttons}});
+}
+async function deleteSiteAnnouncement(env:Env,chatId:string){
+  await setAdminSetting(env,"site_announcement","");
+  await adminLog(env,chatId,"DELETE_SITE_ANNOUNCEMENT");
+  await sendTelegramAnnouncements(env,chatId);
+}
+async function toggleSiteAnnouncement(env:Env,chatId:string){
+  const a=await getSiteAnnouncement(env);
+  if(!a){await sendTelegramAnnouncements(env,chatId);return;}
+  a.enabled=!a.enabled;
+  await saveSiteAnnouncement(env,a);
+  await adminLog(env,chatId,a.enabled?"ENABLE_SITE_ANNOUNCEMENT":"DISABLE_SITE_ANNOUNCEMENT");
+  await sendTelegramAnnouncements(env,chatId);
+}
+async function createSiteAnnouncement(env:Env,chatId:string,payload:any){
+  const type=String(payload?.type||"fixed");
+  const hours=type==="temporary"?Math.max(1,Math.min(720,Number(payload?.hours)||24)):null;
+  const a={
+    id:randomHex(12),
+    title:String(payload?.title||"").trim().slice(0,120),
+    message:String(payload?.message||"").trim().slice(0,2000),
+    type:type==="first"||type==="temporary"?"fixed"===type?"fixed":type:"fixed",
+    enabled:true,
+    createdAt:Date.now(),
+    expiresAt:type==="temporary"?Date.now()+hours*3600000:null
+  };
+  if(!a.title||!a.message)throw new Error("عنوان ورسالة الإعلان مطلوبان");
+  await saveSiteAnnouncement(env,a);
+  await adminLog(env,chatId,"SAVE_SITE_ANNOUNCEMENT",a.type,a.title);
+  await clearTelegramAdminMode(env,chatId);
+  await sendTelegramAnnouncements(env,chatId);
+}
 async function sendTelegramAdminTools(env:Env,chatId:string){
   const maintenance=await getAdminSetting(env,"maintenance","0");
   const activity=await env.DB.prepare("SELECT action,target,created_at FROM admin_activity ORDER BY created_at DESC LIMIT 8").all<any>();
@@ -349,6 +403,7 @@ async function sendTelegramAdminTools(env:Env,chatId:string){
   ].join("\n");
   await telegramCall(env,"sendMessage",{chat_id:chatId,text,reply_markup:{inline_keyboard:[
     [{text:maintenance==="1"?"🟢 إيقاف الصيانة":"🔴 تفعيل الصيانة",callback_data:"admin_maintenance"}],
+    [{text:"📢 إعلانات الموقع",callback_data:"admin_announcements"}],
     [{text:"🧾 سجل العمليات",callback_data:"admin_activity"},{text:"📋 تقرير شامل",callback_data:"admin_report"}],
     [{text:"📢 رسالة واتساب",callback_data:"dash_broadcast"},{text:"📧 رسالة Gmail",callback_data:"dash_email_broadcast"}],
     [{text:"⬅️ اللوحة",callback_data:"dash_home"}]
@@ -583,6 +638,14 @@ async function handleTelegramUpdate(env:Env,update:any){
     if(data==="admin_activity"){await clearTelegramAdminMode(env,chatId);await sendTelegramAdminActivity(env,chatId);return;}
     if(data==="admin_report"){await clearTelegramAdminMode(env,chatId);await sendTelegramAdminReport(env,chatId);return;}
     if(data==="admin_maintenance"){await clearTelegramAdminMode(env,chatId);await toggleMaintenance(env,chatId);return;}
+    if(data==="admin_announcements"){await clearTelegramAdminMode(env,chatId);await sendTelegramAnnouncements(env,chatId);return;}
+    if(data==="announcement_add"){await setTelegramAdminMode(env,chatId,"announcement_title");await telegramCall(env,"sendMessage",{chat_id:chatId,text:"📢 إضافة إعلان للموقع\n\nابعت عنوان الإعلان.",reply_markup:{inline_keyboard:[[ {text:"❌ إلغاء",callback_data:"dash_cancel"} ]] }});return;}
+    if(data==="announcement_type_first"){const state=await getTelegramAdminState(env,chatId);await createSiteAnnouncement(env,chatId,{...state.payload,type:"first"});return;}
+    if(data==="announcement_type_fixed"){const state=await getTelegramAdminState(env,chatId);await createSiteAnnouncement(env,chatId,{...state.payload,type:"fixed"});return;}
+    if(data==="announcement_type_temporary"){await setTelegramAdminMode(env,chatId,"announcement_duration");await telegramCall(env,"sendMessage",{chat_id:chatId,text:"⏱️ الإعلان المؤقت\n\nابعت مدة ظهور الإعلان بالساعات.\nمثال: 24",reply_markup:{inline_keyboard:[[ {text:"❌ إلغاء",callback_data:"dash_cancel"} ]] }});return;}
+    if(data==="announcement_toggle"){await clearTelegramAdminMode(env,chatId);await toggleSiteAnnouncement(env,chatId);return;}
+    if(data==="announcement_delete"){await clearTelegramAdminMode(env,chatId);await deleteSiteAnnouncement(env,chatId);return;}
+    
     if(data==="dash_cleanup"){await clearTelegramAdminMode(env,chatId);await cleanupAdminData(env,chatId);return;}
     if(data==="dash_auth"){await clearTelegramAdminMode(env,chatId);await sendTelegramAuthStats(env,chatId);return;}
     if(data==="dash_wa"){await clearTelegramAdminMode(env,chatId);await sendTelegramWhatsAppStats(env,chatId);return;}
@@ -627,6 +690,30 @@ async function handleTelegramUpdate(env:Env,update:any){
   const text=String(message?.text||"").trim();
   await ensureAdminTools(env);
   const state=await getTelegramAdminState(env,chatId);
+  if(state.mode==="announcement_title" && text){
+    await setTelegramAdminMode(env,chatId,"announcement_message",{title:text.slice(0,120)});
+    await telegramCall(env,"sendMessage",{chat_id:chatId,text:"📝 تمام. ابعت نص الإعلان اللي هيظهر للمستخدمين.",reply_markup:{inline_keyboard:[[ {text:"❌ إلغاء",callback_data:"dash_cancel"} ]] }});
+    return;
+  }
+  if(state.mode==="announcement_message" && text){
+    await setTelegramAdminMode(env,chatId,"announcement_type",{title:String(state.payload?.title||""),message:text.slice(0,2000)});
+    await telegramCall(env,"sendMessage",{chat_id:chatId,text:"📍 اختار نوع الإعلان:",reply_markup:{inline_keyboard:[
+      [{text:"👋 أول دخول فقط",callback_data:"announcement_type_first"}],
+      [{text:"📌 ثابت",callback_data:"announcement_type_fixed"}],
+      [{text:"⏱️ مؤقت",callback_data:"announcement_type_temporary"}],
+      [{text:"❌ إلغاء",callback_data:"dash_cancel"}]
+    ]}});
+    return;
+  }
+  if(state.mode==="announcement_duration" && text){
+    const hours=Number(text.replace(/[^0-9.]/g,""));
+    if(!Number.isFinite(hours)||hours<1||hours>720){
+      await telegramCall(env,"sendMessage",{chat_id:chatId,text:"❌ اكتب عدد ساعات بين 1 و720."});
+      return;
+    }
+    await createSiteAnnouncement(env,chatId,{...state.payload,type:"temporary",hours});
+    return;
+  }
   if(state.mode==="email_broadcast_subject" && text){
     await setTelegramAdminMode(env,chatId,"email_broadcast_message",{subject:text.slice(0,180)});
     await telegramCall(env,"sendMessage",{chat_id:chatId,text:"✉️ تمام. دلوقتي ابعت نص الرسالة اللي هيتبعت على Gmail لكل المستخدمين.",reply_markup:{inline_keyboard:[[ {text:"❌ إلغاء",callback_data:"dash_cancel"} ]] }});
@@ -680,6 +767,16 @@ export default {
         }
         // Owner panel uses one fixed account and its own HttpOnly cookie.
         // It does not create a user/session record and does not depend on the site's normal auth.
+        if(url.pathname==="/api/announcement" && request.method==="GET") {
+          const a=await getSiteAnnouncement(env);
+          if(!a||!a.enabled)return json({announcement:null});
+          if(a.expiresAt&&Number(a.expiresAt)<=Date.now()){
+            a.enabled=false;
+            await saveSiteAnnouncement(env,a);
+            return json({announcement:null});
+          }
+          return json({announcement:{id:String(a.id||""),title:String(a.title||""),message:String(a.message||""),type:String(a.type||"fixed"),expiresAt:a.expiresAt?Number(a.expiresAt):null}});
+        }
         if(url.pathname==="/api/pageview" && request.method==="POST") {
           try {
             await ensurePageViews(env);
