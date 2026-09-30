@@ -239,8 +239,16 @@ useEffect(()=>{if(!auth||!('Notification'in window)||!('serviceWorker'in navigat
     const keyResponse=await fetch('/api/push/public-key',{cache:'no-store'});
     const keyData=await keyResponse.json().catch(()=>({}));
     if(!keyResponse.ok||!keyData?.publicKey)throw new Error(keyData?.error||'إشعارات Push غير مفعّلة على الخادم.');
-    const registration=await navigator.serviceWorker.ready;
+    const registration=await navigator.serviceWorker.register('/sw.js?v=11',{updateViaCache:'none'});
+    await navigator.serviceWorker.ready;
     let subscription=await registration.pushManager.getSubscription();
+    if(subscription){
+      const currentKey=(subscription.options as any)?.applicationServerKey;
+      if(!currentKey){
+        await subscription.unsubscribe();
+        subscription=null;
+      }
+    }
     if(!subscription){
       subscription=await registration.pushManager.subscribe({
         userVisibleOnly:true,
@@ -255,10 +263,13 @@ useEffect(()=>{if(!auth||!('Notification'in window)||!('serviceWorker'in navigat
     });
     const saveData=await saveResponse.json().catch(()=>({}));
     if(!saveResponse.ok)throw new Error(saveData?.error||'تعذر حفظ جهازك للإشعارات.');
-    await notify('🔔 تم تفعيل إشعارات الجهاز بنجاح.');
+    const statusResponse=await fetch('/api/push/status',{credentials:'include',cache:'no-store'});
+    const statusData=await statusResponse.json().catch(()=>({}));
+    if(!statusResponse.ok||Number(statusData?.devices||0)<1)throw new Error('تم إنشاء الاشتراك لكن السيرفر لم يسجل الجهاز بعد. جرّب التفعيل مرة أخرى.');
+    await notify('🔔 تم تسجيل هذا الجهاز لإشعارات Thanaweya بنجاح.');
   }catch(e){
-    setNotice(e instanceof Error?e.message:'تعذر تفعيل الإشعارات.');
-    setTimeout(()=>setNotice(''),4500);
+    setNotice(e instanceof Error?e.message:'تعذر تفعيل إشعارات الأجهزة.');
+    setTimeout(()=>setNotice(''),5000);
   }
 }
  function addSession(minutes:number,type:'focus'|'review'='focus',subjectId=s.subjects[0]?.id||'',lessonId?:string){update({sessions:[...s.sessions,{id:id(),date:today(),subjectId,duration:minutes,type,lessonId,startedAt:new Date().toISOString()}],xp:s.xp+(type==='review'?15:10)})}
