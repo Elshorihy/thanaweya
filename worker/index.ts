@@ -405,7 +405,7 @@ async function createSiteAnnouncement(env:Env,chatId:string,payload:any){
     expiresAt:type==="temporary"?Date.now()+hours*3600000:null
   };
   if(!a.title||!a.message)throw new Error("عنوان ورسالة الإعلان مطلوبان");
-  if(a.buttonText&&!/^https?:\\/\\//i.test(a.buttonUrl)) throw new Error("رابط الزر يجب أن يبدأ بـ https:// أو http://");
+  if(a.buttonText&&!/^https?:\/\//i.test(a.buttonUrl)) throw new Error("رابط الزر يجب أن يبدأ بـ https:// أو http://");
   await saveSiteAnnouncement(env,a);
   await adminLog(env,chatId,"SAVE_SITE_ANNOUNCEMENT",a.type,a.title+" | "+a.placement);
   await clearTelegramAdminMode(env,chatId);
