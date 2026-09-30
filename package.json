@@ -17,7 +17,8 @@
     "react": "latest",
     "react-dom": "latest",
     "lucide-react": "latest",
-    "web-push-neo": "0.1.2"
+    "web-push-neo": "0.1.2",
+    "@mlc-ai/web-llm": "latest"
   },
   "overrides": {
     "source-map-js": "1.2.1"
