@@ -18,7 +18,7 @@ jobs:
         with:
           node-version: 24
 
-      - run: npm install --no-audit --no-fund
+      - run: npm install --no-audit --no-fund --before=2026-09-30T00:00:00Z
 
       - run: npm run build
       - name: Prepare optional messaging secrets
