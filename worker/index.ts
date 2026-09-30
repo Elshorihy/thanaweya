@@ -968,6 +968,15 @@ async function clearTelegramAdminMode(env:Env,chatId:string){
   await env.DB.prepare("DELETE FROM telegram_admin_state WHERE chat_id=?").bind(chatId).run();
 }
 
+async function safeTelegramAnswer(env:Env,callbackQueryId:string,text?:string,showAlert=false){
+  try{
+    const payload:any={callback_query_id:callbackQueryId};
+    if(text) payload.text=text;
+    if(showAlert) payload.show_alert=true;
+    await telegramCall(env,"answerCallbackQuery",payload);
+  }catch{}
+}
+
 async function handleTelegramUpdate(env:Env,update:any){
   const message=update?.message;
   const callback=update?.callback_query;
@@ -978,7 +987,7 @@ async function handleTelegramUpdate(env:Env,update:any){
   await ensureAdminTools(env);
 
   if(callback){
-    if(callback.id) await telegramCall(env,"answerCallbackQuery",{callback_query_id:callback.id});
+    if(callback.id) await safeTelegramAnswer(env,callback.id);
     const data=String(callback.data||"");
     if(data==="dash_center"){await clearTelegramAdminMode(env,chatId);await sendTelegramCommandCenter(env,chatId);return;}
     if(data==="dash_live"){await clearTelegramAdminMode(env,chatId);await sendTelegramLive(env,chatId);return;}
@@ -997,7 +1006,7 @@ async function handleTelegramUpdate(env:Env,update:any){
     if(data.startsWith("global_notification_type:")){
       const type=data.slice("global_notification_type:").trim().toLowerCase();
       if(!["info","success","warning","urgent"].includes(type)){
-        await telegramCall(env,"answerCallbackQuery",{callback_query_id:callback.id,text:"❌ نوع إشعار غير صالح",show_alert:true});
+        await safeTelegramAnswer(env,callback.id,"❌ نوع إشعار غير صالح",true);
         return;
       }
       try{
@@ -1009,14 +1018,14 @@ async function handleTelegramUpdate(env:Env,update:any){
           [{text:"❌ إلغاء",callback_data:"dash_cancel"}]
         ]}});
       }catch(e){
-        await telegramCall(env,"answerCallbackQuery",{callback_query_id:callback.id,text:"⚠️ حصل خطأ أثناء الحفظ",show_alert:true});
+        await safeTelegramAnswer(env,callback.id,"⚠️ حصل خطأ أثناء الحفظ",true);
       }
       return;
     }
     if(data==="global_notification_send"){
       const state=await getTelegramAdminState(env,chatId);
       if(state.mode!=="global_notification_confirm"){await sendTelegramGlobalNotifications(env,chatId);return;}
-      await telegramCall(env,"answerCallbackQuery",{callback_query_id:callback.id,text:"⏳ جاري الإرسال..."});
+      await safeTelegramAnswer(env,callback.id,"⏳ جاري الإرسال...");
       await createGlobalNotification(env,chatId,state.payload);
       return;
     }
