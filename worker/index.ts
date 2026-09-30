@@ -144,7 +144,7 @@ async function sendEmailOtp(env:Env,email:string,code:string,type:"register"|"re
   const secret=env.GOOGLE_APPS_SCRIPT_SECRET;
   if(!url||!secret) throw new Error("Gmail غير مفعّل حاليًا");
 
-  const payload=JSON.stringify({secret,email,code,otpCode:code,type});
+  const payload=JSON.stringify({secret,email,code,otpCode:code,type:"otp"});
   let r=await fetch(url,{
     method:"POST",
     redirect:"manual",
@@ -154,15 +154,21 @@ async function sendEmailOtp(env:Env,email:string,code:string,type:"register"|"re
 
   if([301,302,303,307,308].includes(r.status)){
     const location=r.headers.get("location");
-    if(location){
-      // Google Apps Script executes doPost on the first request, then
-      // redirects to a generated URL that must be fetched with GET.
-      // Re-sending POST to that redirect causes HTTP 405.
-      r=await fetch(new URL(location,url).toString(),{
-        method:"GET",
-        headers:{"accept":"application/json"}
-      });
-    }
+    if(!location) throw new Error("Google Apps Script أعاد تحويلًا بدون رابط متابعة");
+
+    // Apps Script may redirect the POST to a generated URL.
+    // Follow it as GET while preserving the OTP parameters expected by doGet().
+    const redirectUrl=new URL(location,url);
+    redirectUrl.searchParams.set("action","otp");
+    redirectUrl.searchParams.set("type","otp");
+    redirectUrl.searchParams.set("secret",secret);
+    redirectUrl.searchParams.set("email",email);
+    redirectUrl.searchParams.set("code",code);
+
+    r=await fetch(redirectUrl.toString(),{
+      method:"GET",
+      headers:{"accept":"application/json"}
+    });
   }
 
   const raw=await r.text();
