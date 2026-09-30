@@ -1,3 +1,5 @@
+import {sendNotification,type PushSubscription as WebPushSubscription} from "web-push-neo";
+
 interface Env {
   DB: D1Database;
   ASSETS: Fetcher;
@@ -8,6 +10,9 @@ interface Env {
   GREEN_API_URL?: string;
   GOOGLE_APPS_SCRIPT_URL?: string;
   GOOGLE_APPS_SCRIPT_SECRET?: string;
+  VAPID_PUBLIC_KEY?: string;
+  VAPID_PRIVATE_KEY?: string;
+  VAPID_SUBJECT?: string;
 }
 
 let schemaReady:Promise<void>|null=null;
@@ -39,6 +44,9 @@ async function ensureSchema(env:Env){
     await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_global_notifications_active ON global_notifications(enabled,expires_at,created_at)").run();
     await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token_hash)").run();
     await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_sessions_expiry ON sessions(expires_at)").run();
+    await env.DB.prepare("CREATE TABLE IF NOT EXISTS push_subscriptions (id TEXT PRIMARY KEY,user_id TEXT NOT NULL,endpoint TEXT NOT NULL UNIQUE,p256dh TEXT NOT NULL,auth TEXT NOT NULL,user_agent TEXT,created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE)").run();
+    await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_push_subscriptions_user ON push_subscriptions(user_id)").run();
+    await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_push_subscriptions_updated ON push_subscriptions(updated_at)").run();
   })().catch(e=>{schemaReady=null;throw e});
   await schemaReady;
 }
@@ -177,6 +185,46 @@ async function sendEmailOtp(env:Env,email:string,code:string,type:"register"|"re
   }
 
   throw new Error("تم إرسال طلب Gmail لكن لم يصل تأكيد التنفيذ. تأكد من نشر Google Apps Script كـ Web App وتشغيله بحسابك.");
+}
+async function ensurePushSubscriptions(env:Env){
+  await env.DB.prepare("CREATE TABLE IF NOT EXISTS push_subscriptions (id TEXT PRIMARY KEY,user_id TEXT NOT NULL,endpoint TEXT NOT NULL UNIQUE,p256dh TEXT NOT NULL,auth TEXT NOT NULL,user_agent TEXT,created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE)").run();
+  await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_push_subscriptions_user ON push_subscriptions(user_id)").run();
+}
+function validatePushSubscription(value:any){
+  const endpoint=String(value?.endpoint||"").trim();
+  const p256dh=String(value?.keys?.p256dh||"").trim();
+  const auth=String(value?.keys?.auth||"").trim();
+  if(!/^https:\/\//i.test(endpoint)||endpoint.length>3000||!p256dh||!auth||p256dh.length>500||auth.length>500)return null;
+  return {endpoint,p256dh,auth};
+}
+async function broadcastWebPush(env:Env,title:string,message:string,url="/"){
+  if(!env.VAPID_PUBLIC_KEY||!env.VAPID_PRIVATE_KEY||!env.VAPID_SUBJECT) throw new Error("إشعارات Push غير مفعّلة: أضف VAPID_PUBLIC_KEY وVAPID_PRIVATE_KEY وVAPID_SUBJECT.");
+  await ensurePushSubscriptions(env);
+  const rows=await env.DB.prepare("SELECT id,user_id,endpoint,p256dh,auth FROM push_subscriptions ORDER BY updated_at DESC").all<any>();
+  const items=rows.results||[];
+  let sent=0,failed=0,removed=0; const errors:string[]=[];
+  const payload=JSON.stringify({title:title.slice(0,120),body:message.slice(0,3000),icon:"/icons/thanaweya-192.png",badge:"/icons/thanaweya-192.png",url:url.startsWith("/")?url:"/"});
+  for(const row of items){
+    try{
+      const result=await sendNotification(
+        {endpoint:String(row.endpoint),keys:{p256dh:String(row.p256dh),auth:String(row.auth)}} as WebPushSubscription,
+        payload,
+        {vapidDetails:{subject:env.VAPID_SUBJECT,publicKey:env.VAPID_PUBLIC_KEY,privateKey:env.VAPID_PRIVATE_KEY},TTL:86400,urgency:"high"}
+      );
+      const status=Number((result as any)?.statusCode||201);
+      if(status>=200&&status<300) sent++; else {failed++; if(errors.length<5)errors.push(String(row.endpoint).slice(0,80)+": HTTP "+status);}
+    }catch(e){
+      const status=Number((e as any)?.statusCode||0);
+      if(status===404||status===410){
+        await env.DB.prepare("DELETE FROM push_subscriptions WHERE id=?").bind(String(row.id)).run();
+        removed++;
+      }else{
+        failed++;
+        if(errors.length<5)errors.push((e instanceof Error?e.message:String(e)).slice(0,220));
+      }
+    }
+  }
+  return {total:items.length,sent,failed,removed,errors};
 }
 async function ensureWhatsAppLog(env:Env){
   await env.DB.prepare("CREATE TABLE IF NOT EXISTS whatsapp_messages (id TEXT PRIMARY KEY,user_id TEXT,phone TEXT NOT NULL,message TEXT NOT NULL,status TEXT NOT NULL,provider_id TEXT,error TEXT,created_at INTEGER NOT NULL,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE SET NULL)").run();
@@ -669,25 +717,56 @@ async function ensureGlobalNotifications(env:Env){
 }
 async function sendTelegramGlobalNotifications(env:Env,chatId:string){
   await ensureGlobalNotifications(env);
-  const now=Date.now();
-  await env.DB.prepare("UPDATE global_notifications SET enabled=0 WHERE enabled=1 AND expires_at IS NOT NULL AND expires_at<=?").bind(now).run();
-  const rows=await env.DB.prepare("SELECT id,title,message,type,expires_at,created_at FROM global_notifications WHERE enabled=1 AND (expires_at IS NULL OR expires_at>?) ORDER BY created_at DESC LIMIT 30").bind(now).all<any>();
+  await ensurePushSubscriptions(env);
+  const devices=await env.DB.prepare("SELECT COUNT(*) AS n FROM push_subscriptions").first<any>();
+  const rows=await env.DB.prepare("SELECT id,title,message,type,created_at FROM global_notifications ORDER BY created_at DESC LIMIT 10").all<any>();
   const items=rows.results||[];
-  const lines=items.map((x:any,i:number)=>(i+1)+". "+(x.type==="urgent"?"🚨":x.type==="success"?"✅":x.type==="warning"?"⚠️":"📢")+" "+String(x.title)+"\n   "+String(x.message).slice(0,250));
-  const buttons=items.slice(0,15).map((x:any)=>[{text:"🗑️ "+String(x.title).slice(0,30),callback_data:"global_notification_delete:"+String(x.id)}]);
-  await telegramCall(env,"sendMessage",{chat_id:chatId,text:["📢 مركز الإشعارات","","الإشعارات هنا عامة وتظهر لكل المستخدمين.",...(lines.length?["",...lines]:["","لا توجد إشعارات منشورة."])].join("\n"),reply_markup:{inline_keyboard:[[{text:"➕ إشعار جديد",callback_data:"global_notification_add"}],...buttons,[{text:"⬅️ لوحة التحكم",callback_data:"dash_home"}]]}});
+  const lines=items.map((x:any,i:number)=>(i+1)+". "+(x.type==="urgent"?"🚨":x.type==="success"?"✅":x.type==="warning"?"⚠️":"📢")+" "+String(x.title)+"\n   "+String(x.message).slice(0,220));
+  await telegramCall(env,"sendMessage",{chat_id:chatId,text:[
+    "📲 مركز إشعارات الأجهزة",
+    "",
+    "الإشعارات هنا Push حقيقية وتوصل للموبايل والتابلت والكمبيوتر بعد تفعيلها من المستخدم.",
+    "",
+    "📱 الأجهزة المفعّلة: "+Number(devices?.n||0).toLocaleString("ar-EG"),
+    "",
+    ...(lines.length?["🕐 آخر الإشعارات:",...lines]:["لا توجد إشعارات مرسلة حتى الآن."])
+  ].join("\n"),reply_markup:{inline_keyboard:[
+    [{text:"➕ إرسال Push جديد",callback_data:"global_notification_add"}],
+    [{text:"🔄 تحديث",callback_data:"dash_global_notifications"}],
+    [{text:"⬅️ لوحة التحكم",callback_data:"dash_home"}]
+  }}});
 }
 async function createGlobalNotification(env:Env,chatId:string,payload:any){
-  await ensureGlobalNotifications(env);
   const title=String(payload?.title||"").trim().slice(0,140);
   const message=String(payload?.message||"").trim().slice(0,2000);
   const type=["info","success","warning","urgent"].includes(String(payload?.type||""))?String(payload.type):"info";
-  const hours=Number(payload?.hours||0);
-  if(!title||!message||!Number.isFinite(hours)||hours<0||hours>720){await telegramCall(env,"sendMessage",{chat_id:chatId,text:"❌ البيانات غير صحيحة."});return;}
-  const now=Date.now(),expiresAt=hours>0?now+Math.round(hours*3600000):null;
-  await env.DB.prepare("INSERT INTO global_notifications(id,title,message,type,enabled,expires_at,created_at) VALUES(?,?,?,?,?,?,?)").bind(randomHex(16),title,message,type,1,expiresAt,now).run();
+  if(!title||!message){await telegramCall(env,"sendMessage",{chat_id:chatId,text:"❌ عنوان الإشعار ونصه مطلوبان."});return;}
   await clearTelegramAdminMode(env,chatId);
-  await telegramCall(env,"sendMessage",{chat_id:chatId,text:"✅ تم نشر الإشعار لكل المستخدمين.\n\n📢 "+title+"\n"+message+(expiresAt?"\n\n⏱️ ينتهي خلال "+hours+" ساعة":"\n\n📌 بدون انتهاء تلقائي."),reply_markup:{inline_keyboard:[[{text:"📢 مركز الإشعارات",callback_data:"dash_global_notifications"}],[{text:"🎛️ لوحة التحكم",callback_data:"dash_home"}]]}});
+  try{
+    const result=await broadcastWebPush(env,title,message,String(payload?.url||"/"));
+    const now=Date.now();
+    await ensureGlobalNotifications(env);
+    await env.DB.prepare("INSERT INTO global_notifications(id,title,message,type,enabled,expires_at,created_at) VALUES(?,?,?,?,?,?,?)").bind(randomHex(16),title,message,type,1,null,now).run();
+    await adminLog(env,chatId,"PUSH_BROADCAST","all",title+" — "+message);
+    await telegramCall(env,"sendMessage",{chat_id:chatId,text:[
+      "📲 تم تنفيذ إشعار Push",
+      "",
+      "📢 "+title,
+      "👥 الأجهزة المستهدفة: "+result.total,
+      "✅ وصل لمزود الإشعارات: "+result.sent,
+      "❌ فشل: "+result.failed,
+      "🧹 اشتراكات منتهية حُذفت: "+result.removed,
+      result.errors.length?"\n⚠️ أمثلة أخطاء:\n"+result.errors.join("\n"):""
+    ].join("\n"),reply_markup:{inline_keyboard:[
+      [{text:"📲 مركز إشعارات الأجهزة",callback_data:"dash_global_notifications"}],
+      [{text:"🎛️ لوحة التحكم",callback_data:"dash_home"}]
+    ]}});
+  }catch(e){
+    await telegramCall(env,"sendMessage",{chat_id:chatId,text:"⚠️ تعذر إرسال Push:\n\n"+(e instanceof Error?e.message:String(e)).slice(0,700),reply_markup:{inline_keyboard:[
+      [{text:"📲 مركز الإشعارات",callback_data:"dash_global_notifications"}],
+      [{text:"🎛️ لوحة التحكم",callback_data:"dash_home"}]
+    ]}});
+  }
 }
 function telegramDashboardKeyboard(){
   return {inline_keyboard:[
@@ -917,15 +996,22 @@ async function handleTelegramUpdate(env:Env,update:any){
       }
       try{
         const current=await getTelegramAdminState(env,chatId);
-        const payload={...(current.payload||{}),type};
-        await setTelegramAdminMode(env,chatId,"global_notification_hours",payload);
-        await telegramCall(env,"answerCallbackQuery",{callback_query_id:callback.id,text:"✅ تم اختيار نوع الإشعار"});
-        await telegramCall(env,"sendMessage",{chat_id:chatId,text:"⏱️ كام ساعة يفضل الإشعار ظاهر؟\nاكتب 0 لو بدون انتهاء.",reply_markup:{inline_keyboard:[[{text:"❌ إلغاء",callback_data:"dash_cancel"}]]}});
+        await setTelegramAdminMode(env,chatId,"global_notification_confirm",{...(current.payload||{}),type});
+        await telegramCall(env,"answerCallbackQuery",{callback_query_id:callback.id,text:"✅ تم اختيار النوع"});
+        await telegramCall(env,"sendMessage",{chat_id:chatId,text:"🎯 الإشعار جاهز للإرسال كـ Push حقيقي على الأجهزة.\n\nاضغط إرسال الآن.",reply_markup:{inline_keyboard:[
+          [{text:"🚀 إرسال الآن",callback_data:"global_notification_send"}],
+          [{text:"❌ إلغاء",callback_data:"dash_cancel"}]
+        ]}});
       }catch(e){
-        console.error("Global notification type selection failed",e);
-        await telegramCall(env,"answerCallbackQuery",{callback_query_id:callback.id,text:"⚠️ حصل خطأ أثناء حفظ الاختيار",show_alert:true});
-        await telegramCall(env,"sendMessage",{chat_id:chatId,text:"⚠️ حصل خطأ أثناء حفظ نوع الإشعار.\n\n"+(e instanceof Error?e.message:String(e)).slice(0,500),reply_markup:{inline_keyboard:[[{text:"🔄 مركز الإشعارات",callback_data:"dash_global_notifications"}],[{text:"🎛️ لوحة التحكم",callback_data:"dash_home"}]]}});
+        await telegramCall(env,"answerCallbackQuery",{callback_query_id:callback.id,text:"⚠️ حصل خطأ أثناء الحفظ",show_alert:true});
       }
+      return;
+    }
+    if(data==="global_notification_send"){
+      const state=await getTelegramAdminState(env,chatId);
+      if(state.mode!=="global_notification_confirm"){await sendTelegramGlobalNotifications(env,chatId);return;}
+      await telegramCall(env,"answerCallbackQuery",{callback_query_id:callback.id,text:"⏳ جاري الإرسال..."});
+      await createGlobalNotification(env,chatId,state.payload);
       return;
     }
     if(data==="dash_global_notifications"){await clearTelegramAdminMode(env,chatId);await sendTelegramGlobalNotifications(env,chatId);return;}
@@ -1071,15 +1157,13 @@ async function handleTelegramUpdate(env:Env,update:any){
     return;
   }
   if(state.mode==="global_notification_type" && text){
-    await setTelegramAdminMode(env,chatId,"global_notification_hours",{...state.payload,type:text});
-    await telegramCall(env,"sendMessage",{chat_id:chatId,text:"⏱️ كام ساعة يفضل الإشعار ظاهر؟\nاكتب 0 لو بدون انتهاء.",reply_markup:{inline_keyboard:[[{text:"❌ إلغاء",callback_data:"dash_cancel"}]]}});
-    return;
-  }
-  if(state.mode==="global_notification_hours" && text){
-    const normalized=text.replace(/[^0-9.]/g,"");
-    const hours=Number(normalized);
-    if(!normalized||!Number.isFinite(hours)||hours<0||hours>720){await telegramCall(env,"sendMessage",{chat_id:chatId,text:"❌ اكتب رقم من 0 إلى 720."});return;}
-    await createGlobalNotification(env,chatId,{...state.payload,hours});
+    const type=text.trim().toLowerCase();
+    if(!["info","success","warning","urgent"].includes(type)){await telegramCall(env,"sendMessage",{chat_id:chatId,text:"❌ اختار نوع الإشعار من الأزرار."});return;}
+    await setTelegramAdminMode(env,chatId,"global_notification_confirm",{...state.payload,type});
+    await telegramCall(env,"sendMessage",{chat_id:chatId,text:"🎯 الإشعار جاهز للإرسال كـ Push حقيقي على الأجهزة.\n\nاضغط إرسال الآن.",reply_markup:{inline_keyboard:[
+      [{text:"🚀 إرسال الآن",callback_data:"global_notification_send"}],
+      [{text:"❌ إلغاء",callback_data:"dash_cancel"}]
+    ]}});
     return;
   }
   if(state.mode==="global_lecture_title" && text){
@@ -1200,6 +1284,32 @@ export default {
         }
         // Owner panel uses one fixed account and its own HttpOnly cookie.
         // It does not create a user/session record and does not depend on the site's normal auth.
+        if(url.pathname==="/api/push/public-key" && request.method==="GET") {
+          if(!env.VAPID_PUBLIC_KEY) return json({error:"Push notifications are not configured"},503);
+          return json({publicKey:env.VAPID_PUBLIC_KEY});
+        }
+        if(url.pathname==="/api/push/status" && request.method==="GET") {
+          const u=await userFrom(request,env); if(!u) return json({error:"يجب تسجيل الدخول"},401);
+          await ensurePushSubscriptions(env);
+          const row=await env.DB.prepare("SELECT COUNT(*) AS n FROM push_subscriptions WHERE user_id=?").bind(u.id).first<any>();
+          return json({enabled:Number(row?.n||0)>0,devices:Number(row?.n||0)});
+        }
+        if(url.pathname==="/api/push/subscribe" && request.method==="POST") {
+          const u=await userFrom(request,env); if(!u) return json({error:"يجب تسجيل الدخول"},401);
+          const b=await body(request), sub=validatePushSubscription(b?.subscription);
+          if(!sub) return json({error:"اشتراك Push غير صالح"},400);
+          await ensurePushSubscriptions(env);
+          const now=Date.now();
+          await env.DB.prepare("INSERT INTO push_subscriptions(id,user_id,endpoint,p256dh,auth,user_agent,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(endpoint) DO UPDATE SET user_id=excluded.user_id,p256dh=excluded.p256dh,auth=excluded.auth,user_agent=excluded.user_agent,updated_at=excluded.updated_at").bind(randomHex(16),u.id,sub.endpoint,sub.p256dh,sub.auth,String(b?.userAgent||"").slice(0,500),now,now).run();
+          return json({ok:true});
+        }
+        if(url.pathname==="/api/push/subscribe" && request.method==="DELETE") {
+          const u=await userFrom(request,env); if(!u) return json({error:"يجب تسجيل الدخول"},401);
+          const b=await body(request), endpoint=String(b?.endpoint||"").trim();
+          if(endpoint) await env.DB.prepare("DELETE FROM push_subscriptions WHERE user_id=? AND endpoint=?").bind(u.id,endpoint).run();
+          else await env.DB.prepare("DELETE FROM push_subscriptions WHERE user_id=?").bind(u.id).run();
+          return json({ok:true});
+        }
         if(url.pathname==="/api/global-notifications" && request.method==="GET") {
           try {
             await ensureGlobalNotifications(env);
