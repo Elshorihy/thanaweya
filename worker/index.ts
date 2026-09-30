@@ -910,11 +910,22 @@ async function handleTelegramUpdate(env:Env,update:any){
     if(data==="dash_traffic"){await clearTelegramAdminMode(env,chatId);await sendTelegramTraffic(env,chatId);return;}
     if(data==="dash_traffic30"){await clearTelegramAdminMode(env,chatId);await sendTelegramTrafficDetailed(env,chatId);return;}
     if(data.startsWith("global_notification_type:")){
-      const type=data.slice("global_notification_type:").toLowerCase();
-      if(!["info","success","warning","urgent"].includes(type))return;
-      const current=await getTelegramAdminState(env,chatId);
-      await setTelegramAdminMode(env,chatId,"global_notification_hours",{...(current.payload||{}),type});
-      await telegramCall(env,"sendMessage",{chat_id:chatId,text:"⏱️ كام ساعة يفضل الإشعار ظاهر؟\nاكتب 0 لو بدون انتهاء.",reply_markup:{inline_keyboard:[[{text:"❌ إلغاء",callback_data:"dash_cancel"}]]}});
+      const type=data.slice("global_notification_type:").trim().toLowerCase();
+      if(!["info","success","warning","urgent"].includes(type)){
+        await telegramCall(env,"answerCallbackQuery",{callback_query_id:callback.id,text:"❌ نوع إشعار غير صالح",show_alert:true});
+        return;
+      }
+      try{
+        const current=await getTelegramAdminState(env,chatId);
+        const payload={...(current.payload||{}),type};
+        await setTelegramAdminMode(env,chatId,"global_notification_hours",payload);
+        await telegramCall(env,"answerCallbackQuery",{callback_query_id:callback.id,text:"✅ تم اختيار نوع الإشعار"});
+        await telegramCall(env,"sendMessage",{chat_id:chatId,text:"⏱️ كام ساعة يفضل الإشعار ظاهر؟\nاكتب 0 لو بدون انتهاء.",reply_markup:{inline_keyboard:[[{text:"❌ إلغاء",callback_data:"dash_cancel"}]]}});
+      }catch(e){
+        console.error("Global notification type selection failed",e);
+        await telegramCall(env,"answerCallbackQuery",{callback_query_id:callback.id,text:"⚠️ حصل خطأ أثناء حفظ الاختيار",show_alert:true});
+        await telegramCall(env,"sendMessage",{chat_id:chatId,text:"⚠️ حصل خطأ أثناء حفظ نوع الإشعار.\n\n"+(e instanceof Error?e.message:String(e)).slice(0,500),reply_markup:{inline_keyboard:[[{text:"🔄 مركز الإشعارات",callback_data:"dash_global_notifications"}],[{text:"🎛️ لوحة التحكم",callback_data:"dash_home"}]]}});
+      }
       return;
     }
     if(data==="dash_global_notifications"){await clearTelegramAdminMode(env,chatId);await sendTelegramGlobalNotifications(env,chatId);return;}
