@@ -669,7 +669,9 @@ async function ensureGlobalNotifications(env:Env){
 }
 async function sendTelegramGlobalNotifications(env:Env,chatId:string){
   await ensureGlobalNotifications(env);
-  const rows=await env.DB.prepare("SELECT id,title,message,type,expires_at,created_at FROM global_notifications WHERE enabled=1 ORDER BY created_at DESC LIMIT 30").all<any>();
+  const now=Date.now();
+  await env.DB.prepare("UPDATE global_notifications SET enabled=0 WHERE enabled=1 AND expires_at IS NOT NULL AND expires_at<=?").bind(now).run();
+  const rows=await env.DB.prepare("SELECT id,title,message,type,expires_at,created_at FROM global_notifications WHERE enabled=1 AND (expires_at IS NULL OR expires_at>?) ORDER BY created_at DESC LIMIT 30").bind(now).all<any>();
   const items=rows.results||[];
   const lines=items.map((x:any,i:number)=>(i+1)+". "+(x.type==="urgent"?"🚨":x.type==="success"?"✅":x.type==="warning"?"⚠️":"📢")+" "+String(x.title)+"\n   "+String(x.message).slice(0,250));
   const buttons=items.slice(0,15).map((x:any)=>[{text:"🗑️ "+String(x.title).slice(0,30),callback_data:"global_notification_delete:"+String(x.id)}]);
@@ -886,6 +888,9 @@ async function handleTelegramUpdate(env:Env,update:any){
   const callback=update?.callback_query;
   const chatId=String(message?.chat?.id ?? callback?.message?.chat?.id ?? "");
   if(!chatId || chatId!==String(env.TELEGRAM_CHAT_ID)) return;
+  // Make every dashboard entry point self-initializing, even on a fresh D1 database.
+  await ensureSchema(env);
+  await ensureAdminTools(env);
 
   if(callback){
     if(callback.id) await telegramCall(env,"answerCallbackQuery",{callback_query_id:callback.id});
@@ -1060,8 +1065,9 @@ async function handleTelegramUpdate(env:Env,update:any){
     return;
   }
   if(state.mode==="global_notification_hours" && text){
-    const hours=Number(text.replace(/[^0-9.]/g,""));
-    if(!Number.isFinite(hours)||hours<0||hours>720){await telegramCall(env,"sendMessage",{chat_id:chatId,text:"❌ اكتب رقم من 0 إلى 720."});return;}
+    const normalized=text.replace(/[^0-9.]/g,"");
+    const hours=Number(normalized);
+    if(!normalized||!Number.isFinite(hours)||hours<0||hours>720){await telegramCall(env,"sendMessage",{chat_id:chatId,text:"❌ اكتب رقم من 0 إلى 720."});return;}
     await createGlobalNotification(env,chatId,{...state.payload,hours});
     return;
   }
