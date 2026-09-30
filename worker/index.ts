@@ -824,7 +824,7 @@ async function handleTelegramUpdate(env:Env,update:any){
     return;
   }
   if(state.mode==="announcement_button_url" && text){
-    if(!/^https?:\\/\\//i.test(text)){await telegramCall(env,"sendMessage",{chat_id:chatId,text:"❌ الرابط لازم يبدأ بـ https:// أو http://"});return;}
+    if(!/^https?:\/\//i.test(text)){await telegramCall(env,"sendMessage",{chat_id:chatId,text:"❌ الرابط لازم يبدأ بـ https:// أو http://"});return;}
     await createSiteAnnouncement(env,chatId,{...state.payload,buttonUrl:text.slice(0,500)});
     return;
   }
