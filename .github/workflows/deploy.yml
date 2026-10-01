@@ -65,6 +65,17 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 
+      - name: Verify deployed API
+        run: |
+          set -euo pipefail
+          BASE="https://thanaweya.sheenomatp.workers.dev"
+          health="$(curl -fsSL --retry 5 --retry-delay 2 --max-time 20 "$BASE/api/health")"
+          echo "Health: $health"
+          node -e 'const x=JSON.parse(process.argv[1]); if(x.ok!==true) process.exit(1)' "$health"
+          smoke="$(curl -fsSL --retry 5 --retry-delay 2 --max-time 20 -X GET "$BASE/api/auth/forgot/start?email=__deploy_smoke_test__%40example.invalid")"
+          echo "Auth smoke: $smoke"
+          node -e 'const x=JSON.parse(process.argv[1]); if(x.ok!==true) process.exit(1)' "$smoke"
+
       - name: Refresh Telegram webhook
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
