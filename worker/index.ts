@@ -168,51 +168,67 @@ async function sendEmailOtp(env:Env,email:string,code:string,type:"register"|"re
   try{ url=new URL(base); }catch{ throw new Error("رابط GOOGLE_APPS_SCRIPT_URL غير صحيح."); }
   if(url.pathname.endsWith("/dev")) throw new Error("GOOGLE_APPS_SCRIPT_URL يجب أن ينتهي بـ /exec وليس /dev.");
 
-  const requestId=randomHex(20);
-  const payload={action:"otp",type,email,code,otpCode:code,secret,requestId};
+  const payload={
+    action:"otp",
+    type,
+    email,
+    code,
+    otpCode:code,
+    secret,
+    requestId:randomHex(20)
+  };
 
-  function parseResponse(raw:string){
-    const cleaned=raw.replace(/^\uFEFF/,"").trim();
-    if(!cleaned) return null;
-    try{return JSON.parse(cleaned)}catch{return null}
-  }
-  function apiError(data:any){
-    return String(data?.error||data?.message||"فشل إرسال كود التحقق عبر Gmail").slice(0,400);
-  }
-  async function inspect(response:Response){
-    const raw=await response.text();
-    const data=parseResponse(raw);
-    if(data?.ok===true||data?.success===true||data?.sent===true||data?.status==="sent"||data?.status==="ok") return {ok:true};
-    if(data?.ok===false||data?.success===false||data?.status==="error") return {ok:false,kind:"api",error:apiError(data)};
-    return {ok:false,kind:"nonjson",status:response.status,contentType:response.headers.get("content-type")||"",sample:raw.replace(/\s+/g," ").slice(0,180)};
-  }
-  async function getCall(){
-    const u=new URL(url.toString());
-    for(const [key,value] of Object.entries(payload)) u.searchParams.set(key,String(value));
-    return fetch(u.toString(),{method:"GET",redirect:"follow",headers:{accept:"application/json,text/plain,*/*"},cf:{cacheTtl:0,cacheEverything:false}} as RequestInit);
-  }
-  async function postCall(){
-    return fetch(url.toString(),{method:"POST",redirect:"follow",headers:{"content-type":"application/json; charset=utf-8",accept:"application/json,text/plain,*/*"},body:JSON.stringify(payload),cf:{cacheTtl:0,cacheEverything:false}} as RequestInit);
+  // IMPORTANT:
+  // doGet on the Apps Script URL is only a health check in the current deployment.
+  // Never treat {ok:true,message:"...working"} as a successful OTP send.
+  // OTP delivery must go through doPost and must explicitly confirm the send.
+  const response=await fetch(url.toString(),{
+    method:"POST",
+    redirect:"follow",
+    headers:{
+      "content-type":"application/json; charset=utf-8",
+      "accept":"application/json,text/plain,*/*"
+    },
+    body:JSON.stringify(payload),
+    cf:{cacheTtl:0,cacheEverything:false}
+  } as RequestInit);
+
+  const raw=await response.text();
+  const cleaned=raw.replace(/^\\uFEFF/,"").trim();
+  let data:any=null;
+  if(cleaned){
+    try{data=JSON.parse(cleaned)}catch{}
   }
 
-  let last:any=null;
-  // Apps Script ContentService is confirmed working through doGet; try GET first.
-  for(const call of [getCall,postCall]){
-    try{
-      const response=await call();
-      const result=await inspect(response);
-      if(result.ok) return;
-      if(result.kind==="api") throw new Error(result.error);
-      last=result;
-    }catch(e){
-      throw new Error(e instanceof Error?e.message:String(e));
-    }
+  if(
+    data?.sent===true ||
+    data?.status==="sent" ||
+    data?.status==="ok" ||
+    data?.result==="sent" ||
+    data?.accepted===true
+  ){
+    return;
   }
-  if(last?.kind==="nonjson"){
-    const extra=last.sample?" الرد: "+last.sample:"";
-    throw new Error("Google Apps Script أعاد HTTP "+String(last.status)+" لكن الرد ليس JSON."+extra);
+
+  if(data?.ok===false || data?.success===false || data?.status==="error"){
+    throw new Error(String(data?.error||data?.message||"فشل إرسال كود التحقق عبر Gmail").slice(0,400));
   }
-  throw new Error("تعذر إرسال كود التحقق عبر Google Apps Script.");
+
+  // A plain health response such as {ok:true,message:"Thanaweya Mail API is working"}
+  // is NOT an OTP-send confirmation.
+  if(data?.ok===true && !data?.sent && !data?.accepted && data?.status!=="sent" && data?.status!=="ok"){
+    throw new Error("Google Apps Script متصل، لكن لم يؤكد إرسال كود Gmail. تأكد أن doPost هو المسؤول عن إرسال OTP.");
+  }
+
+  if(!response.ok){
+    throw new Error("Google Apps Script HTTP "+response.status+(cleaned?" — "+cleaned.slice(0,240):""));
+  }
+
+  if(!data){
+    throw new Error("Google Apps Script لم يُرجع تأكيدًا صالحًا لإرسال كود Gmail.");
+  }
+
+  throw new Error("Google Apps Script لم يؤكد إرسال كود Gmail.");
 }
 async function ensurePushSubscriptions(env:Env){
   await env.DB.prepare("CREATE TABLE IF NOT EXISTS push_subscriptions (id TEXT PRIMARY KEY,user_id TEXT NOT NULL,endpoint TEXT NOT NULL UNIQUE,p256dh TEXT NOT NULL,auth TEXT NOT NULL,user_agent TEXT,created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE)").run();
