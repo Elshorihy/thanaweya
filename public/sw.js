@@ -1,4 +1,4 @@
-const CACHE='thanaweya-shell-v11';
+const CACHE='thanaweya-shell-v12';
 const CORE=['/','/manifest.webmanifest','/icons/thanaweya-192.png','/icons/thanaweya-512.png','/sw.js'];
 
 self.addEventListener('install',event=>{
