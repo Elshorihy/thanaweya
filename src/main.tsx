@@ -464,7 +464,7 @@ async function exportData(){try{const files:any[]=[];for(const v of [...s.lectur
   const [revealed,setRevealed]=useState(false),[claimed,setClaimed]=useState(false);
   const hash=(value:string)=>{let h=2166136261;for(let i=0;i<value.length;i++){h^=value.charCodeAt(i);h=Math.imul(h,16777619)}return h>>>0};
   const day=today(),subjectIds=s.subjects.map(x=>x.id);
-  const build=(index:number)=>{
+  const build=(index:number):any=>{
     const variant=Math.floor(index/25),kind=index%25,mins=[15,20,25,30,35,40,45,50,60,70,75,90,100,120,135,150,180][variant%17],tasks=1+(variant%5),reviews=1+(variant%5),sessions=1+(variant%4),streakTarget=2+(variant%6);
     const subjectId=subjectIds.length?subjectIds[hash(index+':subject')%subjectIds.length]:'',subjectName=subMap[subjectId]?.name||'أي مادة',flavors=['بدون تسويف','بتركيز كامل','من غير تبديل بين المواد','قبل ما تفتح السوشيال','وكأنها آخر جلسة في اليوم','مع موبايلك بعيد','بأقصى تركيز','من غير ما تسيب الجلسة','بهدوء ومن غير استعجال','وأنت مركز في هدفك'],flavor=flavors[variant%flavors.length],bonus=30+(variant%10)*10,common={id:index+1,bonus};
     if(kind===0)return {...common,kind:'study',title:'ماراثون المذاكرة',text:`ذاكر ${mins} دقيقة اليوم ${flavor}.`,target:mins,unit:'دقيقة'};
