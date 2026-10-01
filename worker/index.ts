@@ -200,12 +200,14 @@ async function sendEmailOtp(env:Env,email:string,code:string,type:"register"|"re
     try{data=JSON.parse(cleaned)}catch{}
   }
 
+  const successMessage=String(data?.message||"").trim().toLowerCase();
   if(
     data?.sent===true ||
     data?.status==="sent" ||
     data?.status==="ok" ||
     data?.result==="sent" ||
-    data?.accepted===true
+    data?.accepted===true ||
+    (data?.ok===true && /otp email sent successfully|email sent successfully|تم إرسال.*كود|تم إرسال.*email/i.test(successMessage))
   ){
     return;
   }
