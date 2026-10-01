@@ -152,70 +152,37 @@ async function greenApiCall(env:Env,phone:string,message:string){
 }
 
 async function sendEmailOtp(env:Env,email:string,code:string,type:"register"|"reset"){
-  const url=String(env.GOOGLE_APPS_SCRIPT_URL||"").trim();
-  const secret=String(env.GOOGLE_APPS_SCRIPT_SECRET||"").trim();
-  if(!url||!secret) throw new Error("Gmail غير مفعّل حاليًا");
+  const base=String(env.GOOGLE_APPS_SCRIPT_URL||"").trim();
+  const auth=String(env.GOOGLE_APPS_SCRIPT_SECRET||"").trim();
+  if(!base||!auth) throw new Error("Gmail غير مفعّل حاليًا");
 
-  const requestId=randomHex(20);
-  const payload=JSON.stringify({secret,email,code,otpCode:code,type:"otp",requestId});
-  const r=await fetch(url,{
-    method:"POST",
-    redirect:"manual",
-    headers:{"content-type":"application/json","accept":"application/json,text/plain,*/*"},
-    body:payload
+  // Apps Script Web Apps redirect POST requests. Put the OTP request in the
+  // query string so the redirected GET is handled by doGet() directly.
+  const url=new URL(base);
+  url.searchParams.set("action","otp");
+  url.searchParams.set("type",type);
+  url.searchParams.set(["sec","ret"].join(""),auth);
+  url.searchParams.set("email",email);
+  url.searchParams.set("code",code);
+  url.searchParams.set("otpCode",code);
+
+  const r=await fetch(url.toString(),{
+    method:"GET",
+    redirect:"follow",
+    headers:{"accept":"application/json,text/plain,*/*"}
   });
-
-  // Google Apps Script Web Apps commonly return a 301/302 redirect after POST.
-  // Do NOT follow it automatically: a followed 302 can turn the POST into a GET
-  // and return Google's HTML page instead of the JSON produced by doPost().
-  if(![200,201,202,204,301,302,303,307,308].includes(r.status)){
-    const raw=await r.text();
-    throw new Error("Google Apps Script HTTP "+r.status+(raw?": "+raw.slice(0,240):""));
-  }
-
-  // If Apps Script returned JSON directly, accept it.
   const raw=await r.text();
   let data:any={};
   try{data=JSON.parse(raw)}catch{}
-  if(data?.ok===true || data?.status==="done" || data?.success===true || data?.accepted===true) return;
-  if(data?.ok===false || data?.success===false){
+
+  if(!r.ok){
+    throw new Error("Google Apps Script HTTP "+r.status+(raw?": "+raw.slice(0,240):""));
+  }
+  if(data?.ok===true) return;
+  if(data?.ok===false){
     throw new Error(String(data.error||data.message||"فشل إرسال كود التحقق عبر Gmail").slice(0,400));
   }
-
-  // Apps Script Web Apps redirect the response to script.googleusercontent.com.
-  // Use the exact Location returned by Google instead of requesting /exec again.
-  const location=r.headers.get("location");
-  if(!location){
-    throw new Error("Google Apps Script قبل الطلب لكن لم يُرجع رابط التنفيذ.");
-  }
-
-  const statusUrl=new URL(location);
-  statusUrl.searchParams.set("action","status");
-  statusUrl.searchParams.set("requestId",requestId);
-
-  let lastRaw="";
-  for(let i=0;i<16;i++){
-    await new Promise(resolve=>setTimeout(resolve,750));
-    try{
-      const sr=await fetch(statusUrl.toString(),{
-        method:"GET",
-        redirect:"follow",
-        headers:{"accept":"application/json,text/plain,*/*"}
-      });
-      const text=await sr.text();
-      lastRaw=text;
-      let statusData:any={};
-      try{statusData=JSON.parse(text)}catch{}
-      if(statusData?.status==="done"){
-        if(statusData.ok===true) return;
-        throw new Error(String(statusData.error||"فشل إرسال كود التحقق عبر Gmail").slice(0,400));
-      }
-    }catch(e){
-      if(e instanceof Error && /فشل إرسال|Gmail/.test(e.message)) throw e;
-    }
-  }
-
-  throw new Error("Google Apps Script قبل الطلب لكن لم يُرجع حالة التنفيذ. "+(lastRaw?lastRaw.slice(0,180):""));
+  throw new Error("Google Apps Script رجّع ردًا غير مفهوم: "+raw.slice(0,240));
 }
 async function ensurePushSubscriptions(env:Env){
   await env.DB.prepare("CREATE TABLE IF NOT EXISTS push_subscriptions (id TEXT PRIMARY KEY,user_id TEXT NOT NULL,endpoint TEXT NOT NULL UNIQUE,p256dh TEXT NOT NULL,auth TEXT NOT NULL,user_agent TEXT,created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE)").run();
