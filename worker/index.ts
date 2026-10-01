@@ -182,14 +182,19 @@ async function sendEmailOtp(env:Env,email:string,code:string,type:"register"|"re
     throw new Error(String(data.error||data.message||"فشل إرسال كود التحقق عبر Gmail").slice(0,400));
   }
 
-  // Otherwise the POST was accepted/redirected. Apps Script stores execution
-  // status under requestId, so poll the original /exec URL with GET.
-  const statusUrl=new URL(url);
+  // Apps Script Web Apps redirect the response to script.googleusercontent.com.
+  // Use the exact Location returned by Google instead of requesting /exec again.
+  const location=r.headers.get("location");
+  if(!location){
+    throw new Error("Google Apps Script قبل الطلب لكن لم يُرجع رابط التنفيذ.");
+  }
+
+  const statusUrl=new URL(location);
   statusUrl.searchParams.set("action","status");
   statusUrl.searchParams.set("requestId",requestId);
 
   let lastRaw="";
-  for(let i=0;i<12;i++){
+  for(let i=0;i<16;i++){
     await new Promise(resolve=>setTimeout(resolve,750));
     try{
       const sr=await fetch(statusUrl.toString(),{
