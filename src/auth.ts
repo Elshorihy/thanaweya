@@ -1,6 +1,9 @@
 export type AuthUser={id:string;email:string;name:string;phone?:string|null};
 async function req(path:string,options:RequestInit={}) {
-  const init:RequestInit={...options,credentials:'include',cache:'no-store',headers:{'content-type':'application/json',...(options.headers||{})}};
+  const headers=new Headers(options.headers||{});
+  if(options.body!==undefined && !headers.has('content-type')) headers.set('content-type','application/json');
+  headers.set('accept','application/json');
+  const init:RequestInit={...options,credentials:'same-origin',cache:'no-store',mode:'same-origin',headers};
   let lastError:unknown=null;
   for(let attempt=0;attempt<2;attempt++){
     try{
