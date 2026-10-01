@@ -194,6 +194,7 @@ function App(){
     const hasMeaningfulData=(x:any)=>{
       if(!x||typeof x!=='object')return false;
       return Boolean(
+        (Array.isArray(x.challengeClaims)&&x.challengeClaims.length) ||
         (Array.isArray(x.subjects)&&x.subjects.length) ||
         (Array.isArray(x.units)&&x.units.length) ||
         (Array.isArray(x.lessons)&&x.lessons.length) ||
@@ -212,7 +213,7 @@ function App(){
       setS({...initial,...cloud,profile:{...initial.profile,...(cloud.profile||{}),name:auth.name,whatsapp:auth.phone||cloud?.profile?.whatsapp||''},settings:{...initial.settings,...(cloud.settings||{})}});
     }else{
       const local=load();
-      const localHasData=local.subjects.length||local.units.length||local.lessons.length||local.tasks.length||local.sessions.length||local.questions.length||local.mistakes.length||local.notes.length||local.lectures.length||local.xp||local.onboarded;
+      const localHasData=local.challengeClaims.length||local.subjects.length||local.units.length||local.lessons.length||local.tasks.length||local.sessions.length||local.questions.length||local.mistakes.length||local.notes.length||local.lectures.length||local.xp||local.onboarded;
       if(localHasData){
        const next={...local,profile:{...local.profile,name:auth.name,whatsapp:auth.phone||local.profile.whatsapp||''}};
        setS(next);
