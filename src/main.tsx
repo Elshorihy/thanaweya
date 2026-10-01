@@ -172,6 +172,7 @@ function App(){
  },[]);
  const [globalLectures,setGlobalLectures]=useState<any[]>([]);
   const [s,setS]=useState<Store>(load),[page,setPage]=useState(()=>{try{return localStorage.getItem('thanaweya_page')||'home'}catch{return 'home'}}),[q,setQ]=useState(''),[modal,setModal]=useState<string|null>(null),[auth,setAuth]=useState<import('./auth').AuthUser|null>(null),[authChecked,setAuthChecked]=useState(false),[authMode,setAuthMode]=useState<'login'|'register'|'forgot'>('login'),[authStep,setAuthStep]=useState<'credentials'|'code'>('credentials'),[authName,setAuthName]=useState(''),[authEmail,setAuthEmail]=useState(''),[authPassword,setAuthPassword]=useState(''),[authNewPassword,setAuthNewPassword]=useState(''),[authCode,setAuthCode]=useState(''),[authPhone,setAuthPhone]=useState(''),[authBusy,setAuthBusy]=useState(false),authCodeRefs=useRef<Array<HTMLInputElement|null>>([]),[authErr,setAuthErr]=useState(''),[notice,setNotice]=useState(''),[focusLeft,setFocusLeft]=useState(1500),[running,setRunning]=useState(false),[focusEnd,setFocusEnd]=useState<number|null>(null),[quiz,setQuiz]=useState<Question[]>([]),[quizIndex,setQuizIndex]=useState(0),[quizScore,setQuizScore]=useState(0),[quizDone,setQuizDone]=useState(false),[calendarDate,setCalendarDate]=useState(new Date()),[installEvent,setInstallEvent]=useState<any>(null),[filter,setFilter]=useState({subject:'',status:'',difficulty:'',priority:'',date:''}),[focusSubjectId,setFocusSubjectId]=useState(''),[focusLessonId,setFocusLessonId]=useState(''),[focusMinutes,setFocusMinutes]=useState(()=>Math.min(180,Math.max(1,Number(s.settings.focus)||25))),[focusTotalSeconds,setFocusTotalSeconds]=useState(()=>Math.min(180,Math.max(1,Number(s.settings.focus)||25))*60); const [settingsDragKey,setSettingsDragKey]=useState<string|null>(null),[settingsDropKey,setSettingsDropKey]=useState<string|null>(null);
+ const cloudSyncReadyRef=useRef(false),cloudSyncTimerRef=useRef<number|undefined>(undefined),cloudOwnerRef=useRef('');
 
  useLayoutEffect(()=>{
   const saved=focusRestoreRef.current;
@@ -182,9 +183,85 @@ function App(){
   if(saved.start!==null&&saved.end!==null&&typeof el.setSelectionRange==='function'){
    try{el.setSelectionRange(saved.start,saved.end)}catch{}
   }
- },[s]); useEffect(()=>localStorage.setItem(KEY,JSON.stringify(s)),[s]);
+ },[s]);
  useEffect(()=>{fetch('/api/global-lectures',{cache:'no-store'}).then(r=>r.ok?r.json():{lectures:[]}).then(d=>setGlobalLectures(Array.isArray(d?.lectures)?d.lectures:[])).catch(()=>{})},[]);
   useEffect(()=>{authMe().then(({user})=>{if(user){setAuth(user);setAuthName(user.name);setAuthPhone(user.phone||'');update({profile:{...s.profile,name:user.name,whatsapp:user.phone||s.profile.whatsapp||''}})}}).catch(()=>{}).finally(()=>setAuthChecked(true))},[]);
+ useEffect(()=>{
+  let cancelled=false;
+  const syncAccount=async()=>{
+   if(!auth?.id){
+    cloudSyncReadyRef.current=false;
+    cloudOwnerRef.current='';
+    if(cloudSyncTimerRef.current!==undefined){window.clearTimeout(cloudSyncTimerRef.current);cloudSyncTimerRef.current=undefined}
+    return;
+   }
+   const ownerKey='thanaweya_owner';
+   let owner='';
+   try{owner=localStorage.getItem(ownerKey)||''}catch{}
+   if(owner && owner!==auth.id){
+    setS({...initial,profile:{...initial.profile,name:auth.name,whatsapp:auth.phone||''}});
+   }
+   try{localStorage.setItem(ownerKey,auth.id)}catch{}
+   cloudOwnerRef.current=auth.id;
+   cloudSyncReadyRef.current=false;
+   try{
+    const response=await fetch('/api/data',{method:'GET',credentials:'include',cache:'no-store'});
+    const payload=await response.json().catch(()=>({}));
+    if(cancelled)return;
+    if(!response.ok)throw new Error(payload?.error||'تعذر تحميل تقدم الحساب.');
+    const cloud=payload?.data;
+    const hasCloudData=cloud&&typeof cloud==='object'&&(
+      (Array.isArray(cloud.subjects)&&cloud.subjects.length>0)||
+      (Array.isArray(cloud.units)&&cloud.units.length>0)||
+      (Array.isArray(cloud.lessons)&&cloud.lessons.length>0)||
+      (Array.isArray(cloud.tasks)&&cloud.tasks.length>0)||
+      (Array.isArray(cloud.sessions)&&cloud.sessions.length>0)||
+      (Array.isArray(cloud.questions)&&cloud.questions.length>0)||
+      (Array.isArray(cloud.mistakes)&&cloud.mistakes.length>0)||
+      (Array.isArray(cloud.notes)&&cloud.notes.length>0)||
+      (Array.isArray(cloud.lectures)&&cloud.lectures.length>0)||
+      Number(cloud.xp||0)>0||
+      cloud.onboarded===true
+    );
+    if(hasCloudData){
+      setS({...initial,...cloud,profile:{...initial.profile,...(cloud.profile||{}),name:auth.name,whatsapp:auth.phone||cloud?.profile?.whatsapp||''},settings:{...initial.settings,...(cloud.settings||{})}});
+    }else{
+      const local=load();
+      const localHasData=local.subjects.length||local.units.length||local.lessons.length||local.tasks.length||local.sessions.length||local.questions.length||local.mistakes.length||local.notes.length||local.lectures.length||local.xp||local.onboarded;
+      if(localHasData){
+       const next={...local,profile:{...local.profile,name:auth.name,whatsapp:auth.phone||local.profile.whatsapp||''}};
+       setS(next);
+       await fetch('/api/data',{method:'PUT',credentials:'include',headers:{'content-type':'application/json'},body:JSON.stringify({data:next})});
+      }else{
+       const next={...initial,profile:{...initial.profile,name:auth.name,whatsapp:auth.phone||''}};
+       setS(next);
+       await fetch('/api/data',{method:'PUT',credentials:'include',headers:{'content-type':'application/json'},body:JSON.stringify({data:next})});
+      }
+    }
+    cloudSyncReadyRef.current=true;
+   }catch(e){
+    console.warn('Cloud progress sync failed',e);
+    cloudSyncReadyRef.current=true;
+   }
+  };
+  syncAccount();
+  return()=>{cancelled=true};
+ },[auth?.id]);
+
+ useEffect(()=>{
+  try{localStorage.setItem(KEY,JSON.stringify(s))}catch{}
+  if(!auth?.id||!cloudSyncReadyRef.current||cloudOwnerRef.current!==auth.id)return;
+  if(cloudSyncTimerRef.current!==undefined)window.clearTimeout(cloudSyncTimerRef.current);
+  cloudSyncTimerRef.current=window.setTimeout(async()=>{
+   cloudSyncTimerRef.current=undefined;
+   try{
+    const response=await fetch('/api/data',{method:'PUT',credentials:'include',headers:{'content-type':'application/json'},body:JSON.stringify({data:s})});
+    if(!response.ok)console.warn('Cloud progress save failed',await response.text().catch(()=>'')); 
+   }catch(e){console.warn('Cloud progress save failed',e)}
+  },700);
+  return()=>{if(cloudSyncTimerRef.current!==undefined){window.clearTimeout(cloudSyncTimerRef.current);cloudSyncTimerRef.current=undefined}};
+ },[s,auth?.id]);
+
  useEffect(()=>{try{localStorage.setItem('thanaweya_page',page)}catch{}},[page]);
  useEffect(()=>{
  document.documentElement.dir=s.settings.language==='ar'?'rtl':'ltr';
