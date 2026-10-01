@@ -53,8 +53,16 @@ async function ensureSchema(env:Env){
 const COOKIE = "thanaweya_session";
 const SESSION_DAYS = 30;
 
-function json(data: unknown, status=200, headers: Record<string,string>={}) {
-  return new Response(JSON.stringify(data), {status, headers: {"content-type":"application/json; charset=utf-8", ...headers}});
+function json(data: unknown, status=200, headers: Record<string,string>={}, request?:Request) {
+  const origin=request?.headers.get("Origin")||"";
+  const allowed=origin==="https://thanaweya.sheenomatp.workers.dev" ? origin : "";
+  return new Response(JSON.stringify(data), {status, headers: {
+    "content-type":"application/json; charset=utf-8",
+    "cache-control":"no-store, no-cache, must-revalidate",
+    "pragma":"no-cache",
+    ...(allowed?{"access-control-allow-origin":allowed,"access-control-allow-credentials":"true","vary":"Origin"}:{}),
+    ...headers
+  }});
 }
 function cleanEmail(v: unknown) { return String(v ?? "").trim().toLowerCase().slice(0,160); }
 function cleanName(v: unknown) { return String(v ?? "").trim().replace(/[<>]/g,"").slice(0,80); }
@@ -1442,6 +1450,16 @@ export default {
           }
           return json({ok:true});
         }
+        if(request.method==="OPTIONS" && url.pathname.startsWith("/api/")){
+          return new Response(null,{status:204,headers:{
+            "access-control-allow-origin":"https://thanaweya.sheenomatp.workers.dev",
+            "access-control-allow-credentials":"true",
+            "access-control-allow-methods":"GET,POST,PUT,DELETE,OPTIONS",
+            "access-control-allow-headers":"content-type",
+            "access-control-max-age":"86400",
+            "cache-control":"no-store"
+          }});
+        }
         if(url.pathname==="/api/health") {
           try { await ensureSchema(env); await env.DB.prepare("SELECT 1 AS ok").first(); return json({ok:true,db:true}); }
           catch(e) { console.error("D1 health check failed",e); return json({ok:false,db:false,error:"D1 binding/database is not available. Check the DB binding in Cloudflare."},503); }
@@ -1480,8 +1498,10 @@ export default {
           ctx.waitUntil(sendAdminAlert(env,"👤 تسجيل مستخدم جديد","👤 "+p.name+"\n✉️ "+email+"\n📱 "+String(p.phone||"غير مرتبط"),"new_user",0));
           const token=await createSession(id,env); return json({user:{id,email,name:p.name,phone:p.phone||null}},200,{"set-cookie":sessionCookie(token)});
         }
-        if(url.pathname==="/api/auth/forgot/start" && request.method==="POST") {
-          const b=await body(request), email=cleanEmail(b?.email), u=await env.DB.prepare("SELECT id FROM users WHERE email=?").bind(email).first<any>();
+        if(url.pathname==="/api/auth/forgot/start" && (request.method==="POST"||request.method==="GET")) {
+          const b=request.method==="POST"?await body(request):null;
+          const email=cleanEmail(request.method==="GET"?url.searchParams.get("email"):b?.email);
+          const u=await env.DB.prepare("SELECT id FROM users WHERE email=?").bind(email).first<any>();
           if(u){
             const code=generateOtpCode(),now=Date.now();
             await env.DB.prepare("DELETE FROM auth_codes WHERE email=? AND type='reset'").bind(email).run();
