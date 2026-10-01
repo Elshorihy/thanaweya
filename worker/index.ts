@@ -165,83 +165,52 @@ async function sendEmailOtp(env:Env,email:string,code:string,type:"register"|"re
   if(!base||!secret) throw new Error("Gmail غير مفعّل حاليًا");
 
   let url:URL;
-  try{
-    url=new URL(base);
-  }catch{
-    throw new Error("رابط GOOGLE_APPS_SCRIPT_URL غير صحيح.");
-  }
+  try{ url=new URL(base); }catch{ throw new Error("رابط GOOGLE_APPS_SCRIPT_URL غير صحيح."); }
+  if(url.pathname.endsWith("/dev")) throw new Error("GOOGLE_APPS_SCRIPT_URL يجب أن ينتهي بـ /exec وليس /dev.");
 
   const requestId=randomHex(20);
   const payload={action:"otp",type,email,code,otpCode:code,secret,requestId};
 
   function parseResponse(raw:string){
-    const cleaned=raw.replace(/^\\uFEFF/,"").trim();
+    const cleaned=raw.replace(/^\uFEFF/,"").trim();
+    if(!cleaned) return null;
     try{return JSON.parse(cleaned)}catch{return null}
   }
-
-  function resultError(data:any){
+  function apiError(data:any){
     return String(data?.error||data?.message||"فشل إرسال كود التحقق عبر Gmail").slice(0,400);
   }
-
-  async function inspectResponse(response:Response){
+  async function inspect(response:Response){
     const raw=await response.text();
     const data=parseResponse(raw);
-    if(data?.ok===true || data?.success===true || data?.sent===true || data?.status==="sent" || data?.status==="ok"){
-      return {ok:true,data,raw};
-    }
-    if(data?.ok===false || data?.success===false || data?.status==="error"){
-      return {ok:false,kind:"api",error:resultError(data),raw};
-    }
-    return {ok:false,kind:"nonjson",error:"",raw};
+    if(data?.ok===true||data?.success===true||data?.sent===true||data?.status==="sent"||data?.status==="ok") return {ok:true};
+    if(data?.ok===false||data?.success===false||data?.status==="error") return {ok:false,kind:"api",error:apiError(data)};
+    return {ok:false,kind:"nonjson",status:response.status,contentType:response.headers.get("content-type")||"",sample:raw.replace(/\s+/g," ").slice(0,180)};
+  }
+  async function getCall(){
+    const u=new URL(url.toString());
+    for(const [key,value] of Object.entries(payload)) u.searchParams.set(key,String(value));
+    return fetch(u.toString(),{method:"GET",redirect:"follow",headers:{accept:"application/json,text/plain,*/*"},cf:{cacheTtl:0,cacheEverything:false}} as RequestInit);
+  }
+  async function postCall(){
+    return fetch(url.toString(),{method:"POST",redirect:"follow",headers:{"content-type":"application/json; charset=utf-8",accept:"application/json,text/plain,*/*"},body:JSON.stringify(payload),cf:{cacheTtl:0,cacheEverything:false}} as RequestInit);
   }
 
-  async function call(method:"GET"|"POST"){
-    if(method==="GET"){
-      const getUrl=new URL(url.toString());
-      for(const [key,value] of Object.entries(payload)) getUrl.searchParams.set(key,String(value));
-      return fetch(getUrl.toString(),{
-        method:"GET",
-        redirect:"follow",
-        headers:{accept:"application/json,text/plain,*/*"},
-        cf:{cacheTtl:0,cacheEverything:false}
-      } as RequestInit);
-    }
-
-    return fetch(url.toString(),{
-      method:"POST",
-      redirect:"follow",
-      headers:{
-        "content-type":"application/json; charset=utf-8",
-        accept:"application/json,text/plain,*/*"
-      },
-      body:JSON.stringify(payload),
-      cf:{cacheTtl:0,cacheEverything:false}
-    } as RequestInit);
-  }
-
-  let firstFailure="";
-  let firstKind="";
-  for(const method of ["POST","GET"] as const){
+  let last:any=null;
+  // Apps Script ContentService is confirmed working through doGet; try GET first.
+  for(const call of [getCall,postCall]){
     try{
-      const response=await call(method);
-      const result=await inspectResponse(response);
+      const response=await call();
+      const result=await inspect(response);
       if(result.ok) return;
-      if(result.kind==="api"){
-        throw new Error(result.error);
-      }
-      firstFailure=firstFailure||("HTTP "+response.status);
-      firstKind=firstKind||"nonjson";
+      if(result.kind==="api") throw new Error(result.error);
+      last=result;
     }catch(e){
-      const message=e instanceof Error?e.message:String(e);
-      if(message && !/^HTTP \\d+$/.test(message)) {
-        if(method==="POST" && /405|method not allowed/i.test(message)) continue;
-        throw new Error(message);
-      }
+      throw new Error(e instanceof Error?e.message:String(e));
     }
   }
-
-  if(firstKind==="nonjson"){
-    throw new Error("Google Apps Script لم يرجّع JSON من Web App (آخر HTTP: "+firstFailure+"). تأكد أن GOOGLE_APPS_SCRIPT_URL هو رابط /exec المنشور كـ Web App وأن الوصول مضبوط على Anyone.");
+  if(last?.kind==="nonjson"){
+    const extra=last.sample?" الرد: "+last.sample:"";
+    throw new Error("Google Apps Script أعاد HTTP "+String(last.status)+" لكن الرد ليس JSON."+extra);
   }
   throw new Error("تعذر إرسال كود التحقق عبر Google Apps Script.");
 }
