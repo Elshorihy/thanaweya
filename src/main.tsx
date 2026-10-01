@@ -17,14 +17,14 @@ type Mistake={id:string;questionId?:string;subjectId:string;question:string;reas
 type Settings={navOrder?:string[];theme:'dark'|'light'|'system';language:'ar'|'en';dailyStudyMinutes:number;restDays:number[];notificationTime:string;startTime:string;sessionMinutes:number;minDailyMinutes:number;dailyTasks:number;focus:number;break:number;morning:boolean;study:boolean;overdue:boolean;review:boolean;endDay:boolean};
 type SiteAnnouncement={id:string;title:string;message:string;type:'first'|'fixed'|'temporary';placement:'top'|'center'|'modal';durationSec:number;buttonText:string;buttonUrl:string;expiresAt:number|null};
 type GlobalNotification={id:string;title:string;message:string;type:'info'|'success'|'warning'|'urgent';expiresAt:number|null;createdAt:number};
-type Store={profile:{name:string;grade:string;section:string;school:string;goal:string;whatsapp?:string};subjects:Subject[];units:Unit[];lessons:Lesson[];tasks:Task[];sessions:Session[];questions:Question[];mistakes:Mistake[];notes:Note[];lectures:Lecture[];trashLectures:Lecture[];xp:number;settings:Settings;onboarded:boolean;onboardStep:number;planStart:string;planEnd:string;sentNotifications:string[]};
+type Store={profile:{name:string;grade:string;section:string;school:string;goal:string;whatsapp?:string};subjects:Subject[];units:Unit[];lessons:Lesson[];tasks:Task[];sessions:Session[];questions:Question[];mistakes:Mistake[];notes:Note[];lectures:Lecture[];trashLectures:Lecture[];xp:number;challengeClaims:string[];settings:Settings;onboarded:boolean;onboardStep:number;planStart:string;planEnd:string;sentNotifications:string[]};
 const KEY='thanaweya-os-v3',id=()=>crypto.randomUUID(),today=()=>new Date().toISOString().slice(0,10);
-const initial:Store={profile:{name:'',grade:'الصف الثالث الثانوي',section:'',school:'',goal:'',whatsapp:''},subjects:[],units:[],lessons:[],tasks:[],sessions:[],questions:[],mistakes:[],notes:[],lectures:[],trashLectures:[],xp:0,onboarded:false,onboardStep:1,planStart:today(),planEnd:'',sentNotifications:[],settings:{navOrder:['home','focus','curriculum','plan','tasks','review','questions','mistakes','notes','lectures','mission','dna','memory','time','rpg','calendar','stats','achievements','settings'],theme:'dark',language:'ar',dailyStudyMinutes:180,restDays:[5],notificationTime:'19:00',startTime:'17:00',sessionMinutes:45,minDailyMinutes:30,dailyTasks:3,focus:25,break:5,morning:true,study:true,overdue:true,review:true,endDay:true}};
+const initial:Store={profile:{name:'',grade:'الصف الثالث الثانوي',section:'',school:'',goal:'',whatsapp:''},subjects:[],units:[],lessons:[],tasks:[],sessions:[],questions:[],mistakes:[],notes:[],lectures:[],trashLectures:[],xp:0,challengeClaims:[],onboarded:false,onboardStep:1,planStart:today(),planEnd:'',sentNotifications:[],settings:{navOrder:['home','focus','curriculum','plan','tasks','review','questions','mistakes','notes','lectures','mission','dna','memory','time','rpg','calendar','stats','achievements','settings'],theme:'dark',language:'ar',dailyStudyMinutes:180,restDays:[5],notificationTime:'19:00',startTime:'17:00',sessionMinutes:45,minDailyMinutes:30,dailyTasks:3,focus:25,break:5,morning:true,study:true,overdue:true,review:true,endDay:true}};
 function clean(v:string){return v.replace(/[<>]/g,'').trim().slice(0,500)}
 function validPersonName(v:string){return /^[\p{L}]+(?:[\p{L}.'-]*)(?:\s+[\p{L}]+(?:[\p{L}.'-]*))*$/u.test(v.trim())}
 function validUrl(v:string){try{const u=new URL(v.trim());return u.protocol==='http:'||u.protocol==='https:'}catch{return false}}
 function fieldError(msg:string){return <p className="fieldError" role="alert">⚠️ {msg}</p>}
-function load():Store{try{const x=JSON.parse(localStorage.getItem(KEY)||'null');return x?({...initial,...x,notes:Array.isArray(x.notes)?x.notes:[],lectures:Array.isArray(x.lectures)?x.lectures:[],trashLectures:Array.isArray(x.trashLectures)?x.trashLectures:[],settings:{...initial.settings,...x.settings}}):initial}catch{return initial}}
+function load():Store{try{const x=JSON.parse(localStorage.getItem(KEY)||'null');return x?({...initial,...x,notes:Array.isArray(x.notes)?x.notes:[],lectures:Array.isArray(x.lectures)?x.lectures:[],trashLectures:Array.isArray(x.trashLectures)?x.trashLectures:[],challengeClaims:Array.isArray(x.challengeClaims)?x.challengeClaims:[],settings:{...initial.settings,...x.settings}}):initial}catch{return initial}}
 function addDays(ds:string,n:number){const d=new Date(ds);d.setDate(d.getDate()+n);return d.toISOString().slice(0,10)}
 function priority(t:Task){return(t.date<today()?100:0)+(t.priority==='high'?30:t.priority==='medium'?20:10)}
 function calcStreak(s:Store){let n=0,d=new Date();for(;;){const ds=d.toISOString().slice(0,10),m=s.sessions.filter(x=>x.date===ds).reduce((a,x)=>a+x.duration,0);if(m<s.settings.minDailyMinutes)break;n++;d.setDate(d.getDate()-1);if(n>366)break}return n}
@@ -275,7 +275,25 @@ function App(){
  return()=>{if(timer)window.clearTimeout(timer);observer?.disconnect();media?.removeEventListener?.('change',onThemeChange)};
 },[s.settings.language,s.settings.theme]);
  useEffect(()=>{if('serviceWorker'in navigator)navigator.serviceWorker.register('/sw.js?v=13',{updateViaCache:'none'}).catch(()=>{});const h=(e:any)=>{e.preventDefault();setInstallEvent(e)};window.addEventListener('beforeinstallprompt',h);const installed=()=>setInstallEvent(null);window.addEventListener('appinstalled',installed);return()=>{window.removeEventListener('beforeinstallprompt',h);window.removeEventListener('appinstalled',installed)}},[]);
-useEffect(()=>{if(!auth||!('Notification'in window)||!('serviceWorker'in navigator)||!('PushManager'in window)||Notification.permission!=='granted')return;let cancelled=false;(async()=>{try{const registration=await navigator.serviceWorker.ready;const subscription=await registration.pushManager.getSubscription();if(!subscription)return;const response=await fetch('/api/push/subscribe',{method:'POST',credentials:'include',headers:{'content-type':'application/json'},body:JSON.stringify({subscription:subscription.toJSON(),userAgent:navigator.userAgent})});if(!cancelled&&!response.ok)console.warn('Push subscription sync failed',await response.text().catch(()=>''));}catch(e){if(!cancelled)console.warn('Push subscription sync failed',e)}})();return()=>{cancelled=true}},[auth]);
+async function syncPushSubscription(){
+ if(!auth||!('Notification'in window)||!('serviceWorker'in navigator)||!('PushManager'in window)||Notification.permission!=='granted')return false;
+ const keyResponse=await fetch('/api/push/public-key',{cache:'no-store'});
+ const keyData=await keyResponse.json().catch(()=>({}));
+ if(!keyResponse.ok||!keyData?.publicKey)throw new Error(keyData?.error||'إشعارات Push غير مفعّلة على الخادم.');
+ const registration=await navigator.serviceWorker.register('/sw.js?v=13',{updateViaCache:'none'});
+ await navigator.serviceWorker.ready;
+ let subscription=await registration.pushManager.getSubscription();
+ if(!subscription){
+   subscription=await registration.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:pushBase64ToBytes(String(keyData.publicKey))});
+ }
+ const saveResponse=await fetch('/api/push/subscribe',{method:'POST',credentials:'include',headers:{'content-type':'application/json'},body:JSON.stringify({subscription:subscription.toJSON(),userAgent:navigator.userAgent})});
+ const saveData=await saveResponse.json().catch(()=>({}));
+ if(!saveResponse.ok)throw new Error(saveData?.error||'تعذر حفظ جهازك للإشعارات.');
+ return true;
+}
+useEffect(()=>{if(!auth)return;let cancelled=false;(async()=>{try{await syncPushSubscription()}catch(e){if(!cancelled)console.warn('Push subscription sync failed',e)}})();return()=>{cancelled=true}},[auth?.id]);
+
+
  useEffect(()=>{if(!running||!focusEnd)return;let cancelled=false;const key='thanaweya_focus_end';try{localStorage.setItem(key,String(focusEnd))}catch{};const tick=()=>{if(cancelled)return;const end=Number(localStorage.getItem(key)||focusEnd);const left=Math.max(0,Math.ceil((end-Date.now())/1000));setFocusLeft(left);if(left<=0){cancelled=true;try{localStorage.removeItem(key)}catch{};setRunning(false);setFocusEnd(null);addSession(Math.max(1,Math.round(focusTotalSeconds/60)),'focus',focusSubjectId,focusLessonId||undefined);notify('🔥 خلصت جلسة المذاكرة!');setFocusLeft(s.settings.break*60);return}window.setTimeout(tick,200)};tick();const sync=()=>{if(document.visibilityState==='visible'||document.hasFocus())tick()};document.addEventListener('visibilitychange',sync);window.addEventListener('focus',sync);return()=>{cancelled=true;document.removeEventListener('visibilitychange',sync);window.removeEventListener('focus',sync)}},[running,focusEnd,focusTotalSeconds,focusSubjectId,focusLessonId,s.settings.break]);
  useEffect(()=>{if(!s.onboarded)return;const check=()=>{const now=new Date(),hm=now.toTimeString().slice(0,5),ds=today();const send=(kind:string,msg:string,enabled:boolean)=>{const k=ds+'|'+kind;if(enabled&&!s.sentNotifications.includes(k)){notify(msg);setS(x=>({...x,sentNotifications:[...x.sentNotifications.slice(-150),k]}))}};if(hm===s.settings.notificationTime){const pending=s.tasks.filter(t=>t.date===ds&&t.status!=='completed').length;send('study','📚 وقت المذاكرة — عندك '+pending+' مهام النهارده.',s.settings.study)}if(hm===s.settings.startTime)send('morning','☀️ صباح الخير — خطتك لليوم جاهزة.',s.settings.morning);const overdue=s.tasks.filter(t=>t.date<ds&&t.status!=='completed').length;if(hm===s.settings.notificationTime&&overdue)send('overdue','⚠️ عندك '+overdue+' مهام متأخرة.',s.settings.overdue);const due=s.lessons.filter(l=>l.nextReviewAt&&l.nextReviewAt<=ds).length;if(hm===s.settings.notificationTime&&due)send('review','🧠 عندك '+due+' مراجعات مستحقة.',s.settings.review);if(hm==='23:00')send('end','📊 خلصت '+s.tasks.filter(t=>t.date===ds&&t.status==='completed').length+' مهام النهارده.',s.settings.endDay)};check();const timer=window.setInterval(check,15000);return()=>window.clearInterval(timer)},[s.onboarded,s.settings.notificationTime,s.settings.startTime,s.settings.study,s.settings.morning,s.settings.overdue,s.settings.review,s.settings.endDay,s.tasks,s.lessons,s.sentNotifications]);
  const lessonMap=useMemo(()=>Object.fromEntries(s.lessons.map(x=>[x.id,x])),[s.lessons]);const subMap=useMemo(()=>Object.fromEntries(s.subjects.map(x=>[x.id,x])),[s.subjects]);
@@ -315,47 +333,16 @@ useEffect(()=>{if(!auth||!('Notification'in window)||!('serviceWorker'in navigat
 }
  async function askNotify(){
   if(!auth){setNotice('سجّل الدخول أولًا لتفعيل إشعارات الأجهزة.');setTimeout(()=>setNotice(''),3500);return}
-  if(!('Notification'in window)||!('serviceWorker'in navigator)||!('PushManager'in window)){
-    setNotice('المتصفح الحالي لا يدعم إشعارات Push.');setTimeout(()=>setNotice(''),3500);return;
-  }
+  if(!('Notification'in window)||!('serviceWorker'in navigator)||!('PushManager'in window)){setNotice('المتصفح الحالي لا يدعم إشعارات Push.');setTimeout(()=>setNotice(''),3500);return}
   try{
     const permission=Notification.permission==='granted'?'granted':await Notification.requestPermission();
     if(permission!=='granted'){setNotice('لم يتم السماح بالإشعارات.');setTimeout(()=>setNotice(''),3500);return}
-    const keyResponse=await fetch('/api/push/public-key',{cache:'no-store'});
-    const keyData=await keyResponse.json().catch(()=>({}));
-    if(!keyResponse.ok||!keyData?.publicKey)throw new Error(keyData?.error||'إشعارات Push غير مفعّلة على الخادم.');
-    const registration=await navigator.serviceWorker.register('/sw.js?v=11',{updateViaCache:'none'});
-    await navigator.serviceWorker.ready;
-    let subscription=await registration.pushManager.getSubscription();
-    if(subscription){
-      const currentKey=(subscription.options as any)?.applicationServerKey;
-      if(!currentKey){
-        await subscription.unsubscribe();
-        subscription=null;
-      }
-    }
-    if(!subscription){
-      subscription=await registration.pushManager.subscribe({
-        userVisibleOnly:true,
-        applicationServerKey:pushBase64ToBytes(String(keyData.publicKey))
-      });
-    }
-    const saveResponse=await fetch('/api/push/subscribe',{
-      method:'POST',
-      credentials:'include',
-      headers:{'content-type':'application/json'},
-      body:JSON.stringify({subscription:subscription.toJSON(),userAgent:navigator.userAgent})
-    });
-    const saveData=await saveResponse.json().catch(()=>({}));
-    if(!saveResponse.ok)throw new Error(saveData?.error||'تعذر حفظ جهازك للإشعارات.');
+    await syncPushSubscription();
     const statusResponse=await fetch('/api/push/status',{credentials:'include',cache:'no-store'});
     const statusData=await statusResponse.json().catch(()=>({}));
-    if(!statusResponse.ok||Number(statusData?.devices||0)<1)throw new Error('تم إنشاء الاشتراك لكن السيرفر لم يسجل الجهاز بعد. جرّب التفعيل مرة أخرى.');
+    if(!statusResponse.ok||Number(statusData?.devices||0)<1)throw new Error('تم تفعيل الإشعارات لكن السيرفر لم يسجل الجهاز بعد. جرّب مرة أخرى.');
     await notify('🔔 تم تسجيل هذا الجهاز لإشعارات Thanaweya بنجاح.');
-  }catch(e){
-    setNotice(e instanceof Error?e.message:'تعذر تفعيل إشعارات الأجهزة.');
-    setTimeout(()=>setNotice(''),5000);
-  }
+  }catch(e){setNotice(e instanceof Error?e.message:'تعذر تفعيل إشعارات الأجهزة.');setTimeout(()=>setNotice(''),5000)}
 }
  function addSession(minutes:number,type:'focus'|'review'='focus',subjectId=s.subjects[0]?.id||'',lessonId?:string){update({sessions:[...s.sessions,{id:id(),date:today(),subjectId,duration:minutes,type,lessonId,startedAt:new Date().toISOString()}],xp:s.xp+(type==='review'?15:10)})}
  function completeTask(t:Task){if(t.status==='completed')return;const l=lessonMap[t.lessonId];const sessions=[...s.sessions,{id:id(),date:today(),subjectId:s.units.find(u=>u.id===l?.unitId)?.subjectId||'',lessonId:t.lessonId,duration:t.estimatedMinutes,type:'focus' as const}];update({tasks:s.tasks.map(x=>x.id===t.id?{...x,status:'completed'}:x),xp:s.xp+20,sessions})}
@@ -579,10 +566,10 @@ async function exportData(){try{const files:any[]=[];for(const v of [...s.lectur
     return {...common,kind:'subject',title:'Final Push',text:`ذاكر ${Math.min(180,mins+40)} دقيقة في «${subjectName}».`,target:Math.min(180,mins+40),unit:'دقيقة',subjectId};
   };
   const choose=()=>{let data:any={history:[],current:null};try{const raw=localStorage.getItem(storageKey);if(raw)data=JSON.parse(raw)}catch{}if(data.current?.date===day)return data;const history=Array.isArray(data.history)?data.history:[],recent=new Set(history.slice(-30).map((x:any)=>x.index));let index=hash(day+'|'+(auth?.id||auth?.email||'student'))%50000,tries=0;while(recent.has(index)&&tries<50000){index=(index+7919)%50000;tries++}data={history,current:{date:day,index,done:false,claimed:false}};localStorage.setItem(storageKey,JSON.stringify(data));return data};
-  const data=choose(),challenge=build(data.current.index),todayMinutes=s.sessions.filter(x=>x.date===day).reduce((a,x)=>a+x.duration,0),todayTasksDone=s.tasks.filter(x=>x.date===day&&x.status==='completed').length,todayReviews=s.lessons.filter(x=>x.lastReviewedAt===day).length,todaySessions=s.sessions.filter(x=>x.date===day).length,subjectMinutes=challenge.subjectId?s.sessions.filter(x=>x.date===day&&x.subjectId===challenge.subjectId).reduce((a,x)=>a+x.duration,0):0;
+  const data=choose(),challenge=build(data.current.index),challengeKey=day+':'+data.current.index,cloudClaimed=s.challengeClaims.includes(challengeKey),todayMinutes=s.sessions.filter(x=>x.date===day).reduce((a,x)=>a+x.duration,0),todayTasksDone=s.tasks.filter(x=>x.date===day&&x.status==='completed').length,todayReviews=s.lessons.filter(x=>x.lastReviewedAt===day).length,todaySessions=s.sessions.filter(x=>x.date===day).length,subjectMinutes=challenge.subjectId?s.sessions.filter(x=>x.date===day&&x.subjectId===challenge.subjectId).reduce((a,x)=>a+x.duration,0):0;
   const value=challenge.kind==='study'||challenge.kind==='focus'?todayMinutes:challenge.kind==='tasks'?todayTasksDone:challenge.kind==='review'?todayReviews:challenge.kind==='sessions'?todaySessions:challenge.kind==='subject'?subjectMinutes:streak,percent=Math.min(100,Math.round(value/challenge.target*100)),isDone=value>=challenge.target;
-  useEffect(()=>{setRevealed(false);setClaimed(Boolean(data.current.claimed))},[day,data.current.index]);
-  const claim=()=>{if(!isDone||data.current.claimed)return;const next={...data,current:{...data.current,done:true,claimed:true},history:[...data.history,{date:day,index:data.current.index}]};localStorage.setItem(storageKey,JSON.stringify(next));setClaimed(true);update({xp:s.xp+challenge.bonus});notify('🎁 التحدي اكتمل! +'+challenge.bonus+' XP')};
+  useEffect(()=>{setRevealed(false);setClaimed(Boolean(data.current.claimed||cloudClaimed))},[day,data.current.index,cloudClaimed]);
+  const claim=()=>{if(!isDone||data.current.claimed||cloudClaimed)return;const next={...data,current:{...data.current,done:true,claimed:true},history:[...data.history,{date:day,index:data.current.index}]};localStorage.setItem(storageKey,JSON.stringify(next));setClaimed(true);update({xp:s.xp+challenge.bonus,challengeClaims:Array.from(new Set([...s.challengeClaims,challengeKey])).slice(-180)});notify('🎁 التحدي اكتمل! +'+challenge.bonus+' XP')};
   return <section><Title title="⚡ تحدي اليوم" sub="واحد من 50,000 تحدي مذاكرة — تحدي جديد كل يوم." action={<button onClick={()=>{localStorage.removeItem(storageKey);setRevealed(false);setClaimed(false)}}><Zap/> تحدي جديد</button>}/><div className="challengeHero card"><div className="challengeTop"><span className="eyebrow">DAILY CHALLENGE • #${challenge.id}</span><span className="challengeRare">{challenge.bonus>=110?'👑 أسطوري':challenge.bonus>=80?'💜 نادر':'⭐ عادي'}</span></div>{!revealed?<div className="challengeLocked"><div className="challengeIcon">?</div><h1>🔒 تحديك مخفي</h1><p className="muted">مستعد تعرف مهمتك النهارده؟</p><button className="primary" onClick={()=>setRevealed(true)}><Gift/> اكشف التحدي</button></div>:<div className="challengeBody"><div className="challengeIcon">⚡</div><h1>{challenge.title}</h1><p>{challenge.text}</p><div className="challengeProgress"><div className="progress"><div style={{width:percent+'%'}}/></div><b>{value} / {challenge.target} {challenge.unit}</b></div><div className="challengeActions"><button className="primary" disabled={!isDone||claimed} onClick={claim}>{claimed?'🎉 تم استلام المكافأة':'🎁 استلام +'+challenge.bonus+' XP'}</button>{!isDone&&<span className="muted">كمّل هدفك من خلال المذاكرة الفعلية داخل الموقع.</span>}</div></div>}</div><div className="grid2"><Card title="🎲 بنك التحديات"><h2>50,000</h2><p className="muted">تحديات متنوعة بمستويات مختلفة، والطالب لا يرى نفس التحدي باستمرار.</p></Card><Card title="🔥 سلسلة التحدي"><h2>{streak} يوم</h2><p className="muted">الـStreak الدراسي الحالي. كل يوم عندك فرصة جديدة تكمل فيها التحدي.</p></Card></div><Card title="📜 آخر تحدياتك">{Array.isArray(data.history)&&data.history.length?data.history.slice(-8).reverse().map((x:any)=><div className="listrow" key={x.date+'-'+x.index}><div><b>⚡ تحدي #{x.index+1}</b><span>{x.date}</span></div><span>✓ مكتمل</span></div>):<Empty text="لسه مفيش تحديات مكتملة. اكشف تحديك الأول!"/>}</Card></section>;
 }
 function MissionControl(){const overdue=s.tasks.filter(t=>t.date<today()&&t.status!=='completed').length,due=s.lessons.filter(l=>l.nextReviewAt&&l.nextReviewAt<=today()).length,todayMin=todayTasks.reduce((a,t)=>a+t.estimatedMinutes,0);return <section><Title title="🛰️ غرفة العمليات" sub="كل ما تحتاجه لتعرف موقفك الحالي وتحدد مهمتك التالية."/><div className="missionHero card"><div><span className="eyebrow">MISSION CONTROL</span><h1>{s.profile.name||'طالب'} — جاهز للمهمة؟</h1><p>المطلوب اليوم: {todayTasks.length} مهام • {todayMin} دقيقة • {due} مراجعات</p></div><button className="primary" onClick={quickStudy}><Brain/> اختر مهمتي التالية</button></div><div className="statsgrid"><Stat title="تقدم المنهج" value={progress+'%'} icon={<BookOpen/>}/><Stat title="المتأخر" value={overdue} icon={<AlertTriangle/>}/><Stat title="مراجعات اليوم" value={due} icon={<Brain/>}/><Stat title="XP" value={s.xp} icon={<Trophy/>}/></div><div className="grid2"><Card title="🎯 مهمات اليوم">{todayTasks.length?todayTasks.slice(0,5).map(t=><TaskRow t={t} key={t.id}/>):<Empty text="لا توجد مهمات اليوم." action="تجهيز الأهداف" onClick={generateDailyTasks}/>}</Card><Card title="📡 حالة النظام"><div className="systemGrid"><b>المنهج <span>{progress}%</span></b><b>المهام <span>{todayTasks.length?Math.round(doneToday/todayTasks.length*100):0}%</span></b><b>الذاكرة <span>{s.lessons.length?Math.round(s.lessons.filter(l=>l.nextReviewAt&&l.nextReviewAt>today()).length/s.lessons.length*100):0}%</span></b><b>المستوى <span>{level}</span></b></div></Card></div></section>}
@@ -692,7 +679,29 @@ function Dashboard(){const due=s.lessons.filter(l=>l.nextReviewAt&&l.nextReviewA
    <p className="muted">عند إنهاء الجلسة، الوقت هيتسجل للجلسة تلقائيًا، ولو اخترت مادة هيتحسب وقتها عليها. مدة الراحة: {s.settings.break} دقيقة</p>
   </section>
  } function Stats(){const bySub=s.subjects.map(x=>({name:x.name,min:s.sessions.filter(a=>a.subjectId===x.id).reduce((z,a)=>z+a.duration,0)}));const byDay=Array.from({length:7},(_,i)=>{const ds=addDays(today(),-6+i);return {ds,min:s.sessions.filter(a=>a.date===ds).reduce((z,a)=>z+a.duration,0)}});return <section><Title title="الإحصائيات" sub="كل الأرقام مبنية على بياناتك الفعلية."/><div className="statsgrid"><Stat title="إجمالي الوقت" value={totalMin+' دقيقة'} icon={<Timer/>}/><Stat title="الدروس المكتملة" value={s.lessons.filter(x=>x.status==='completed').length} icon={<BookOpen/>}/><Stat title="المهام المكتملة" value={s.tasks.filter(x=>x.status==='completed').length} icon={<CheckSquare/>}/><Stat title="الأسئلة" value={s.questions.length} icon={<FileQuestion/>}/><Stat title="Current Streak" value={streak} icon={<Trophy/>}/><Stat title="Longest Streak" value={longestStreak(s)} icon={<Trophy/>}/><Stat title="Overall Progress" value={progress+'%'} icon={<BarChart3/>}/></div><Card title="وقت المذاكرة حسب المادة">{bySub.map(x=><div className="barrow" key={x.name}><span>{x.name}</span><div><i style={{width:(totalMin?x.min/totalMin*100:0)+'%'}}/></div><b>{x.min}د</b></div>)}</Card><Card title="وقت المذاكرة آخر 7 أيام"><div className="weeklybars">{byDay.map(x=><div key={x.ds}><div className="vbar"><i style={{height:Math.min(100,x.min/Math.max(1,...byDay.map(y=>y.min))*100)+'%'}}/></div><small>{x.min}د</small></div>)}</div></Card></section>}
- function Achievements(){const doneTasks=s.tasks.filter(x=>x.status==='completed').length,defs=[['first','أول جلسة مذاكرة',s.sessions.length>0],['tasks10','أول 10 مهام',doneTasks>=10],['questions100','أول 100 سؤال',s.questions.length>=100],['streak3','3 أيام Streak',streak>=3],['streak7','7 أيام Streak',streak>=7],['streak30','30 يوم Streak',streak>=30],['week','أول أسبوع كامل',longestStreak(s)>=7],['subject','إنهاء أول مادة',s.subjects.some(sub=>{const ls=s.lessons.filter(l=>s.units.find(u=>u.id===l.unitId)?.subjectId===sub.id);return ls.length>0&&ls.every(l=>l.status==='completed')})],['half','إنهاء 50% من المنهج',progress>=50],['finish','إنهاء المنهج',progress===100&&s.lessons.length>0]];return <section><Title title="إنجازاتي" sub="تفتح تلقائيًا حسب بياناتك الحقيقية."/><div className="achievementGrid">{defs.map(([k,n,ok])=><div className={'achievement card '+(ok?'unlocked':'')} key={String(k)}><Trophy/><b>{n}</b><span>{ok?'مفتوح':'مغلق'}</span></div>)}</div></section>}
+ function Achievements(){
+ const doneTasks=s.tasks.filter(x=>x.status==='completed');
+ const badgeDefs=[
+  {id:'beginner',name:'مبتدئ',icon:'🌱',min:0,max:99},
+  {id:'below',name:'أقل من المتوسط',icon:'🟤',min:100,max:299},
+  {id:'average',name:'متوسط',icon:'🟢',min:300,max:599},
+  {id:'above',name:'أعلى من المتوسط',icon:'🔵',min:600,max:999},
+  {id:'excellent',name:'متفوق',icon:'🟣',min:1000,max:1999},
+  {id:'genius',name:'نابغ',icon:'👑',min:2000,max:Infinity}
+ ];
+ const currentBadge=badgeDefs.find(b=>s.xp>=b.min&&s.xp<=b.max)||badgeDefs[0];
+ const defs=[['first','أول جلسة مذاكرة',s.sessions.length>0],['tasks10','أول 10 مهام',doneTasks.length>=10],['questions100','أول 100 سؤال',s.questions.length>=100],['streak3','3 أيام Streak',streak>=3],['streak7','7 أيام Streak',streak>=7],['streak30','30 يوم Streak',streak>=30],['week','أول أسبوع كامل',longestStreak(s)>=7],['subject','إنهاء أول مادة',s.subjects.some(sub=>{const ls=s.lessons.filter(l=>s.units.find(u=>u.id===l.unitId)?.subjectId===sub.id);return ls.length>0&&ls.every(l=>l.status==='completed')})],['half','إنهاء 50% من المنهج',progress>=50],['finish','إنهاء المنهج',progress===100&&s.lessons.length>0]];
+ return <section>
+  <Title title="🏅 الشارات والإنجازات" sub="ترتيب الشارات من المبتدئ حتى نابغ يعتمد على XP المكتسب من نشاطك داخل الموقع."/>
+  <Card title="🎖️ مستواك الحالي">
+   <div className="badgeGrid">{badgeDefs.map(b=><div className={'badgeCard '+(b.id===currentBadge.id?'active':'')} key={b.id}><div className="badgeIcon">{b.icon}</div><b>{b.name}</b><span>{b.id===currentBadge.id?'الشارة الحالية':'XP '+b.min+(Number.isFinite(b.max)?' — '+b.max:'+')}</span></div>)}</div>
+   <p className="muted">XP الحالي: <strong>{s.xp}</strong> • الشارة الحالية: <strong>{currentBadge.name}</strong></p>
+  </Card>
+  <Card title="🏆 الإنجازات">
+   <div className="achievementGrid">{defs.map(([k,n,ok])=><div className={'achievement card '+(ok?'unlocked':'')} key={String(k)}><Trophy/><b>{n}</b><span>{ok?'مفتوح':'مغلق'}</span></div>)}</div>
+  </Card>
+ </section>
+}
  function SettingsPage(){const dragKey=settingsDragKey,dropKey=settingsDropKey;const setDragKey=setSettingsDragKey,setDropKey=setSettingsDropKey;const finishDrag=()=>{if(dragKey&&dropKey&&dragKey!==dropKey){const a=[...(s.settings.navOrder||nav.map(x=>x[0]))],fi=a.indexOf(dragKey),ti=a.indexOf(dropKey);if(fi>=0&&ti>=0){a.splice(fi,1);a.splice(ti,0,dragKey);update({settings:{...s.settings,navOrder:a}})}}setDragKey(null);setDropKey(null)};return <section><Title title="الإعدادات" sub="المظهر، الإشعارات، الحساب، الخطة والنسخ الاحتياطي."/><div className="settingsgrid"><Card title="👤 المعلومات الشخصية"><div className="accountInfoGrid">
  <label>البريد الإلكتروني<input value={auth?.email||''} readOnly aria-readonly="true" placeholder="سجّل الدخول أولًا"/></label>
  <label>الاسم<input data-focus-key="settings-account-name" value={s.profile.name} onChange={e=>update({profile:{...s.profile,name:clean(e.target.value)}})} /></label>
