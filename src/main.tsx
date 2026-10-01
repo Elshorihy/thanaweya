@@ -291,8 +291,17 @@ useEffect(()=>{if(!auth||!('Notification'in window)||!('serviceWorker'in navigat
    const r=await fetch('/api/account/profile',{method:'PUT',credentials:'include',headers:{'content-type':'application/json'},body:JSON.stringify({name:nextName,phone:nextPhone})});
    const d=await r.json().catch(()=>({}));
    if(!r.ok)throw new Error(d?.error||'تعذر حفظ المعلومات الشخصية.');
+   const nextProfile={...s.profile,name:d.user.name,whatsapp:d.user.phone||''};
+   const nextState={...s,profile:nextProfile};
    setAuth(d.user);
-   update({profile:{...s.profile,name:d.user.name,whatsapp:d.user.phone||''}});
+   setS(nextState);
+   try{
+    const syncResponse=await fetch('/api/data',{method:'PUT',credentials:'include',headers:{'content-type':'application/json'},body:JSON.stringify({data:nextState})});
+    if(!syncResponse.ok)throw new Error('تعذر مزامنة المعلومات الشخصية.');
+   }catch(syncError){
+    console.warn('Profile cloud sync failed',syncError);
+    throw syncError;
+   }
    setNotice('تم حفظ المعلومات الشخصية بنجاح.');
    setTimeout(()=>setNotice(''),3000);
   }catch(e){setNotice(e instanceof Error?e.message:'تعذر حفظ المعلومات الشخصية.');setTimeout(()=>setNotice(''),4000)}
