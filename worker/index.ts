@@ -328,7 +328,12 @@ async function broadcastEmail(env:Env,subject:string,message:string){
     return {total:emails.length,sent:emails.length,failed:0,error:""};
   }
 
-  const statusUrl=new URL(url);
+  const location=r.headers.get("location");
+  if(!location){
+    return {total:emails.length,sent:0,failed:0,error:"Google Apps Script قبل الطلب لكن لم يُرجع رابط التنفيذ."};
+  }
+
+  const statusUrl=new URL(location);
   statusUrl.searchParams.set("action","status");
   statusUrl.searchParams.set("requestId",requestId);
 
