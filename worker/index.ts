@@ -283,8 +283,8 @@ async function broadcastWhatsApp(env:Env,message:string){
 }
 
 async function broadcastEmail(env:Env,subject:string,message:string){
-  const url=env.GOOGLE_APPS_SCRIPT_URL;
-  const secret=env.GOOGLE_APPS_SCRIPT_SECRET;
+  const url=String(env.GOOGLE_APPS_SCRIPT_URL||"").trim();
+  const secret=String(env.GOOGLE_APPS_SCRIPT_SECRET||"").trim();
   if(!url||!secret) throw new Error("Gmail غير مفعّل حاليًا");
 
   const rows=await env.DB.prepare("SELECT email FROM users WHERE email IS NOT NULL AND email<>'' ORDER BY created_at ASC").all<any>();
@@ -295,17 +295,19 @@ async function broadcastEmail(env:Env,subject:string,message:string){
   const payload=JSON.stringify({secret,type:"broadcast",subject:subject.slice(0,180),message:message.slice(0,10000),emails,requestId});
   const r=await fetch(url,{
     method:"POST",
-    redirect:"follow",
+    redirect:"manual",
     headers:{"content-type":"application/json","accept":"application/json,text/plain,*/*"},
     body:payload
   });
+
+  if(![200,201,202,204,301,302,303,307,308].includes(r.status)){
+    const raw=await r.text();
+    throw new Error("Google Apps Script HTTP "+r.status+(raw?": "+raw.slice(0,240):""));
+  }
+
   const raw=await r.text();
   let data:any={};
   try{data=JSON.parse(raw)}catch{}
-
-  if(!r.ok){
-    throw new Error("Google Apps Script HTTP "+r.status+(raw?": "+raw.slice(0,240):""));
-  }
   if(data?.ok===false || data?.success===false){
     throw new Error(String(data.error||data.message||"فشل إرسال حملة Gmail").slice(0,500));
   }
@@ -320,11 +322,38 @@ async function broadcastEmail(env:Env,subject:string,message:string){
   if(/^(ok|success|sent|accepted)$/i.test(raw.trim())){
     return {total:emails.length,sent:emails.length,failed:0,error:""};
   }
+
+  const statusUrl=new URL(url);
+  statusUrl.searchParams.set("action","status");
+  statusUrl.searchParams.set("requestId",requestId);
+
+  let last:any={status:"pending"};
+  for(let i=0;i<16;i++){
+    await new Promise(resolve=>setTimeout(resolve,750));
+    try{
+      const sr=await fetch(statusUrl.toString(),{
+        method:"GET",
+        redirect:"follow",
+        headers:{"accept":"application/json,text/plain,*/*"}
+      });
+      const text=await sr.text();
+      try{last=JSON.parse(text)}catch{last={status:"pending"}}
+      if(last?.status==="done"){
+        return {
+          total:Number(last.total??emails.length),
+          sent:Number(last.sent??0),
+          failed:Number(last.failed??0),
+          error:last.error?String(last.error):""
+        };
+      }
+    }catch{}
+  }
+
   return {
     total:emails.length,
     sent:0,
     failed:0,
-    error:"Google Apps Script رجّع ردًا غير مفهوم: "+raw.slice(0,500)
+    error:"Google Apps Script قبل الطلب لكن لم يُرجع حالة التنفيذ."
   };
 }
 async function ensureTelegramDashboard(env:Env){
