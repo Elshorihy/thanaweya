@@ -168,89 +168,49 @@ async function sendEmailOtp(env:Env,email:string,code:string,type:"register"|"re
   try{ url=new URL(base); }catch{ throw new Error("رابط GOOGLE_APPS_SCRIPT_URL غير صحيح."); }
   if(url.pathname.endsWith("/dev")) throw new Error("GOOGLE_APPS_SCRIPT_URL يجب أن ينتهي بـ /exec وليس /dev.");
 
-  const requestId=randomHex(20);
-  const payload={action:"otp",type,email,code,otpCode:code,secret,requestId};
+  const u=new URL(url.toString());
+  u.searchParams.set("action","otp");
+  u.searchParams.set("type",type);
+  u.searchParams.set("email",email);
+  u.searchParams.set("code",code);
+  u.searchParams.set("otpCode",code);
+  u.searchParams.set("secret",secret);
+  u.searchParams.set("requestId",randomHex(20));
+  u.searchParams.set("_ts",String(Date.now()));
 
-  function parse(raw:string){
-    const cleaned=raw.replace(/^\\uFEFF/,"").trim();
-    if(!cleaned)return null;
-    try{return JSON.parse(cleaned)}catch{return null}
-  }
-  function isSuccess(data:any){
-    const message=String(data?.message||"").trim().toLowerCase();
-    return data?.sent===true ||
-      data?.status==="sent" ||
-      data?.status==="ok" ||
-      data?.result==="sent" ||
-      data?.accepted===true ||
-      (data?.ok===true && /otp email sent successfully|email sent successfully|تم إرسال.*كود|تم إرسال.*email/i.test(message));
-  }
-  function errorFrom(data:any){
-    return String(data?.error||data?.message||"فشل إرسال كود التحقق عبر Gmail").slice(0,400);
-  }
-  async function inspect(response:Response){
-    const raw=await response.text();
-    const data=parse(raw);
-    if(isSuccess(data))return {ok:true as const};
-    if(data?.ok===false||data?.success===false||data?.status==="error"){
-      return {ok:false as const,kind:"api" as const,error:errorFrom(data)};
-    }
-    return {ok:false as const,kind:"nonjson" as const,status:response.status,sample:raw.replace(/\\s+/g," ").slice(0,240)};
-  }
+  const response=await fetch(u.toString(),{
+    method:"GET",
+    redirect:"follow",
+    headers:{
+      "accept":"application/json,text/plain,*/*",
+      "cache-control":"no-cache"
+    },
+    cf:{cacheTtl:0,cacheEverything:false}
+  } as RequestInit);
 
-  async function callGet(){
-    const u=new URL(url.toString());
-    for(const [key,value] of Object.entries(payload))u.searchParams.set(key,String(value));
-    const response=await fetch(u.toString(),{
-      method:"GET",
-      redirect:"follow",
-      headers:{accept:"application/json,text/plain,*/*"},
-      cf:{cacheTtl:0,cacheEverything:false}
-    } as RequestInit);
-    return inspect(response);
+  const raw=await response.text();
+  const cleaned=raw.replace(/^\\uFEFF/,"").trim();
+  let data:any=null;
+  try{ data=JSON.parse(cleaned); }catch{}
+
+  if(data?.ok===true && (
+    data?.sent===true ||
+    data?.status==="sent" ||
+    data?.status==="ok" ||
+    data?.result==="sent" ||
+    data?.accepted===true ||
+    /otp email sent successfully|email sent successfully|تم إرسال.*كود|تم إرسال.*email/i.test(String(data?.message||""))
+  )) return;
+
+  if(data?.ok===false || data?.success===false || data?.status==="error"){
+    throw new Error(String(data?.error||data?.message||"Google Apps Script فشل في إرسال كود Gmail").slice(0,400));
   }
 
-  async function callPost(){
-    const response=await fetch(url.toString(),{
-      method:"POST",
-      redirect:"follow",
-      headers:{
-        "content-type":"application/json; charset=utf-8",
-        "accept":"application/json,text/plain,*/*"
-      },
-      body:JSON.stringify(payload),
-      cf:{cacheTtl:0,cacheEverything:false}
-    } as RequestInit);
-    return inspect(response);
+  const sample=cleaned.replace(/\s+/g," ").slice(0,300);
+  if(/ppConfig|accounts\.google\.com|ServiceLogin|Sign in/i.test(sample)){
+    throw new Error("Google Apps Script وصل، لكن حساب Google يحتاج تفويض Gmail داخل مشروع Apps Script. شغّل دالة تفويض Gmail مرة واحدة ثم أعد النشر.");
   }
-
-  let lastNetworkError="";
-  let lastBadResponse:any=null;
-
-  // Apps Script explicitly supports GET OTP. Try it first because it is the
-  // simplest Web App path and does not require a CORS-style POST preflight.
-  for(const call of [callGet,callPost]){
-    try{
-      const result=await call();
-      if(result.ok)return;
-      if(result.kind==="api")throw new Error(result.error);
-      lastBadResponse=result;
-    }catch(e){
-      const message=e instanceof Error?e.message:String(e);
-      if(message)lastNetworkError=message;
-      // Try the other transport before failing.
-    }
-  }
-
-  if(lastBadResponse?.kind==="nonjson"){
-    throw new Error("Google Apps Script أعاد HTTP "+String(lastBadResponse.status)+" لكن الرد ليس تأكيد إرسال."+(
-      lastBadResponse.sample?" الرد: "+lastBadResponse.sample:""
-    ));
-  }
-  if(lastNetworkError){
-    throw new Error("تعذر الاتصال بخدمة Gmail عبر Google Apps Script: "+lastNetworkError);
-  }
-  throw new Error("Google Apps Script لم يؤكد إرسال كود Gmail.");
+  throw new Error("Google Apps Script أعاد HTTP "+response.status+" لكن لم يؤكد إرسال كود Gmail."+(sample?" الرد: "+sample:""));
 }
 async function ensurePushSubscriptions(env:Env){
   await env.DB.prepare("CREATE TABLE IF NOT EXISTS push_subscriptions (id TEXT PRIMARY KEY,user_id TEXT NOT NULL,endpoint TEXT NOT NULL UNIQUE,p256dh TEXT NOT NULL,auth TEXT NOT NULL,user_agent TEXT,created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE)").run();
