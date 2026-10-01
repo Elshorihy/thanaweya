@@ -158,33 +158,29 @@ async function sendEmailOtp(env:Env,email:string,code:string,type:"register"|"re
 
   const requestId=randomHex(20);
   const payload=JSON.stringify({secret,email,code,otpCode:code,type:"otp",requestId});
-  const r=await fetch(url,{method:"POST",redirect:"manual",headers:{"content-type":"application/json","accept":"application/json"},body:payload});
+  const r=await fetch(url,{
+    method:"POST",
+    redirect:"follow",
+    headers:{"content-type":"application/json","accept":"application/json,text/plain,*/*"},
+    body:payload
+  });
+  const raw=await r.text();
+  let data:any={};
+  try{data=JSON.parse(raw)}catch{}
 
-  if(![301,302,303,307,308].includes(r.status) && !r.ok){
-    const raw=await r.text();
-    throw new Error("Google Apps Script HTTP "+r.status+(raw?": "+raw.slice(0,180):""));
+  if(!r.ok){
+    throw new Error("Google Apps Script HTTP "+r.status+(raw?": "+raw.slice(0,240):""));
   }
-
-  const statusUrl=new URL(url);
-  statusUrl.searchParams.set("action","status");
-  statusUrl.searchParams.set("requestId",requestId);
-
-  for(let i=0;i<8;i++){
-    await new Promise(resolve=>setTimeout(resolve,750));
-    try{
-      const sr=await fetch(statusUrl.toString(),{method:"GET",headers:{"accept":"application/json"}});
-      const raw=await sr.text();
-      let data:any={}; try{data=JSON.parse(raw)}catch{}
-      if(data?.status==="done"){
-        if(!data.ok) throw new Error(String(data.error||"فشل إرسال كود التحقق عبر Gmail").slice(0,300));
-        return;
-      }
-    }catch(e){
-      if(e instanceof Error && /فشل إرسال|Gmail/.test(e.message)) throw e;
-    }
+  if(data?.ok===true || data?.status==="done" || data?.success===true || data?.accepted===true){
+    return;
   }
-
-  throw new Error("تم إرسال طلب Gmail لكن لم يصل تأكيد التنفيذ. تأكد من نشر Google Apps Script كـ Web App وتشغيله بحسابك.");
+  if(data?.ok===false || data?.success===false){
+    throw new Error(String(data.error||data.message||"فشل إرسال كود التحقق عبر Gmail").slice(0,400));
+  }
+  if(/^(ok|success|sent|accepted)$/i.test(raw.trim())){
+    return;
+  }
+  throw new Error("Google Apps Script رجّع ردًا غير مفهوم بعد تنفيذ الطلب: "+raw.slice(0,240));
 }
 async function ensurePushSubscriptions(env:Env){
   await env.DB.prepare("CREATE TABLE IF NOT EXISTS push_subscriptions (id TEXT PRIMARY KEY,user_id TEXT NOT NULL,endpoint TEXT NOT NULL UNIQUE,p256dh TEXT NOT NULL,auth TEXT NOT NULL,user_agent TEXT,created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE)").run();
@@ -267,33 +263,38 @@ async function broadcastEmail(env:Env,subject:string,message:string){
 
   const requestId=randomHex(20);
   const payload=JSON.stringify({secret,type:"broadcast",subject:subject.slice(0,180),message:message.slice(0,10000),emails,requestId});
-  const r=await fetch(url,{method:"POST",redirect:"manual",headers:{"content-type":"application/json","accept":"application/json"},body:payload});
+  const r=await fetch(url,{
+    method:"POST",
+    redirect:"follow",
+    headers:{"content-type":"application/json","accept":"application/json,text/plain,*/*"},
+    body:payload
+  });
+  const raw=await r.text();
+  let data:any={};
+  try{data=JSON.parse(raw)}catch{}
 
-  if(![301,302,303,307,308].includes(r.status) && !r.ok){
-    const raw=await r.text();
-    throw new Error("Google Apps Script HTTP "+r.status+(raw?": "+raw.slice(0,180):""));
+  if(!r.ok){
+    throw new Error("Google Apps Script HTTP "+r.status+(raw?": "+raw.slice(0,240):""));
   }
-
-  const statusUrl=new URL(url);
-  statusUrl.searchParams.set("action","status");
-  statusUrl.searchParams.set("requestId",requestId);
-
-  for(let i=0;i<12;i++){
-    await new Promise(resolve=>setTimeout(resolve,750));
-    const sr=await fetch(statusUrl.toString(),{method:"GET",headers:{"accept":"application/json"}});
-    const raw=await sr.text();
-    let data:any={}; try{data=JSON.parse(raw)}catch{}
-    if(data?.status==="done"){
-      if(!data.ok) throw new Error(String(data.error||"فشل إرسال حملة Gmail").slice(0,500));
-      return {total:Number(data.total??emails.length),sent:Number(data.sent??0),failed:Number(data.failed??0),error:data.error?String(data.error):""};
-    }
+  if(data?.ok===false || data?.success===false){
+    throw new Error(String(data.error||data.message||"فشل إرسال حملة Gmail").slice(0,500));
   }
-
+  if(data?.status==="done" || data?.ok===true || data?.success===true || data?.accepted===true){
+    return {
+      total:Number(data.total??emails.length),
+      sent:Number(data.sent??(data.total??emails.length)),
+      failed:Number(data.failed??0),
+      error:data.error?String(data.error):""
+    };
+  }
+  if(/^(ok|success|sent|accepted)$/i.test(raw.trim())){
+    return {total:emails.length,sent:emails.length,failed:0,error:""};
+  }
   return {
     total:emails.length,
     sent:0,
     failed:0,
-    error:"تم استلام الطلب من Google Apps Script لكن لم يصل تأكيد التنفيذ. لم نعتبر أي رسالة مُرسلة."
+    error:"Google Apps Script رجّع ردًا غير مفهوم: "+raw.slice(0,500)
   };
 }
 async function ensureTelegramDashboard(env:Env){
