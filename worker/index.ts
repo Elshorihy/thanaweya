@@ -1614,8 +1614,9 @@ export default {
           }
           const b=await body(request); if(!b||typeof b.data!=="object") return json({error:"بيانات غير صالحة"},400);
           const serialized=JSON.stringify(b.data); if(serialized.length>900000) return json({error:"النسخة كبيرة جدًا"},413);
-          await env.DB.prepare("UPDATE user_data SET data_json=?,updated_at=? WHERE user_id=?").bind(serialized,Date.now(),u.id).run();
-          return json({ok:true,updatedAt:Date.now()});
+          const now=Date.now();
+          await env.DB.prepare("INSERT INTO user_data(user_id,data_json,updated_at) VALUES(?,?,?) ON CONFLICT(user_id) DO UPDATE SET data_json=excluded.data_json,updated_at=excluded.updated_at").bind(u.id,serialized,now).run();
+          return json({ok:true,updatedAt:now});
         }
         return json({error:"Not found"},404);
       } catch(e) {
@@ -1627,7 +1628,14 @@ export default {
         return json({error:"حدث خطأ في الخادم",detail:message.slice(0,240)},500);
       }
     }
-    if(url.pathname === "/" || url.pathname.includes(".")) return env.ASSETS.fetch(request);
+    if(url.pathname === "/" || url.pathname === "/index.html"){
+      const assetResponse=await env.ASSETS.fetch(request);
+      const headers=new Headers(assetResponse.headers);
+      headers.set("cache-control","no-store, no-cache, must-revalidate, max-age=0");
+      headers.set("pragma","no-cache");
+      return new Response(assetResponse.body,{status:assetResponse.status,statusText:assetResponse.statusText,headers});
+    }
+    if(url.pathname.includes(".")) return env.ASSETS.fetch(request);
     return new Response("الصفحة غير موجودة", {status:404, headers:{"content-type":"text/plain; charset=utf-8","cache-control":"no-store"}});
   }
 };
