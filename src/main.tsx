@@ -160,31 +160,11 @@ function SiteAnnouncementBanner({userId}:{userId?:string}){
  return <div className={'siteAnnouncement siteAnnouncement-'+a.placement} role="alert"><div className="siteAnnouncementIcon">📢</div><div className="siteAnnouncementBody"><strong>{a.title}</strong><p>{a.message}</p>{button}{a.type==='temporary'&&a.expiresAt&&<small>إعلان مؤقت</small>}</div><button onClick={close} aria-label="إغلاق"><X size={18}/></button></div>;
 }
 function App(){
- const focusRestoreRef=useRef<{key:string;start:number|null;end:number|null}|null>(null);
- useEffect(()=>{
-  const onFocus=(e:FocusEvent)=>{
-   const el=e.target as HTMLInputElement|HTMLTextAreaElement|null;
-   const key=el?.getAttribute?.('data-focus-key');
-   if(!el||!key)return;
-   focusRestoreRef.current={key,start:typeof el.selectionStart==='number'?el.selectionStart:null,end:typeof el.selectionEnd==='number'?el.selectionEnd:null};
-  };
-  document.addEventListener('focusin',onFocus);
-  return()=>document.removeEventListener('focusin',onFocus);
- },[]);
  const [globalLectures,setGlobalLectures]=useState<any[]>([]);
   const [s,setS]=useState<Store>(load),[page,setPage]=useState(()=>{try{return localStorage.getItem('thanaweya_page')||'home'}catch{return 'home'}}),[q,setQ]=useState(''),[modal,setModal]=useState<string|null>(null),[auth,setAuth]=useState<import('./auth').AuthUser|null>(null),[authChecked,setAuthChecked]=useState(false),[authMode,setAuthMode]=useState<'login'|'register'|'forgot'>('login'),[authStep,setAuthStep]=useState<'credentials'|'code'>('credentials'),[authName,setAuthName]=useState(''),[authEmail,setAuthEmail]=useState(''),[authPassword,setAuthPassword]=useState(''),[authNewPassword,setAuthNewPassword]=useState(''),[authCode,setAuthCode]=useState(''),[authPhone,setAuthPhone]=useState(''),[authBusy,setAuthBusy]=useState(false),authCodeRefs=useRef<Array<HTMLInputElement|null>>([]),[authErr,setAuthErr]=useState(''),[notice,setNotice]=useState(''),[focusLeft,setFocusLeft]=useState(1500),[running,setRunning]=useState(false),[focusEnd,setFocusEnd]=useState<number|null>(null),[quiz,setQuiz]=useState<Question[]>([]),[quizIndex,setQuizIndex]=useState(0),[quizScore,setQuizScore]=useState(0),[quizDone,setQuizDone]=useState(false),[calendarDate,setCalendarDate]=useState(new Date()),[installEvent,setInstallEvent]=useState<any>(null),[filter,setFilter]=useState({subject:'',status:'',difficulty:'',priority:'',date:''}),[focusSubjectId,setFocusSubjectId]=useState(''),[focusLessonId,setFocusLessonId]=useState(''),[focusMinutes,setFocusMinutes]=useState(()=>Math.min(180,Math.max(1,Number(s.settings.focus)||25))),[focusTotalSeconds,setFocusTotalSeconds]=useState(()=>Math.min(180,Math.max(1,Number(s.settings.focus)||25))*60); const [settingsDragKey,setSettingsDragKey]=useState<string|null>(null),[settingsDropKey,setSettingsDropKey]=useState<string|null>(null);
  const cloudSyncReadyRef=useRef(false),cloudSyncTimerRef=useRef<number|undefined>(undefined),cloudOwnerRef=useRef('');
 
- useLayoutEffect(()=>{
-  const saved=focusRestoreRef.current;
-  if(!saved)return;
-  const el=document.querySelector(`[data-focus-key="${saved.key}"]`) as HTMLInputElement|HTMLTextAreaElement|null;
-  if(!el)return;
-  if(document.activeElement!==el)el.focus({preventScroll:true});
-  if(saved.start!==null&&saved.end!==null&&typeof el.setSelectionRange==='function'){
-   try{el.setSelectionRange(saved.start,saved.end)}catch{}
-  }
- },[s]);
+
  useEffect(()=>{fetch('/api/global-lectures',{cache:'no-store'}).then(r=>r.ok?r.json():{lectures:[]}).then(d=>setGlobalLectures(Array.isArray(d?.lectures)?d.lectures:[])).catch(()=>{})},[]);
   useEffect(()=>{authMe().then(({user})=>{if(user){setAuth(user);setAuthName(user.name);setAuthPhone(user.phone||'')}}).catch(()=>{}).finally(()=>setAuthChecked(true))},[]);
  useEffect(()=>{
@@ -211,7 +191,23 @@ function App(){
     if(cancelled)return;
     if(!response.ok)throw new Error(payload?.error||'تعذر تحميل تقدم الحساب.');
     const cloud=payload?.data;
-    const hasCloudData=cloud&&typeof cloud==='object'&&Object.keys(cloud).length>0;
+    const hasMeaningfulData=(x:any)=>{
+      if(!x||typeof x!=='object')return false;
+      return Boolean(
+        (Array.isArray(x.subjects)&&x.subjects.length) ||
+        (Array.isArray(x.units)&&x.units.length) ||
+        (Array.isArray(x.lessons)&&x.lessons.length) ||
+        (Array.isArray(x.tasks)&&x.tasks.length) ||
+        (Array.isArray(x.sessions)&&x.sessions.length) ||
+        (Array.isArray(x.questions)&&x.questions.length) ||
+        (Array.isArray(x.mistakes)&&x.mistakes.length) ||
+        (Array.isArray(x.notes)&&x.notes.length) ||
+        (Array.isArray(x.lectures)&&x.lectures.length) ||
+        Number(x.xp||0)>0 ||
+        Boolean(x.onboarded)
+      );
+    };
+    const hasCloudData=hasMeaningfulData(cloud);
     if(hasCloudData){
       setS({...initial,...cloud,profile:{...initial.profile,...(cloud.profile||{}),name:auth.name,whatsapp:auth.phone||cloud?.profile?.whatsapp||''},settings:{...initial.settings,...(cloud.settings||{})}});
     }else{
