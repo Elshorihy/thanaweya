@@ -1580,6 +1580,28 @@ export default {
           const row=await env.DB.prepare("SELECT phone FROM user_phones WHERE user_id=?").bind(u.id).first<any>();
           return json({user:{id:u.id,email:u.email,name:u.name,phone:row?.phone||null}});
         }
+        if(url.pathname==="/api/account/profile" && (request.method==="GET"||request.method==="PUT")) {
+          const u=await userFrom(request,env); if(!u) return json({error:"يجب تسجيل الدخول"},401);
+          if(request.method==="GET") {
+            const row=await env.DB.prepare("SELECT phone FROM user_phones WHERE user_id=?").bind(u.id).first<any>();
+            return json({user:{id:u.id,email:u.email,name:u.name,phone:row?.phone||null}});
+          }
+          const b=await body(request), name=cleanName(b?.name);
+          if(!name) return json({error:"الاسم مطلوب"},400);
+          const phone=cleanPhone(b?.phone);
+          if(phone && !validPhone(phone)) return json({error:"رقم واتساب غير صالح"},400);
+          if(phone){
+            const exists=await env.DB.prepare("SELECT user_id FROM user_phones WHERE phone=? AND user_id<>?").bind(phone,u.id).first<any>();
+            if(exists)return json({error:"رقم واتساب مستخدم بالفعل"},409);
+          }
+          await env.DB.prepare("UPDATE users SET name=?,updated_at=? WHERE id=?").bind(name,Date.now(),u.id).run();
+          if(phone){
+            await env.DB.prepare("INSERT INTO user_phones(user_id,phone,updated_at) VALUES(?,?,?) ON CONFLICT(user_id) DO UPDATE SET phone=excluded.phone,updated_at=excluded.updated_at").bind(u.id,phone,Date.now()).run();
+          }else{
+            await env.DB.prepare("DELETE FROM user_phones WHERE user_id=?").bind(u.id).run();
+          }
+          return json({ok:true,user:{id:u.id,email:u.email,name,phone:phone||null}});
+        }
         if(url.pathname==="/api/auth/logout" && request.method==="POST") {
           const token=cookieValue(request); if(token) await env.DB.prepare("DELETE FROM sessions WHERE token_hash=?").bind(await sha256(token)).run();
           return json({ok:true},200,{"set-cookie":clearCookie()});
