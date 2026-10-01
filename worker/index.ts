@@ -152,8 +152,8 @@ async function greenApiCall(env:Env,phone:string,message:string){
 }
 
 async function sendEmailOtp(env:Env,email:string,code:string,type:"register"|"reset"){
-  const url=env.GOOGLE_APPS_SCRIPT_URL;
-  const secret=env.GOOGLE_APPS_SCRIPT_SECRET;
+  const url=String(env.GOOGLE_APPS_SCRIPT_URL||"").trim();
+  const secret=String(env.GOOGLE_APPS_SCRIPT_SECRET||"").trim();
   if(!url||!secret) throw new Error("Gmail غير مفعّل حاليًا");
 
   const requestId=randomHex(20);
