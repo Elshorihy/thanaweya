@@ -152,45 +152,46 @@ async function greenApiCall(env:Env,phone:string,message:string){
 }
 
 async function sendEmailOtp(env:Env,email:string,code:string,type:"register"|"reset"){
-  const url=String(env.GOOGLE_APPS_SCRIPT_URL||"").trim();
+  const base=String(env.GOOGLE_APPS_SCRIPT_URL||"").trim();
   const secret=String(env.GOOGLE_APPS_SCRIPT_SECRET||"").trim();
-  if(!url||!secret) throw new Error("Gmail غير مفعّل حاليًا");
+  if(!base||!secret) throw new Error("Gmail غير مفعّل حاليًا");
 
-  const payload=JSON.stringify({
-    secret,
-    email,
-    code,
-    otpCode:code,
-    type:"otp",
-    requestId:randomHex(20)
-  });
+  // Apps Script Web Apps commonly finish with Google's HTML redirect page.
+  // Use GET so Apps Script executes doGet(), and treat only an explicit JSON
+  // success response as success. Never mistake Google's HTML page for success.
+  const url=new URL(base);
+  url.searchParams.set("action","otp");
+  url.searchParams.set("type",type);
+  url.searchParams.set("email",email);
+  url.searchParams.set("code",code);
+  url.searchParams.set("otpCode",code);
+  url.searchParams.set("secret",secret);
+  url.searchParams.set("requestId",randomHex(20));
 
-  // Apps Script executes doPost() before returning its normal Web App
-  // redirect. Do not follow the redirect; a 30x here is an accepted execution.
-  const r=await fetch(url,{
-    method:"POST",
-    redirect:"manual",
-    headers:{
-      "content-type":"application/json",
-      "accept":"application/json,text/plain,*/*"
-    },
-    body:payload
-  });
-
-  if(r.status>=300 && r.status<400){
-    return;
+  let r:Response;
+  try{
+    r=await fetch(url.toString(),{
+      method:"GET",
+      redirect:"follow",
+      headers:{accept:"application/json,text/plain,*/*"},
+      cf:{cacheTtl:0,cacheEverything:false}
+    } as RequestInit);
+  }catch(e){
+    throw new Error("تعذر الاتصال بـ Google Apps Script: "+(e instanceof Error?e.message:String(e)).slice(0,300));
   }
 
   const raw=await r.text();
-  let data:any={};
+  let data:any=null;
   try{data=JSON.parse(raw)}catch{}
 
-  if(!r.ok){
-    throw new Error("Google Apps Script HTTP "+r.status+(raw?": "+raw.slice(0,240):""));
-  }
-  if(data?.ok===true || data?.success===true || data?.accepted===true) return;
+  if(data?.ok===true || data?.success===true || data?.sent===true) return;
   if(data?.ok===false || data?.success===false){
     throw new Error(String(data.error||data.message||"فشل إرسال كود التحقق عبر Gmail").slice(0,400));
+  }
+
+  const looksLikeGoogleHtml=/<!doctype html|<html[\\s>]/i.test(raw);
+  if(looksLikeGoogleHtml){
+    throw new Error("Google Apps Script لم يرجّع JSON من Web App. تأكد أن رابط GOOGLE_APPS_SCRIPT_URL هو رابط /exec المنشور كـ Web App وأن الوصول مضبوط على Anyone.");
   }
 
   throw new Error("Google Apps Script رجّع ردًا غير مفهوم: "+raw.slice(0,240));
