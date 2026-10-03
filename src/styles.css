@@ -478,3 +478,14 @@ input:invalid,textarea:invalid,select:invalid{border-color:#ef4444}
 @keyframes focusGlow{50%{transform:scale(1.08);opacity:.75}}
 @media(max-width:1050px){.weeklyScheduleGrid{grid-template-columns:repeat(7,145px)}}
 @media(max-width:600px){.scheduleHero{align-items:flex-start}.scheduleStats{min-width:90px}.scheduleHero h2{font-size:20px}.focusCore{min-height:400px}.focusCoreRing{width:280px;height:280px}.focusCoreInner{width:230px;height:230px}.focusCoreTicks i{transform:rotate(calc(var(--i)*10deg)) translateY(-132px);transform-origin:0 132px}.focusCoreInner strong{font-size:52px}.focusCoreProgress{width:210px}}
+
+/* Focus mode: the circular timer becomes the main screen after Start. */
+.focuspage.runningFocus .focusTopbar,.focuspage.runningFocus .focuscontext,.focuspage.runningFocus>p{display:none!important}
+.focuspage.runningFocus .focusCore{margin:10px auto 18px;min-height:430px;z-index:2}
+.focuspage.runningFocus .focusBlessing{order:0;margin:0 0 4px;z-index:3}
+.focuspage.runningFocus .focuscontrols{position:relative;z-index:3}
+.focuspage.runningFocus .focusCoreRing{width:360px;height:360px}
+.focuspage.runningFocus .focusCoreInner{width:292px;height:292px}
+.focuspage.runningFocus .focusCoreInner strong{font-size:68px}
+.mini>div{min-width:0;display:grid;gap:2px}.mini>div b{font-size:12px}.mini>div small{color:var(--muted);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:180px}
+@media(max-width:620px){.focuspage.runningFocus .focusCore{min-height:350px}.focuspage.runningFocus .focusCoreRing{width:290px;height:290px}.focuspage.runningFocus .focusCoreInner{width:235px;height:235px}.focuspage.runningFocus .focusCoreInner strong{font-size:52px}}
