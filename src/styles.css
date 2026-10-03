@@ -431,3 +431,50 @@ input:invalid,textarea:invalid,select:invalid{border-color:#ef4444}
 @keyframes focusPulse{50%{transform:scale(1.08);opacity:.45}100%{transform:scale(1)}}
 @keyframes orbitSpin{to{transform:rotate(360deg)}}
 @media(max-width:900px){.scheduleSlotsGrid{grid-template-columns:repeat(7,145px);padding-bottom:6px}.focusVisual-minimal .focusVisualDigits{font-size:64px}.focusVisual-digital .focusVisualDigits{font-size:56px}}
+
+/* v2 premium focus + standalone weekly schedule */
+.schedulePage{max-width:1400px;margin:0 auto}
+.scheduleHero{display:flex;align-items:center;justify-content:space-between;gap:20px;margin:18px 0;padding:22px}
+.scheduleHero h2{margin:5px 0 4px;font-size:24px}
+.scheduleStats{min-width:130px;text-align:center;padding:14px 18px;border:1px solid var(--border);border-radius:18px;background:var(--panel2)}
+.scheduleStats strong{display:block;font-size:30px}
+.scheduleStats span{font-size:11px;color:var(--muted)}
+.weeklyScheduleGrid{display:grid;grid-template-columns:repeat(7,minmax(150px,1fr));gap:10px;overflow-x:auto;padding-bottom:8px}
+.weeklyScheduleDay{min-height:310px;padding:12px;border:1px solid var(--border);border-radius:18px;background:var(--panel);transition:.2s}
+.weeklyScheduleDay.today{border-color:#8b5cf6;box-shadow:0 0 0 1px #8b5cf633,0 12px 35px #0003}
+.weeklyScheduleHead{display:flex;align-items:center;justify-content:space-between;padding-bottom:12px;border-bottom:1px solid var(--border)}
+.weeklyScheduleHead span{min-width:24px;height:24px;border-radius:999px;display:grid;place-items:center;background:var(--panel2);font-size:11px;color:var(--muted)}
+.scheduleEvent{position:relative;display:grid;grid-template-columns:48px 1fr;gap:9px;margin-top:10px;padding:10px 28px 10px 10px;border-radius:14px;background:linear-gradient(145deg,var(--panel2),var(--panel));border:1px solid var(--border);overflow:hidden}
+.scheduleEvent:before{content:"";position:absolute;inset-inline-start:0;top:0;bottom:0;width:3px;background:linear-gradient(180deg,#8b5cf6,#2563eb)}
+.scheduleEventTime{font-size:12px;font-weight:800}
+.scheduleEventTime small{display:block;color:var(--muted);font-weight:500;margin-top:2px}
+.scheduleEventBody{display:grid;gap:4px;min-width:0}
+.scheduleEventBody strong{font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.scheduleEventBody small{font-size:10px;color:var(--muted)}
+.scheduleEvent>button{position:absolute;top:5px;right:3px;padding:4px;color:#f87171}
+.scheduleEmpty{min-height:230px;display:grid;place-items:center;align-content:center;gap:4px;color:var(--muted)}
+.scheduleEmpty span{font-size:24px;opacity:.35}
+.scheduleEmpty small{font-size:11px}
+.focusTopbar{display:flex;align-items:center;justify-content:space-between;max-width:720px;margin:0 auto 8px}
+.focusStatusDot{font-size:11px;padding:6px 10px;border-radius:999px;background:var(--panel);border:1px solid var(--border);color:var(--muted)}
+.focusCore{width:min(88vw,430px);margin:14px auto 22px;position:relative;display:grid;place-items:center;min-height:470px}
+.focusCoreGlow{position:absolute;width:340px;height:340px;border-radius:50%;background:radial-gradient(circle,#7c3aed33 0%,#2563eb18 38%,transparent 70%);filter:blur(18px);animation:focusGlow 4s ease-in-out infinite}
+.focusCoreRing{position:relative;width:330px;height:330px;border-radius:50%;display:grid;place-items:center;background:conic-gradient(from -90deg,#8b5cf6 0deg,#2563eb calc(var(--focus-progress,0)*360deg),#263244 calc(var(--focus-progress,0)*360deg) 360deg);box-shadow:0 0 45px #7c3aed33,0 25px 70px #0005;padding:9px}
+.focusCoreRing:before{content:"";position:absolute;inset:9px;border-radius:50%;background:radial-gradient(circle at 50% 35%,#182033,var(--bg) 68%);box-shadow:inset 0 0 35px #0008}
+.focusCoreTicks{position:absolute;inset:0;border-radius:50%;z-index:2;pointer-events:none}
+.focusCoreTicks i{position:absolute;left:50%;top:50%;width:2px;height:8px;border-radius:2px;background:#ffffff33;transform:rotate(calc(var(--i)*10deg)) translateY(-157px);transform-origin:0 157px}
+.focusCoreTicks i:nth-child(3n){height:12px;background:#ffffff66}
+.focusCoreInner{position:relative;z-index:3;width:270px;height:270px;border-radius:50%;display:grid;place-items:center;align-content:center;gap:4px;text-align:center;background:radial-gradient(circle at 50% 30%,#202b43,var(--bg) 75%);box-shadow:inset 0 0 35px #0008}
+.focusCoreLabel{font-size:10px;letter-spacing:5px;color:#a78bfa;font-weight:800}
+.focusCoreInner strong{font-variant-numeric:tabular-nums;font-size:62px;line-height:1;font-weight:900;letter-spacing:2px}
+.focusCoreSubject{max-width:210px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted);font-size:12px}
+.focusCoreProgress{position:absolute;bottom:2px;width:240px;text-align:center;z-index:4}
+.focusCoreProgress span{font-size:11px;color:var(--muted)}
+.focusCoreProgress i{display:block;height:4px;margin-top:7px;border-radius:999px;background:var(--border);overflow:hidden}
+.focusCoreProgress i b{display:block;height:100%;width:calc((1 - var(--focus-progress,0))*100%);background:linear-gradient(90deg,#2563eb,#8b5cf6);border-radius:999px}
+.focusCore.isRunning .focusCoreRing{animation:focusBreath 3.5s ease-in-out infinite}
+.focusCore.isRunning .focusCoreGlow{animation:focusGlow 2.5s ease-in-out infinite}
+@keyframes focusBreath{50%{box-shadow:0 0 70px #7c3aed55,0 30px 90px #0006}}
+@keyframes focusGlow{50%{transform:scale(1.08);opacity:.75}}
+@media(max-width:1050px){.weeklyScheduleGrid{grid-template-columns:repeat(7,145px)}}
+@media(max-width:600px){.scheduleHero{align-items:flex-start}.scheduleStats{min-width:90px}.scheduleHero h2{font-size:20px}.focusCore{min-height:400px}.focusCoreRing{width:280px;height:280px}.focusCoreInner{width:230px;height:230px}.focusCoreTicks i{transform:rotate(calc(var(--i)*10deg)) translateY(-132px);transform-origin:0 132px}.focusCoreInner strong{font-size:52px}.focusCoreProgress{width:210px}}
