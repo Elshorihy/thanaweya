@@ -371,7 +371,33 @@ function deleteLesson(lid:string){
 }
  function addLesson(name:string,sid:string,unitName:string,m:number,p:Priority){name=clean(name);unitName=clean(unitName)||'الوحدة الأولى';if(!name||!sid)return;let u=s.units.find(x=>x.subjectId===sid&&x.name===unitName),units=s.units;if(!u){u={id:id(),subjectId:sid,name:unitName};units=[...units,u]}update({units,lessons:[...s.lessons,{id:id(),unitId:u.id,name,estimatedMinutes:Math.max(5,m),status:'not_started',priority:p}]});setModal(null)}
  function addTask(lessonId:string,date:string,m:number,p:Priority){if(!lessonId||!date)return;update({tasks:[...s.tasks,{id:id(),lessonId,date,estimatedMinutes:Math.max(5,m),status:'not_started',priority:p}]});setModal(null)}
- function schedule(){const startBase=s.planStart||today(),start=startBase<today()?today():startBase,end=s.planEnd||addDays(start,60),dates:string[]=[];for(let d=start;d<=end;d=addDays(d,1))if(!s.settings.restDays.includes(new Date(d).getDay()))dates.push(d);let tasks=s.tasks.filter(t=>t.status==='completed');let idx=0;for(const l of [...s.lessons].filter(x=>x.status!=='completed').sort((a,b)=>(b.priority==='high'?3:b.priority==='medium'?2:1)-(a.priority==='high'?3:a.priority==='medium'?2:1))){let remain=l.estimatedMinutes;while(remain>0&&idx<dates.length){const date=dates[idx],used=tasks.filter(t=>t.date===date).reduce((a,t)=>a+t.estimatedMinutes,0),capacity=Math.max(15,s.settings.dailyStudyMinutes),m=Math.min(remain,Math.max(15,capacity-used));if(m<=0){idx++;continue}tasks.push({id:id(),lessonId:l.id,date,estimatedMinutes:m,status:'not_started',priority:l.priority});remain-=m;if(used+m>=capacity||tasks.filter(t=>t.date===date).length>=s.settings.dailyTasks)idx++}}update({tasks});notify('تم إنشاء وإعادة توزيع الخطة حسب الوقت المتاح')}
+ function schedule(){
+ const startBase=s.planStart||today(),start=startBase<today()?today():startBase,end=s.planEnd||addDays(start,60),dates:string[]=[];
+ for(let d=start;d<=end;d=addDays(d,1))if(!s.settings.restDays.includes(new Date(d).getDay()))dates.push(d);
+ const completed=s.tasks.filter(t=>t.status==='completed'),tasks=[...completed];
+ const classSubjectsByDay=Array.from({length:7},(_,day)=>s.classSchedule.filter(x=>x.dayOfWeek===day).map(x=>x.subjectId).filter(Boolean) as string[]);
+ const subjectOfLesson=(lesson:Lesson)=>s.units.find(u=>u.id===lesson.unitId)?.subjectId||'';
+ const remaining=[...s.lessons].filter(x=>x.status!=='completed');
+ for(const date of dates){
+   const day=new Date(date).getDay(),preferred=classSubjectsByDay[day]||[];
+   let used=tasks.filter(t=>t.date===date).reduce((a,t)=>a+t.estimatedMinutes,0),count=tasks.filter(t=>t.date===date).length;
+   const capacity=Math.max(15,s.settings.dailyStudyMinutes);
+   while(used<capacity&&count<s.settings.dailyTasks&&remaining.length){
+     remaining.sort((a,b)=>{
+       const ap=preferred.includes(subjectOfLesson(a))?1:0,bp=preferred.includes(subjectOfLesson(b))?1:0;
+       if(ap!==bp)return bp-ap;
+       const pr=(x:Lesson)=>x.priority==='high'?3:x.priority==='medium'?2:1;
+       return pr(b)-pr(a);
+     });
+     const l=remaining[0],m=Math.min(l.estimatedMinutes,Math.max(15,capacity-used));
+     tasks.push({id:id(),lessonId:l.id,date,estimatedMinutes:m,status:'not_started',priority:l.priority,startTime:count===0?s.settings.startTime:undefined});
+     used+=m;count++;
+     if(m>=l.estimatedMinutes)remaining.shift(); else remaining[0]={...l,estimatedMinutes:l.estimatedMinutes-m};
+   }
+ }
+ update({tasks});
+ notify(s.classSchedule.length?'تم إنشاء جدول المذاكرة بناءً على جدول دروسك وتوزيع المواد على أيام الأسبوع.':'تم إنشاء وإعادة توزيع الخطة حسب الوقت المتاح');
+}
  function redistribute(){const keep=s.tasks.filter(t=>t.status==='completed');update({tasks:keep});setTimeout(schedule,0)}
  function rescue(min:number){const pool=s.tasks.filter(t=>t.status!=='completed').sort((a,b)=>priority(b)-priority(a)||a.date.localeCompare(b.date));let left=min,chosen:Task[]=[];for(const t of pool){if(left<=0)break;chosen.push(t);left-=Math.min(left,t.estimatedMinutes)}setModal(null);setNotice('خطة إنقاذ: '+(chosen.map(x=>lessonMap[x.lessonId]?.name).filter(Boolean).join(' ← ')||'لا توجد مهام مناسبة'))}
 function addClassSlot(title:string,dayOfWeek:number,startTime:string,endTime:string,subjectId?:string,notes?:string){if(!title.trim()||!startTime||!endTime)return;const toMin=(v:string)=>{const [h,m]=v.split(':').map(Number);return h*60+m};if(toMin(endTime)<=toMin(startTime)){notify('وقت النهاية لازم يكون بعد وقت البداية');return}update({classSchedule:[...s.classSchedule,{id:id(),title:clean(title),dayOfWeek,startTime,endTime,subjectId:subjectId||undefined,notes:notes?clean(notes):undefined}]});setModal(null);notify('تم حفظ موعد الدرس')}
@@ -666,7 +692,6 @@ function Dashboard(){const due=s.lessons.filter(l=>l.nextReviewAt&&l.nextReviewA
    {running&&<div className="focusBackgroundOverlay" aria-hidden="true"/>}
    {running&&<div className="focusBlessing">صل على النبي ﷺ</div>}
    <div className="focusTopbar"><span className="eyebrow">FOCUS MODE</span><span className="focusStatusDot">{running?'جلسة شغالة':'جاهز للتركيز'}</span></div>
-   <h1>{mm}:{ss}</h1>
    <div className="focuscontext card">
     <label>المادة <select value={focusSubjectId} disabled={running} onChange={e=>{setFocusSubjectId(e.target.value);setFocusLessonId('')}}>
       <option value="">بدون مادة (اختياري)</option>{s.subjects.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}
