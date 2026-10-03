@@ -396,3 +396,38 @@ input:invalid,textarea:invalid,select:invalid{border-color:#ef4444}
 .homeGreeting{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.studentBadge{display:inline-flex;align-items:center;gap:5px;font-size:.48em;line-height:1;padding:8px 12px;border-radius:999px;border:1px solid var(--border,#ffffff20);background:var(--card,#ffffff08);vertical-align:middle;white-space:nowrap;box-shadow:0 4px 14px rgba(0,0,0,.08)}
 
 .pushPrompt{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:16px;padding:16px 18px;border:1px solid var(--border,#ffffff20)}.pushPrompt p{margin:5px 0 0}.pushPrompt .primary{white-space:nowrap}@media(max-width:600px){.pushPrompt{align-items:stretch;flex-direction:column}.pushPrompt .primary{width:100%}}
+
+/* Personal class schedule + focus timer styles */
+.scheduleSlotsGrid{display:grid;grid-template-columns:repeat(7,minmax(120px,1fr));gap:10px;margin-top:10px;overflow-x:auto}
+.scheduleDay{min-height:110px;padding:12px;border:1px solid var(--border);border-radius:14px;background:var(--panel)}
+.scheduleDay>b{display:block;margin-bottom:8px}
+.scheduleSlot{position:relative;display:grid;gap:3px;padding:9px 28px 9px 9px;margin-top:7px;border-radius:11px;background:var(--panel2);border:1px solid var(--border)}
+.scheduleSlot span,.scheduleSlot small{font-size:11px;color:var(--muted)}
+.scheduleSlot strong{font-size:13px}
+.scheduleSlot button{position:absolute;top:4px;right:3px;padding:3px 6px;color:#f87171}
+.savedScheduleList{display:grid;gap:8px;margin-top:16px}
+.savedScheduleRow{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 12px;border:1px solid var(--border);border-radius:12px;background:var(--panel)}
+.savedScheduleRow>div{display:grid;gap:3px}
+.savedScheduleRow span,.savedScheduleRow small{color:var(--muted);font-size:12px}
+.focusStylePicker{display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:7px;margin:14px auto 8px}
+.focusStylePicker>span{width:100%;text-align:center;color:var(--muted);font-size:12px}
+.focusStylePicker button{border:1px solid var(--border);background:var(--panel);padding:7px 10px;font-size:12px}
+.focusStylePicker button.selected{border-color:#8b5cf6;box-shadow:0 0 0 2px #8b5cf633;background:#1d1730}
+.focusVisual{width:220px;height:220px;margin:18px auto;position:relative;display:grid;place-items:center;border-radius:50%;transition:.25s;overflow:hidden}
+.focusVisualDigits{font-variant-numeric:tabular-nums;font-size:46px;font-weight:900;letter-spacing:1px;z-index:2}
+.focusVisual-digital{width:min(92vw,430px);height:170px;border-radius:28px;background:linear-gradient(145deg,#111827,#1f2937);border:1px solid #334155;box-shadow:0 20px 60px #0008}
+.focusVisual-digital .focusVisualDigits{font-size:72px;letter-spacing:3px}
+.focusPulseDot{position:absolute;width:180px;height:180px;border-radius:50%;border:2px solid #8b5cf6;animation:focusPulse 2s ease-in-out infinite}
+.focusVisual-minimal{width:min(92vw,500px);height:150px;border-radius:24px;background:transparent}
+.focusVisual-minimal .focusVisualDigits{font-size:88px}
+.focusMinimalLabel{position:absolute;bottom:8px;font-size:10px;letter-spacing:6px;color:var(--muted)}
+.focusVisual-orbital{background:radial-gradient(circle at center,#1e1b4b 0 24%,transparent 25%),conic-gradient(from 0deg,#8b5cf6,#2563eb,#06b6d4,#8b5cf6);padding:8px}
+.focusVisual-orbital:before{content:"";position:absolute;inset:8px;border-radius:50%;background:var(--bg);z-index:0}
+.focusVisual-orbital .focusVisualDigits{z-index:2}
+.focusOrbitDot{position:absolute;width:12px;height:12px;border-radius:50%;background:#fff;top:8px;left:50%;transform-origin:0 102px;animation:orbitSpin 3s linear infinite}
+.focusVisual-flip{width:260px;height:150px;border-radius:22px;gap:0;background:transparent;overflow:visible}
+.focusVisual-flip .focusVisualDigits{padding:22px 24px;border-radius:16px;background:#111827;border:1px solid #334155;box-shadow:0 14px 35px #0008;font-size:52px;letter-spacing:2px}
+.focusFlipMark{position:absolute;top:-14px;right:-14px;font-size:22px}
+@keyframes focusPulse{50%{transform:scale(1.08);opacity:.45}100%{transform:scale(1)}}
+@keyframes orbitSpin{to{transform:rotate(360deg)}}
+@media(max-width:900px){.scheduleSlotsGrid{grid-template-columns:repeat(7,145px);padding-bottom:6px}.focusVisual-minimal .focusVisualDigits{font-size:64px}.focusVisual-digital .focusVisualDigits{font-size:56px}}
