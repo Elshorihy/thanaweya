@@ -439,8 +439,28 @@ input:invalid,textarea:invalid,select:invalid{border-color:#ef4444}
 .scheduleStats{min-width:130px;text-align:center;padding:14px 18px;border:1px solid var(--border);border-radius:18px;background:var(--panel2)}
 .scheduleStats strong{display:block;font-size:30px}
 .scheduleStats span{font-size:11px;color:var(--muted)}
-.weeklyScheduleGrid{display:grid;grid-template-columns:repeat(7,minmax(150px,1fr));gap:10px;overflow-x:auto;padding-bottom:8px}
-.weeklyScheduleDay{min-height:310px;padding:12px;border:1px solid var(--border);border-radius:18px;background:var(--panel);transition:.2s}
+.weeklyScheduleGrid{display:grid;grid-template-columns:1fr;gap:12px;overflow:visible;padding-bottom:8px}
+.weeklyScheduleDay{min-height:0;width:100%;padding:0;border:1px solid var(--border);border-radius:20px;background:linear-gradient(135deg,var(--panel),var(--panel2));transition:.2s;overflow:hidden;display:grid;grid-template-columns:minmax(150px,22%) 1fr;align-items:stretch}
+.weeklyScheduleDay:hover{transform:translateY(-1px);box-shadow:0 12px 32px #0002}
+.studyScheduleGrid .weeklyScheduleDay{grid-template-columns:190px 1fr;min-height:108px}
+.studyScheduleGrid .weeklyScheduleDay.today{box-shadow:0 0 0 1px #8b5cf633,0 14px 34px #0003}
+.studyScheduleGrid .weeklyScheduleHead{height:100%;padding:18px 20px;border-bottom:0;border-inline-end:1px solid var(--border);display:flex;flex-direction:column;align-items:flex-start;justify-content:center;gap:7px;background:linear-gradient(180deg,#8b5cf612,transparent)}
+.studyScheduleGrid .weeklyScheduleHead b{font-size:20px;line-height:1.2}
+.studyScheduleGrid .weeklyScheduleHead span{font-size:12px;padding:4px 9px;height:auto;width:auto}
+.studyScheduleGrid .studyEvent{margin:14px;padding:16px 38px 16px 16px;min-height:76px;grid-template-columns:105px 1fr;align-items:center;border-radius:16px}
+.studyScheduleGrid .scheduleEventTime{font-size:13px}
+.studyScheduleGrid .scheduleEventBody strong{font-size:18px;white-space:normal;overflow:visible}
+.studyScheduleGrid .scheduleEventBody small{font-size:12px}
+.studyScheduleGrid .scheduleEmpty{min-height:76px;display:flex;align-items:center;justify-content:flex-start;padding:18px 20px;gap:10px}
+.studyScheduleGrid .scheduleEmpty span{font-size:20px}
+.studyScheduleGrid .scheduleEmpty small{font-size:12px}
+@media(max-width:700px){
+ .weeklyScheduleDay,.studyScheduleGrid .weeklyScheduleDay{grid-template-columns:105px 1fr}
+ .studyScheduleGrid .weeklyScheduleHead{padding:14px 12px}
+ .studyScheduleGrid .weeklyScheduleHead b{font-size:16px}
+ .studyScheduleGrid .studyEvent{margin:10px;padding:13px 30px 13px 12px;grid-template-columns:78px 1fr}
+ .studyScheduleGrid .scheduleEventBody strong{font-size:16px}
+}
 .weeklyScheduleDay.today{border-color:#8b5cf6;box-shadow:0 0 0 1px #8b5cf633,0 12px 35px #0003}
 .weeklyScheduleHead{display:flex;align-items:center;justify-content:space-between;padding-bottom:12px;border-bottom:1px solid var(--border)}
 .weeklyScheduleHead span{min-width:24px;height:24px;border-radius:999px;display:grid;place-items:center;background:var(--panel2);font-size:11px;color:var(--muted)}
