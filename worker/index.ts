@@ -168,49 +168,63 @@ async function sendEmailOtp(env:Env,email:string,code:string,type:"register"|"re
   try{ url=new URL(base); }catch{ throw new Error("رابط GOOGLE_APPS_SCRIPT_URL غير صحيح."); }
   if(url.pathname.endsWith("/dev")) throw new Error("GOOGLE_APPS_SCRIPT_URL يجب أن ينتهي بـ /exec وليس /dev.");
 
-  const u=new URL(url.toString());
-  u.searchParams.set("action","otp");
-  u.searchParams.set("type",type);
-  u.searchParams.set("email",email);
-  u.searchParams.set("code",code);
-  u.searchParams.set("otpCode",code);
-  u.searchParams.set("secret",secret);
-  u.searchParams.set("requestId",randomHex(20));
-  u.searchParams.set("_ts",String(Date.now()));
+  let lastError:unknown=null;
+  for(let attempt=1;attempt<=3;attempt++){
+    const u=new URL(url.toString());
+    u.searchParams.set("action","otp");
+    u.searchParams.set("type",type);
+    u.searchParams.set("email",email);
+    u.searchParams.set("code",code);
+    u.searchParams.set("otpCode",code);
+    u.searchParams.set("secret",secret);
+    u.searchParams.set("requestId",randomHex(20));
+    u.searchParams.set("_ts",String(Date.now()));
 
-  const response=await fetch(u.toString(),{
-    method:"GET",
-    redirect:"follow",
-    headers:{
-      "accept":"application/json,text/plain,*/*",
-      "cache-control":"no-cache"
-    },
-    cf:{cacheTtl:0,cacheEverything:false}
-  } as RequestInit);
+    const controller=new AbortController();
+    const timeout=setTimeout(()=>controller.abort(),12000);
+    try{
+      const response=await fetch(u.toString(),{
+        method:"GET",
+        redirect:"follow",
+        headers:{
+          "accept":"application/json,text/plain,*/*",
+          "cache-control":"no-cache"
+        },
+        signal:controller.signal,
+        cf:{cacheTtl:0,cacheEverything:false}
+      } as RequestInit);
 
-  const raw=await response.text();
-  const cleaned=raw.replace(/^\\uFEFF/,"").trim();
-  let data:any=null;
-  try{ data=JSON.parse(cleaned); }catch{}
+      const raw=await response.text();
+      const cleaned=raw.replace(/^\\uFEFF/,"").trim();
+      let data:any=null;
+      try{ data=JSON.parse(cleaned); }catch{}
 
-  if(data?.ok===true && (
-    data?.sent===true ||
-    data?.status==="sent" ||
-    data?.status==="ok" ||
-    data?.result==="sent" ||
-    data?.accepted===true ||
-    /otp email sent successfully|email sent successfully|تم إرسال.*كود|تم إرسال.*email/i.test(String(data?.message||""))
-  )) return;
+      if(data?.ok===true && (
+        data?.sent===true ||
+        data?.status==="sent" ||
+        data?.status==="ok" ||
+        data?.result==="sent" ||
+        data?.accepted===true ||
+        /otp email sent successfully|email sent successfully|تم إرسال.*كود|تم إرسال.*email/i.test(String(data?.message||""))
+      )) return;
 
-  if(data?.ok===false || data?.success===false || data?.status==="error"){
-    throw new Error(String(data?.error||data?.message||"Google Apps Script فشل في إرسال كود Gmail").slice(0,400));
+      if(data?.ok===false || data?.success===false || data?.status==="error"){
+        throw new Error(String(data?.error||data?.message||"Google Apps Script فشل في إرسال كود Gmail").slice(0,400));
+      }
+
+      const sample=cleaned.replace(/\s+/g," ").slice(0,300);
+      if(/ppConfig|accounts\.google\.com|ServiceLogin|Sign in/i.test(sample)){
+        throw new Error("Google Apps Script وصل، لكن حساب Google يحتاج تفويض Gmail داخل مشروع Apps Script. شغّل دالة تفويض Gmail مرة واحدة ثم أعد النشر.");
+      }
+      throw new Error("Google Apps Script أعاد HTTP "+response.status+" لكن لم يؤكد إرسال كود Gmail."+(sample?" الرد: "+sample:""));
+    }catch(e){
+      lastError=e;
+      if(attempt<3) await new Promise(resolve=>setTimeout(resolve,1500*attempt));
+    }finally{
+      clearTimeout(timeout);
+    }
   }
-
-  const sample=cleaned.replace(/\s+/g," ").slice(0,300);
-  if(/ppConfig|accounts\.google\.com|ServiceLogin|Sign in/i.test(sample)){
-    throw new Error("Google Apps Script وصل، لكن حساب Google يحتاج تفويض Gmail داخل مشروع Apps Script. شغّل دالة تفويض Gmail مرة واحدة ثم أعد النشر.");
-  }
-  throw new Error("Google Apps Script أعاد HTTP "+response.status+" لكن لم يؤكد إرسال كود Gmail."+(sample?" الرد: "+sample:""));
+  throw lastError instanceof Error?lastError:new Error("تعذر إرسال كود Gmail");
 }
 async function ensurePushSubscriptions(env:Env){
   await env.DB.prepare("CREATE TABLE IF NOT EXISTS push_subscriptions (id TEXT PRIMARY KEY,user_id TEXT NOT NULL,endpoint TEXT NOT NULL UNIQUE,p256dh TEXT NOT NULL,auth TEXT NOT NULL,user_agent TEXT,created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE)").run();
@@ -1488,7 +1502,7 @@ export default {
           const salt=randomHex(16), pass=await hashPassword(password,salt), code=generateOtpCode(), now=Date.now(), expires=now+10*60*1000, payload=JSON.stringify({name,password_hash:pass,password_salt:salt,phone:phone||null});
           await env.DB.prepare("DELETE FROM auth_codes WHERE email=? AND type='register'").bind(email).run();
           await env.DB.prepare("INSERT INTO auth_codes(id,email,type,code_hash,payload_json,expires_at,attempts,created_at) VALUES(?,?,?,?,?,?,?,?)").bind(randomHex(16),email,"register",await otpHash(email,"register",code),payload,expires,0,now).run();
-          try { await sendEmailOtp(env,email,code,"register"); } catch(e){ await env.DB.prepare("DELETE FROM auth_codes WHERE email=? AND type='register'").bind(email).run(); throw e; }
+          await sendEmailOtp(env,email,code,"register");
           return json({ok:true,email});
         }
         if(url.pathname==="/api/auth/register/verify" && request.method==="POST") {
@@ -1514,7 +1528,7 @@ export default {
             const code=generateOtpCode(),now=Date.now();
             await env.DB.prepare("DELETE FROM auth_codes WHERE email=? AND type='reset'").bind(email).run();
             await env.DB.prepare("INSERT INTO auth_codes(id,email,type,code_hash,payload_json,expires_at,attempts,created_at) VALUES(?,?,?,?,?,?,?,?)").bind(randomHex(16),email,"reset",await otpHash(email,"reset",code),null,now+10*60*1000,0,now).run();
-            try{await sendEmailOtp(env,email,code,"reset");}catch(e){await env.DB.prepare("DELETE FROM auth_codes WHERE email=? AND type='reset'").bind(email).run();throw e;}}
+            await sendEmailOtp(env,email,code,"reset");}
           return json({ok:true});
         }
         if(url.pathname==="/api/auth/reset" && request.method==="POST") {
