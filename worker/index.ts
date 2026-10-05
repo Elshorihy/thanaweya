@@ -1500,6 +1500,8 @@ export default {
           if(!validPhone(phone)) return json({error:"رقم واتساب غير صالح"},400);
           if(phone){const phoneExists=await env.DB.prepare("SELECT user_id FROM user_phones WHERE phone=?").bind(phone).first();if(phoneExists)return json({error:"رقم واتساب مستخدم بالفعل"},409);}
           const salt=randomHex(16), pass=await hashPassword(password,salt), code=generateOtpCode(), now=Date.now(), expires=now+10*60*1000, payload=JSON.stringify({name,password_hash:pass,password_salt:salt,phone:phone||null});
+          const recentRegister=await env.DB.prepare("SELECT created_at FROM auth_codes WHERE email=? AND type='register' ORDER BY created_at DESC LIMIT 1").bind(email).first<any>();
+          if(recentRegister&&Date.now()-Number(recentRegister.created_at)<60000) return json({error:"استنى 60 ثانية قبل طلب كود جديد."},429);
           await env.DB.prepare("DELETE FROM auth_codes WHERE email=? AND type='register'").bind(email).run();
           await env.DB.prepare("INSERT INTO auth_codes(id,email,type,code_hash,payload_json,expires_at,attempts,created_at) VALUES(?,?,?,?,?,?,?,?)").bind(randomHex(16),email,"register",await otpHash(email,"register",code),payload,expires,0,now).run();
           await sendEmailOtp(env,email,code,"register");
@@ -1526,6 +1528,8 @@ export default {
           const u=await env.DB.prepare("SELECT id FROM users WHERE email=?").bind(email).first<any>();
           if(u){
             const code=generateOtpCode(),now=Date.now();
+            const recentReset=await env.DB.prepare("SELECT created_at FROM auth_codes WHERE email=? AND type='reset' ORDER BY created_at DESC LIMIT 1").bind(email).first<any>();
+            if(recentReset&&Date.now()-Number(recentReset.created_at)<60000) return json({error:"استنى 60 ثانية قبل طلب كود جديد."},429);
             await env.DB.prepare("DELETE FROM auth_codes WHERE email=? AND type='reset'").bind(email).run();
             await env.DB.prepare("INSERT INTO auth_codes(id,email,type,code_hash,payload_json,expires_at,attempts,created_at) VALUES(?,?,?,?,?,?,?,?)").bind(randomHex(16),email,"reset",await otpHash(email,"reset",code),null,now+10*60*1000,0,now).run();
             await sendEmailOtp(env,email,code,"reset");}
