@@ -11,15 +11,15 @@
   "dir": "rtl",
   "icons": [
     {
-      "src": "/icons/thanaweya-192.png",
+      "src": "/icons/thanaweya-2026-192.jpg?v=20261006",
       "sizes": "192x192",
-      "type": "image/png",
+      "type": "image/jpeg",
       "purpose": "any"
     },
     {
-      "src": "/icons/thanaweya-512.png",
-      "sizes": "512x512",
-      "type": "image/png",
+      "src": "/icons/thanaweya-2026-192.jpg?v=20261006",
+      "sizes": "192x192",
+      "type": "image/jpeg",
       "purpose": "any"
     }
   ],
