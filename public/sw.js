@@ -1,5 +1,5 @@
-const CACHE='thanaweya-shell-v13';
-const CORE=['/','/manifest.webmanifest','/icons/thanaweya-192.png','/icons/thanaweya-512.png','/sw.js'];
+const CACHE='thanaweya-shell-v14';
+const CORE=['/','/manifest.webmanifest','/icons/thanaweya-2026-192.jpg?v=20261006','/icons/thanaweya-512.png','/sw.js'];
 
 self.addEventListener('install',event=>{
  event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(CORE)).then(()=>self.skipWaiting()));
