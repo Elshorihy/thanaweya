@@ -3,7 +3,7 @@ import {createRoot} from 'react-dom/client';
 import type {LucideIcon} from 'lucide-react';
 import {Home,BookOpen,CalendarDays,CheckSquare,Brain,Timer,BarChart3,Trophy,Bell,Settings,Plus,Search,Trash2,Play,Pause,RotateCcw,Download,Upload,Sun,Moon,Globe2,AlertCircle,X,Save,FileQuestion,NotebookPen,Calendar,AlertTriangle,Check,RefreshCw,ChevronLeft,ChevronRight,Smartphone,Clock,UserRound,Filter,Pencil,Zap,Gift} from 'lucide-react';
 import './styles.css';
-function ServiceWorkerRefresh(){useEffect(()=>{if(!('serviceWorker'in navigator))return; navigator.serviceWorker.register('/sw.js?v=17',{updateViaCache:'none'}).then(r=>r.update()).catch(()=>{})},[]);return null}
+function ServiceWorkerRefresh(){useEffect(()=>{if(!('serviceWorker'in navigator))return; navigator.serviceWorker.register('/sw.js?v=18',{updateViaCache:'none'}).then(r=>r.update()).catch(()=>{})},[]);return null}
 import {authMe,authLogin,authLogout,authRegisterStart,authRegisterVerify,authForgotStart,authResetPassword,whatsappSave} from './auth';
 
 type Status='not_started'|'in_progress'|'completed'|'skipped'; type Priority='low'|'medium'|'high';
@@ -277,13 +277,13 @@ function App(){
  run();
  return()=>{if(timer)window.clearTimeout(timer);observer?.disconnect();media?.removeEventListener?.('change',onThemeChange)};
 },[s.settings.language,s.settings.theme]);
- useEffect(()=>{if('serviceWorker'in navigator)navigator.serviceWorker.register('/sw.js?v=13',{updateViaCache:'none'}).catch(()=>{});const h=(e:any)=>{e.preventDefault();setInstallEvent(e)};window.addEventListener('beforeinstallprompt',h);const installed=()=>setInstallEvent(null);window.addEventListener('appinstalled',installed);return()=>{window.removeEventListener('beforeinstallprompt',h);window.removeEventListener('appinstalled',installed)}},[]);
+ useEffect(()=>{if('serviceWorker'in navigator)navigator.serviceWorker.register('/sw.js?v=18',{updateViaCache:'none'}).catch(()=>{});const h=(e:any)=>{e.preventDefault();setInstallEvent(e)};window.addEventListener('beforeinstallprompt',h);const installed=()=>setInstallEvent(null);window.addEventListener('appinstalled',installed);return()=>{window.removeEventListener('beforeinstallprompt',h);window.removeEventListener('appinstalled',installed)}},[]);
 async function syncPushSubscription(){
  if(!auth||!('Notification'in window)||!('serviceWorker'in navigator)||!('PushManager'in window)||Notification.permission!=='granted')return false;
  const keyResponse=await fetch('/api/push/public-key',{cache:'no-store'});
  const keyData=await keyResponse.json().catch(()=>({}));
  if(!keyResponse.ok||!keyData?.publicKey)throw new Error(keyData?.error||'إشعارات Push غير مفعّلة على الخادم.');
- const registration=await navigator.serviceWorker.register('/sw.js?v=13',{updateViaCache:'none'});
+ const registration=await navigator.serviceWorker.register('/sw.js?v=18',{updateViaCache:'none'});
  await navigator.serviceWorker.ready;
  let subscription=await registration.pushManager.getSubscription();
  if(!subscription){
