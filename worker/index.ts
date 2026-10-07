@@ -13,6 +13,8 @@ interface Env {
   VAPID_PUBLIC_KEY?: string;
   VAPID_PRIVATE_KEY?: string;
   VAPID_SUBJECT?: string;
+  GEMINI_API_KEY?: string;
+  GEMINI_MODEL?: string;
 }
 
 let schemaReady:Promise<void>|null=null;
@@ -116,6 +118,42 @@ async function createSession(userId:string,env:Env) {
   return token;
 }
 async function body(request:Request){try{return await request.json() as any}catch{return null}}
+
+async function callGemini(env:Env, contents:any[], systemInstruction:string){
+  const apiKey=String(env.GEMINI_API_KEY||"").trim();
+  if(!apiKey) throw new Error("مفتاح Gemini غير مفعّل في Cloudflare.");
+  const model=String(env.GEMINI_MODEL||"gemini-3.6-flash").trim()||"gemini-3.6-flash";
+  const endpoint="https://generativelanguage.googleapis.com/v1beta/models/"+encodeURIComponent(model)+":generateContent";
+  const response=await fetch(endpoint,{
+    method:"POST",
+    headers:{
+      "content-type":"application/json",
+      "x-goog-api-key":apiKey
+    },
+    body:JSON.stringify({
+      systemInstruction:{parts:[{text:systemInstruction}]},
+      contents,
+      generationConfig:{maxOutputTokens:1800}
+    })
+  });
+  const raw=await response.text();
+  let data:any=null;
+  try{data=JSON.parse(raw)}catch{}
+  if(!response.ok){
+    const msg=String(data?.error?.message||"Gemini API error");
+    if(response.status===429) throw new Error("المساعد وصل لحد الاستخدام الحالي. جرّب بعد شوية.");
+    throw new Error(msg.slice(0,300));
+  }
+  const text=(data?.candidates||[])
+    .flatMap((c:any)=>c?.content?.parts||[])
+    .map((p:any)=>String(p?.text||""))
+    .filter(Boolean)
+    .join("\n")
+    .trim();
+  if(!text) throw new Error("Gemini لم يُرجع ردًا.");
+  return text;
+}
+
 
 async function getPageViewStats(env:Env){
   const today=new Date().toISOString().slice(0,10);
@@ -1551,33 +1589,64 @@ export default {
           }catch{}
         }
         if(url.pathname==="/api/ai/advice" && request.method==="POST") {
-          const u=await userFrom(request,env); if(!u) return json({error:"يجب تسجيل الدخول"},401);
+          const u=await userFrom(request,env);
+          if(!u) return json({error:"يجب تسجيل الدخول"},401);
           if(Number(u.verified||0)!==1 && String(u.role||"")!=="owner") return json({error:"ثانوية AI متاحة للحسابات الموثقة فقط."},403);
-          const b=await body(request),question=String(b?.question||"").trim().slice(0,1000);
-          if(!question)return json({error:"اكتب سؤالك أولًا."},400);
+
+          const b=await body(request);
+          const question=String(b?.question||"").trim().slice(0,4000);
+          if(!question) return json({error:"اكتب سؤالك أولًا."},400);
+
           const stored=await env.DB.prepare("SELECT data_json FROM user_data WHERE user_id=?").bind(u.id).first<any>();
-          let data:any={}; try{data=stored?.data_json?JSON.parse(stored.data_json)||{}:{}}catch{data={}}
-          const day=new Date().toISOString().slice(0,10),limit=20;
+          let data:any={};
+          try{data=stored?.data_json?JSON.parse(stored.data_json)||{}:{}}catch{data={}}
+
+          const day=new Date().toISOString().slice(0,10), limit=40;
           const usage=await env.DB.prepare("SELECT count FROM ai_usage WHERE user_id=? AND day=?").bind(u.id,day).first<any>();
-          const used=Number(usage?.count||0); if(used>=limit)return json({error:"وصلت للحد اليومي للمساعد الذكي (20 طلب). جرّب بكرة."},429);
-          await env.DB.prepare("INSERT INTO ai_usage(user_id,day,count) VALUES(?,?,1) ON CONFLICT(user_id,day) DO UPDATE SET count=count+1").bind(u.id,day).run();
-          const subjects=Array.isArray(data.subjects)?data.subjects:[],lessons=Array.isArray(data.lessons)?data.lessons:[],tasks=Array.isArray(data.tasks)?data.tasks:[],sessions=Array.isArray(data.sessions)?data.sessions:[];
-          const pending=tasks.filter((x:any)=>x?.status!=="completed"),completed=lessons.filter((x:any)=>x?.status==="completed");
-          const overdue=pending.filter((x:any)=>String(x?.date||"")<day);
-          const minutes=sessions.reduce((n:number,x:any)=>n+Number(x?.duration||0),0);
-          let answer="";
-          if(/ماذا|إيه|اذاكر|أذاكر|أعمل|اعمل|دلوقتي|الآن|دلوقت/i.test(question)){
-            const t=overdue[0]||pending.sort((a:any,b:any)=>String(a?.date||"").localeCompare(String(b?.date||"")))[0];
-            answer=t?"ابدأ بالمهمة المتأخرة أو الأقرب موعدًا: "+String(t?.date||"اليوم")+"، والمدة المقترحة "+Number(t?.estimatedMinutes||30)+" دقيقة.":pending.length?"مفيش مهمة محددة، اختار أصعب درس عندك وابدأ جلسة تركيز قصيرة.":"أنت مخلص كل المهام الحالية؛ استخدم وقتك في مراجعة الدروس أو إضافة منهجك المتبقي.";
-          }else if(/حلل|تقدم|متأخر|متاخر/i.test(question)){
-            answer="عندك "+subjects.length+" مواد، "+lessons.length+" درس إجمالًا، خلصت "+completed.length+" درس، وعندك "+pending.length+" مهمة متبقية. إجمالي وقت المذاكرة المسجل: "+minutes+" دقيقة. "+(overdue.length?"في "+overdue.length+" مهمة متأخرة، فدي أول أولوية.":"مفيش مهام متأخرة حاليًا.");
-          }else if(/رتب|أولو|جدول|خطة/i.test(question)){
-            const names=pending.slice(0,5).map((x:any)=>String(x?.date||"")+" — "+Number(x?.estimatedMinutes||30)+"د").join(" | ");
-            answer=pending.length?"ترتيبي المبدئي: 1) المهام المتأخرة، 2) المهام الأقرب موعدًا، 3) الدروس ذات الأولوية العالية. أقرب مهام عندك: "+names:"مفيش مهام معلقة حاليًا.";
-          }else{
-            answer="أنا شايف بيانات حسابك: "+subjects.length+" مواد، "+lessons.length+" درس، "+pending.length+" مهمة متبقية، و"+minutes+" دقيقة مذاكرة مسجلة. سؤالك اتسجل ضمن حد الاستخدام اليومي؛ جرّب تسألني عن الأولويات أو التقدم أو جدول المذاكرة.";
+          const used=Number(usage?.count||0);
+          if(used>=limit) return json({error:"وصلت للحد اليومي للمساعد الذكي (40 رسالة). جرّب بكرة."},429);
+
+          const rawHistory=Array.isArray(b?.history)?b.history:[];
+          const history=rawHistory.slice(-12).map((m:any)=>{
+            const role=m?.role==="assistant"?"model":"user";
+            const text=String(m?.text||"").trim().slice(0,4000);
+            return text?{role,parts:[{text}]}:null;
+          }).filter(Boolean);
+
+          const safeData={
+            profile:data?.profile||{},
+            subjects:Array.isArray(data?.subjects)?data.subjects:[],
+            units:Array.isArray(data?.units)?data.units:[],
+            lessons:Array.isArray(data?.lessons)?data.lessons:[],
+            tasks:Array.isArray(data?.tasks)?data.tasks:[],
+            sessions:Array.isArray(data?.sessions)?data.sessions:[],
+            studySchedule:Array.isArray(data?.studySchedule)?data.studySchedule:[],
+            classSchedule:Array.isArray(data?.classSchedule)?data.classSchedule:[],
+            settings:data?.settings||{}
+          };
+
+          const systemInstruction=[
+            "أنت ثانوية AI، مساعد مذاكرة شخصي داخل منصة ثانوية لطلاب الصف الثالث الثانوي في مصر.",
+            "اتكلم بالمصري الطبيعي، بشكل ودود ومباشر، ومن غير مبالغة أو كلام روبوتي.",
+            "اعتمد على بيانات الحساب المرسلة لك فقط عندما تتكلم عن تقدم الطالب أو جدوله أو مواده.",
+            "لو البيانات ناقصة قل إنك لا تملك المعلومة بدل اختلاقها.",
+            "ساعد في المذاكرة، التخطيط، شرح المفاهيم الدراسية، تنظيم الوقت، وتحليل التقدم.",
+            "لا تدّعي أنك اتخذت إجراء داخل الموقع إذا لم يتم تنفيذ إجراء فعلي.",
+            "لا تكشف أي بيانات سرية أو مفاتيح أو تفاصيل داخلية عن النظام.",
+            "بيانات الطالب الحالية (قد تكون فارغة):",
+            JSON.stringify(safeData)
+          ].join("\n");
+
+          const contents=[...history,{role:"user",parts:[{text:question}]}];
+
+          try{
+            const answer=await callGemini(env,contents,systemInstruction);
+            await env.DB.prepare("INSERT INTO ai_usage(user_id,day,count) VALUES(?,?,1) ON CONFLICT(user_id,day) DO UPDATE SET count=count+1").bind(u.id,day).run();
+            return json({ok:true,answer,used:used+1,limit,model:String(env.GEMINI_MODEL||"gemini-3.6-flash")});
+          }catch(e){
+            const message=e instanceof Error?e.message:String(e);
+            return json({error:message.slice(0,400)},503);
           }
-          return json({ok:true,answer,used:used+1,limit});
         }
         if(url.pathname==="/api/auth/register/start" && request.method==="POST") {
           const b=await body(request), email=cleanEmail(b?.email), name=cleanName(b?.name), password=String(b?.password||""), phone=cleanPhone(b?.phone);
