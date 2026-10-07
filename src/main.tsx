@@ -3,7 +3,7 @@ import {createRoot} from 'react-dom/client';
 import type {LucideIcon} from 'lucide-react';
 import {Home,BookOpen,CalendarDays,CheckSquare,Brain,Timer,BarChart3,Trophy,Bell,Settings,Plus,Search,Trash2,Play,Pause,RotateCcw,Download,Upload,Sun,Moon,Globe2,AlertCircle,X,Save,FileQuestion,NotebookPen,Calendar,AlertTriangle,Check,RefreshCw,ChevronLeft,ChevronRight,Smartphone,Clock,UserRound,Filter,Pencil,Zap,Gift} from 'lucide-react';
 import './styles.css';
-function ServiceWorkerRefresh(){useEffect(()=>{if(!('serviceWorker'in navigator))return; navigator.serviceWorker.register('/sw.js?v=14',{updateViaCache:'none'}).then(r=>r.update()).catch(()=>{})},[]);return null}
+function ServiceWorkerRefresh(){useEffect(()=>{if(!('serviceWorker'in navigator))return; navigator.serviceWorker.register('/sw.js?v=15',{updateViaCache:'none'}).then(r=>r.update()).catch(()=>{})},[]);return null}
 import {authMe,authLogin,authLogout,authRegisterStart,authRegisterVerify,authForgotStart,authResetPassword,whatsappSave} from './auth';
 
 type Status='not_started'|'in_progress'|'completed'|'skipped'; type Priority='low'|'medium'|'high';
