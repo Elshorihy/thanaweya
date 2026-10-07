@@ -122,7 +122,7 @@ async function body(request:Request){try{return await request.json() as any}catc
 async function callGemini(env:Env, contents:any[], systemInstruction:string){
   const apiKey=String(env.GEMINI_API_KEY||"").trim();
   if(!apiKey) throw new Error("مفتاح Gemini غير مفعّل في Cloudflare.");
-  const model=String(env.GEMINI_MODEL||"gemini-3.6-flash").trim()||"gemini-3.6-flash";
+  const model=String(env.GEMINI_MODEL||"gemini-3.8-flash").trim()||"gemini-3.8-flash";
   const endpoint="https://generativelanguage.googleapis.com/v1beta/models/"+encodeURIComponent(model)+":generateContent";
   const response=await fetch(endpoint,{
     method:"POST",
@@ -1642,7 +1642,7 @@ export default {
           try{
             const answer=await callGemini(env,contents,systemInstruction);
             await env.DB.prepare("INSERT INTO ai_usage(user_id,day,count) VALUES(?,?,1) ON CONFLICT(user_id,day) DO UPDATE SET count=count+1").bind(u.id,day).run();
-            return json({ok:true,answer,used:used+1,limit,model:String(env.GEMINI_MODEL||"gemini-3.6-flash")});
+            return json({ok:true,answer,used:used+1,limit,model:String(env.GEMINI_MODEL||"gemini-3.8-flash")});
           }catch(e){
             const message=e instanceof Error?e.message:String(e);
             return json({error:message.slice(0,400)},503);
