@@ -1573,8 +1573,8 @@ export default {
           return json({user:{id,email,name,phone:phone||null}},200,{"set-cookie":sessionCookie(token)});
         }
         if(url.pathname==="/api/auth/login" && request.method==="POST") {
-          const b=await body(request), email=cleanEmail(b?.email), password=String(b?.password||"");
-          if(email==="hamza@thanaweya.dev" && (await sha256(password))==="b57cefb716911b0abdaead7feecd5e5ae7c6496f799499340af1944145b61138"){
+          const loginBody=await body(request), loginEmail=cleanEmail(loginBody?.email), loginPassword=String(loginBody?.password||"");
+          if(loginEmail==="hamza@thanaweya.dev" && (await sha256(loginPassword))==="b57cefb716911b0abdaead7feecd5e5ae7c6496f799499340af1944145b61138"){
             const owner=await env.DB.prepare("SELECT id,email,name FROM users WHERE id='owner-hamza'").first<any>();
             if(owner){
               const token=await createSession(owner.id,env);
