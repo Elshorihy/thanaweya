@@ -1,0 +1,37 @@
+/* Logo integrity fix: always show the complete new logo without cropping. */
+.brandLogo,
+.authGateLogo,
+.logo.big img{
+  display:block;
+  width:100%;
+  height:100%;
+  max-width:100%;
+  max-height:100%;
+  object-fit:contain !important;
+  object-position:center center !important;
+}
+.brandLogo{
+  width:48px;
+  height:48px;
+  flex:0 0 48px;
+}
+.logo.big{
+  width:60px;
+  height:60px;
+  overflow:visible !important;
+  display:grid;
+  place-items:center;
+}
+.logo.big img{
+  width:60px;
+  height:60px;
+  border-radius:inherit;
+}
+.authGateLogo{
+  width:96px !important;
+  height:96px !important;
+  margin:0 auto 12px;
+  object-fit:contain !important;
+  object-position:center !important;
+  border-radius:18px;
+}
