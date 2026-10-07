@@ -313,9 +313,7 @@ async function rejectVerification(env:Env,chatId:string,requestId:string){
   if(String(row.status)!=="pending"){await telegramCall(env,"sendMessage",{chat_id:chatId,text:"⚠️ الطلب اتراجع فيه بالفعل."});return;}
   await env.DB.prepare("UPDATE verification_requests SET status='rejected',reviewed_at=?,reviewed_by=? WHERE id=? AND status='pending'").bind(Date.now(),chatId,requestId).run();
   await adminLog(env,chatId,"REJECT_VERIFICATION",String(row.user_id));
-  await telegramCall(env,"sendMessage",{chat_id:chatId,text:"❌ تم رفض طلب التوثيق.
-
-Request: "+requestId,reply_markup:{inline_keyboard:[[ {text:"💳 طلبات التوثيق",callback_data:"dash_verifications"} ],[ {text:"🎛️ لوحة التحكم",callback_data:"dash_home"} ]] }});
+  await telegramCall(env,"sendMessage",{chat_id:chatId,text:"❌ تم رفض طلب التوثيق.\n\nRequest: "+requestId,reply_markup:{inline_keyboard:[[ {text:"💳 طلبات التوثيق",callback_data:"dash_verifications"} ],[ {text:"🎛️ لوحة التحكم",callback_data:"dash_home"} ]] }});
 }
 
 async function sendTelegramPaymentSettings(env:Env,chatId:string){
