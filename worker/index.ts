@@ -25,8 +25,11 @@ async function ensurePageViews(env:Env){
 }
 async function ensureSchema(env:Env){
   if(!schemaReady) schemaReady=(async()=>{
-    await env.DB.prepare("CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY,email TEXT NOT NULL UNIQUE,name TEXT NOT NULL,password_hash TEXT NOT NULL,password_salt TEXT NOT NULL,phone TEXT,email_verified_at INTEGER,created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL)").run();
+    await env.DB.prepare("CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY,email TEXT NOT NULL UNIQUE,name TEXT NOT NULL,password_hash TEXT NOT NULL,password_salt TEXT NOT NULL,phone TEXT,email_verified_at INTEGER,role TEXT NOT NULL DEFAULT 'user',verified INTEGER NOT NULL DEFAULT 0,created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL)").run();
     try { await env.DB.prepare("ALTER TABLE users ADD COLUMN email_verified_at INTEGER").run(); } catch {}
+    try { await env.DB.prepare("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'user'").run(); } catch {}
+    try { await env.DB.prepare("ALTER TABLE users ADD COLUMN verified INTEGER NOT NULL DEFAULT 0").run(); } catch {}
+    await env.DB.prepare("INSERT OR IGNORE INTO users(id,email,name,password_hash,password_salt,email_verified_at,role,verified,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)").bind("owner-hamza","hamza@thanaweya.dev","Hamza Shaheen","OWNER_LOGIN_ONLY","OWNER_LOGIN_ONLY",Date.now(),"owner",1,Date.now(),Date.now()).run();
     await env.DB.prepare("CREATE TABLE IF NOT EXISTS user_phones (user_id TEXT PRIMARY KEY, phone TEXT UNIQUE, updated_at INTEGER NOT NULL, FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE)").run();
     try {
       await env.DB.prepare("ALTER TABLE users ADD COLUMN phone TEXT").run();
@@ -101,7 +104,7 @@ function cookieValue(request:Request) {
 async function userFrom(request:Request,env:Env) {
   const token=cookieValue(request); if(!token) return null;
   const tokenHash=await sha256(token);
-  const row=await env.DB.prepare("SELECT u.id,u.email,u.name FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires_at>?").bind(tokenHash,Date.now()).first<{id:string;email:string;name:string}>();
+  const row=await env.DB.prepare("SELECT u.id,u.email,u.name,u.role,u.verified FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires_at>?").bind(tokenHash,Date.now()).first<{id:string;email:string;name:string}>();
   return row||null;
 }
 const sessionCookie=(token:string)=>`${COOKIE}=${token}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${SESSION_DAYS*86400}`;
@@ -1379,9 +1382,16 @@ export default {
     if(url.pathname.startsWith("/api/")) {
       try {
         if(request.method==="OPTIONS") return new Response(null,{status:204,headers:{"access-control-allow-origin":"*","access-control-allow-methods":"GET,POST,PUT,DELETE,OPTIONS","access-control-allow-headers":"content-type, accept","cache-control":"no-store"}});
-        if(url.pathname!=="/api/pageview" && url.pathname!=="/api/telegram/webhook" && url.pathname!=="/api/health"){
+        if(url.pathname!=="/api/pageview" && url.pathname!=="/api/telegram/webhook" && url.pathname!=="/api/health" && !url.pathname.startsWith("/api/auth/")){
           const maintenance=await getAdminSetting(env,"maintenance","0");
-          if(maintenance==="1") return json({error:"الموقع في وضع الصيانة حاليًا. حاول مرة أخرى لاحقًا."},503,{"retry-after":"300"});
+          const token=cookieValue(request);
+          let ownerBypass=false;
+          if(token){
+            const tokenHash=await sha256(token);
+            const owner=await env.DB.prepare("SELECT u.role FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires_at>?").bind(tokenHash,Date.now()).first<any>().catch(()=>null);
+            ownerBypass=String(owner?.role||"") === "owner";
+          }
+          if(maintenance==="1" && !ownerBypass) return json({error:"الموقع في وضع الصيانة حاليًا. حاول مرة أخرى لاحقًا."},503,{"retry-after":"300"});
         }
         // Owner panel uses one fixed account and its own HttpOnly cookie.
         // It does not create a user/session record and does not depend on the site's normal auth.
@@ -1563,8 +1573,16 @@ export default {
           return json({user:{id,email,name,phone:phone||null}},200,{"set-cookie":sessionCookie(token)});
         }
         if(url.pathname==="/api/auth/login" && request.method==="POST") {
+          const b=await body(request), email=cleanEmail(b?.email), password=String(b?.password||"");
+          if(email==="hamza@thanaweya.dev" && (await sha256(password))==="b57cefb716911b0abdaead7feecd5e5ae7c6496f799499340af1944145b61138"){
+            const owner=await env.DB.prepare("SELECT id,email,name FROM users WHERE id='owner-hamza'").first<any>();
+            if(owner){
+              const token=await createSession(owner.id,env);
+              return json({user:{id:owner.id,email:owner.email,name:owner.name,phone:null,role:"owner",verified:true}},200,{"set-cookie":sessionCookie(token)});
+            }
+          }
           const b=await body(request), email=cleanEmail(b?.email), password=String(b?.password||""), phone=cleanPhone(b?.phone);
-          const u=await env.DB.prepare("SELECT id,email,name,password_hash,password_salt FROM users WHERE email=?").bind(email).first<any>();
+          const u=await env.DB.prepare("SELECT id,email,name,password_hash,password_salt,role,verified FROM users WHERE email=?").bind(email).first<any>();
           if(!u||!(await verifyPassword(password,u.password_salt,u.password_hash))) return json({error:"الإيميل أو كلمة السر غير صحيحة"},401);
           if(phone && !validPhone(phone)) return json({error:"رقم واتساب غير صالح"},400);
           if(phone){
@@ -1575,7 +1593,7 @@ export default {
           const phoneRow=await env.DB.prepare("SELECT phone FROM user_phones WHERE user_id=?").bind(u.id).first<any>();
           await env.DB.prepare("DELETE FROM sessions WHERE expires_at<=?").bind(Date.now()).run();
           const token=await createSession(u.id,env);
-          return json({user:{id:u.id,email:u.email,name:u.name,phone:phoneRow?.phone||null}},200,{"set-cookie":sessionCookie(token)});
+          return json({user:{id:u.id,email:u.email,name:u.name,phone:phoneRow?.phone||null,role:u.role||"user",verified:Number(u.verified||0)===1}},200,{"set-cookie":sessionCookie(token)});
         }
         if(url.pathname==="/api/account/whatsapp" && (request.method==="GET"||request.method==="PUT")) {
           const u=await userFrom(request,env); if(!u) return json({error:"يجب تسجيل الدخول"},401);
@@ -1596,7 +1614,7 @@ export default {
         if(url.pathname==="/api/auth/me" && request.method==="GET") {
           const u=await userFrom(request,env); if(!u) return json({user:null});
           const row=await env.DB.prepare("SELECT phone FROM user_phones WHERE user_id=?").bind(u.id).first<any>();
-          return json({user:{id:u.id,email:u.email,name:u.name,phone:row?.phone||null}});
+          return json({user:{id:u.id,email:u.email,name:u.name,phone:row?.phone||null,role:u.role||"user",verified:Number(u.verified||0)===1}});
         }
         if(url.pathname==="/api/account/profile" && (request.method==="GET"||request.method==="PUT")) {
           const u=await userFrom(request,env); if(!u) return json({error:"يجب تسجيل الدخول"},401);
