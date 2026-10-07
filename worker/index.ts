@@ -277,7 +277,7 @@ async function approveVerification(env:Env,chatId:string,requestId:string){
   await telegramCall(env,"sendMessage",{chat_id:chatId,text:"✅ اختر مدة الاشتراك للطلب "+requestId,reply_markup:{inline_keyboard:[
     [{text:"30 يوم",callback_data:"verification_months:1:"+requestId},{text:"3 شهور",callback_data:"verification_months:3:"+requestId}],
     [{text:"6 شهور",callback_data:"verification_months:6:"+requestId},{text:"سنة",callback_data:"verification_months:12:"+requestId}],
-    [{text:"✏️ مدة مخصصة",callback_data:"verification_custom:"+requestId"}],
+    [{text:"✏️ مدة مخصصة",callback_data:"verification_custom:"+requestId}],
     [{text:"❌ إلغاء",callback_data:"verification_cancel:"+requestId}]
   ]}});
 }
@@ -318,6 +318,11 @@ async function rejectVerification(env:Env,chatId:string,requestId:string){
   await telegramCall(env,"sendMessage",{chat_id:chatId,text:"❌ تم رفض طلب التوثيق.
 
 Request: "+requestId,reply_markup:{inline_keyboard:[[ {text:"💳 طلبات التوثيق",callback_data:"dash_verifications"} ],[ {text:"🎛️ لوحة التحكم",callback_data:"dash_home"} ]] }});
+}
+
+async function sendTelegramPaymentSettings(env:Env,chatId:string){
+  const phone=await getPaymentPhone(env);
+  await telegramCall(env,"sendMessage",{chat_id:chatId,text:"💰 رقم التحويل الحالي\n\n"+(phone||"❌ لم يتم تحديد رقم التحويل بعد.")+"\n\nابعت الرقم الجديد في رسالة منفصلة لتحديثه.",reply_markup:{inline_keyboard:[[ {text:"⬅️ أدوات الإدارة",callback_data:"dash_tools"} ]] }});
 }
 
 async function sendTelegramVerifications(env:Env,chatId:string){
@@ -863,6 +868,7 @@ async function sendTelegramAdminTools(env:Env,chatId:string){
     [{text:maintenance==="1"?"🟢 إيقاف الصيانة":"🔴 تفعيل الصيانة",callback_data:"admin_maintenance"}],
     [{text:"📢 إعلانات الموقع",callback_data:"admin_announcements"}],
     [{text:"🧾 سجل العمليات",callback_data:"admin_activity"},{text:"📋 تقرير شامل",callback_data:"admin_report"}],
+    [{text:"💰 رقم التحويل",callback_data:"dash_payment"}],
     [{text:"📢 رسالة واتساب",callback_data:"dash_broadcast"},{text:"📧 رسالة Gmail",callback_data:"dash_email_broadcast"}],
     [{text:"⬅️ اللوحة",callback_data:"dash_home"}]
   ]}});
@@ -1352,6 +1358,7 @@ async function handleTelegramUpdate(env:Env,update:any){
     if(data==="dash_campaigns"){await clearTelegramAdminMode(env,chatId);await sendTelegramCampaigns(env,chatId);return;}
     if(data==="dash_home"){await clearTelegramAdminMode(env,chatId);await sendTelegramDashboard(env,chatId);return;}
     if(data==="dash_stats"){await sendTelegramDashboard(env,chatId);return;}
+    if(data==="dash_payment"){await setTelegramAdminMode(env,chatId,"payment_phone");await sendTelegramPaymentSettings(env,chatId);return;}
     if(data==="dash_verifications"){await clearTelegramAdminMode(env,chatId);await sendTelegramVerifications(env,chatId);return;}
     if(data.startsWith("verification_view:")){await clearTelegramAdminMode(env,chatId);await sendVerificationRequestDetails(env,chatId,data.slice(19));return;}
     if(data.startsWith("verification_approve:")){await approveVerification(env,chatId,data.slice(21));return;}
@@ -1603,6 +1610,16 @@ async function handleTelegramUpdate(env:Env,update:any){
     await telegramCall(env,"sendMessage",{chat_id:chatId,text:"📝 الرسالة جاهزة للإرسال:\n\n"+text+"\n\nهل أنت متأكد إنك عايز تبعتها لكل أرقام واتساب؟",reply_markup:{inline_keyboard:[[ {text:"✅ تأكيد الإرسال",callback_data:"dash_broadcast_confirm"},{text:"❌ إلغاء",callback_data:"dash_cancel"} ]] }});
     return;
   }
+  if(state.mode==="payment_phone" && text){
+    const phone=cleanPhone(text);
+    if(!validPhone(phone)){await telegramCall(env,"sendMessage",{chat_id:chatId,text:"❌ اكتب رقم موبايل صحيح."});return;}
+    await setAdminSetting(env,"payment_phone",phone);
+    await clearTelegramAdminMode(env,chatId);
+    await adminLog(env,chatId,"SET_PAYMENT_PHONE","payment_phone",phone);
+    await telegramCall(env,"sendMessage",{chat_id:chatId,text:"✅ تم تحديث رقم التحويل إلى:\n"+phone,reply_markup:{inline_keyboard:[[ {text:"💳 طلبات التوثيق",callback_data:"dash_verifications"} ],[ {text:"🎛️ لوحة التحكم",callback_data:"dash_home"} ]] }});
+    return;
+  }
+
   if(state.mode==="verification_custom_months" && text){
     const months=Number(text.replace(/[^0-9]/g,""));
     const requestId=String(state.payload?.requestId||"");
