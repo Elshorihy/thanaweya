@@ -536,3 +536,11 @@ input:invalid,textarea:invalid,select:invalid{border-color:#ef4444}
 .aiBubbleRole{display:block;font-size:11px;opacity:.65;margin-bottom:4px;font-weight:700}
 .aiQuick .choices{display:flex;flex-wrap:wrap;gap:8px}
 .aiQuick .choices button{flex:1 1 180px}
+
+
+/* Paid verification / subscription */
+.subscriptionStatus{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:16px 18px;border:1px solid var(--border);border-radius:18px;background:linear-gradient(135deg,var(--panel),var(--panel2));margin-bottom:14px}
+.subscriptionStatus>div{display:grid;gap:5px;min-width:0}.subscriptionStatus b{font-size:16px}.subscriptionStatus span{font-size:12px;color:var(--muted)}.subscriptionStatus>strong{white-space:nowrap;padding:9px 12px;border-radius:12px;background:#8b5cf614;border:1px solid #8b5cf633}
+.paymentInfo{display:grid;gap:7px;padding:16px 18px;border-radius:18px;border:1px solid #8b5cf633;background:#8b5cf60b;margin-bottom:14px}.paymentInfo span{font-size:12px;color:var(--muted)}.paymentInfo strong{font-size:21px;direction:ltr;letter-spacing:.4px}
+.subscriptionForm{display:grid;gap:12px}.subscriptionForm label{display:grid;gap:7px}.subscriptionForm input[type="file"]{padding:12px}.subscriptionForm .upload{cursor:pointer}
+@media(max-width:650px){.subscriptionStatus{align-items:flex-start;flex-direction:column}.subscriptionStatus>strong{align-self:flex-start}}
