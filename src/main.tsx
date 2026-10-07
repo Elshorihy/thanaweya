@@ -827,7 +827,7 @@ function Dashboard(){const due=s.lessons.filter(l=>l.nextReviewAt&&l.nextReviewA
  </section>
 }
  function SubscriptionCard({auth,notify}:{auth:import('./auth').AuthUser|null;notify:(m:string)=>void}){
- const [loading,setLoading]=useState(true),[sending,setSending]=useState(false),[status,setStatus]=useState<any>(null),[transferPhone,setTransferPhone]=useState(''),[file,setFile]=useState<File|null>(null);
+ const [loading,setLoading]=useState(true),[sending,setSending]=useState(false),[show,setShow]=useState(false),[status,setStatus]=useState<any>(null),[transferPhone,setTransferPhone]=useState(''),[file,setFile]=useState<File|null>(null);
  const load=async()=>{
   if(!auth){setLoading(false);return}
   try{const r=await fetch('/api/subscription/status',{credentials:'include',cache:'no-store'});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d?.error||'تعذر تحميل حالة الاشتراك');setStatus(d)}catch(e){notify(e instanceof Error?e.message:'تعذر تحميل حالة الاشتراك')}finally{setLoading(false)}
@@ -851,8 +851,14 @@ function Dashboard(){const due=s.lessons.filter(l=>l.nextReviewAt&&l.nextReviewA
  const pending=!!status?.pending;
  const expires=sub.expiresAt?new Date(Number(sub.expiresAt)).toLocaleString('ar-EG',{dateStyle:'medium',timeStyle:'short'}):'—';
  if(!auth)return <Card title="💳 التوثيق المدفوع"><p className="muted">سجّل الدخول أولًا لطلب التوثيق.</p></Card>;
- return <Card title="💳 التوثيق والاشتراك">
-  {loading?<p className="muted">جاري تحميل حالة الاشتراك...</p>:<>
+ return <Card title="💳 توثيق الحساب">
+  {!show ? <div className="verificationHero">
+    <div className="verificationHeroIcon">✓</div>
+    <div><h3>وثّق حسابك وافتح مميزات ثانوية AI</h3><p className="muted">التوثيق باشتراك 30 جنيه شهريًا، والموافقة بتتم يدويًا من الإدارة بعد مراجعة إيصال التحويل.</p></div>
+    <button className="primary wide" onClick={()=>setShow(true)}>🔐 توثيق الحساب — 30 جنيه / شهر</button>
+  </div> : <>
+    <div className="verificationBenefits"><b>✨ مميزات التوثيق</b><div>🤖 استخدام ثانوية AI طوال مدة الاشتراك</div><div>📅 خلي الـAI ينشئ وينظم جدول مذاكرتك داخل الموقع</div><div>📝 يساعدك في تنظيم المهام والخطط والتقدم</div><div>⚡ الـAI يتعامل مع بيانات حسابك لتنفيذ الإجراءات المسموح بها</div><div>🛡️ مراجعة بشرية للإيصال قبل التفعيل</div></div>
+    {loading?<p className="muted">جاري تحميل حالة الاشتراك...</p>:<>
    <div className="subscriptionStatus">
     <div><b>{active?'🟢 اشتراكك مفعّل':pending?'🟡 طلبك قيد المراجعة':'⚪ لا يوجد اشتراك مفعّل'}</b><span>{active?'ثانوية AI متاحة لحسابك الآن.':pending?'تم إرسال الإيصال وسيتم مراجعته من الإدارة.':'التوثيق يفتح لك ثانوية AI.'}</span></div>
     {active&&<strong>{sub.daysLeft} يوم متبقي</strong>}
@@ -866,8 +872,8 @@ function Dashboard(){const due=s.lessons.filter(l=>l.nextReviewAt&&l.nextReviewA
      <button className="primary wide" disabled={sending||!status?.paymentPhone||!file||!transferPhone.trim()} onClick={submit}>{sending?'جاري إرسال الطلب...':'📨 إرسال طلب التوثيق'}</button>
     </div>
    </>}
-   <button className="ghost" onClick={load} disabled={loading||sending}>🔄 تحديث الحالة</button>
-  </>}
+   <div className="actions"><button className="ghost" onClick={load} disabled={loading||sending}>🔄 تحديث الحالة</button><button className="ghost" onClick={()=>setShow(false)}>إخفاء التفاصيل</button></div>
+  </>}</>
  </Card>
 }
 function SettingsPage(){const dragKey=settingsDragKey,dropKey=settingsDropKey;const setDragKey=setSettingsDragKey,setDropKey=setSettingsDropKey;const finishDrag=()=>{if(dragKey&&dropKey&&dragKey!==dropKey){const a=[...(s.settings.navOrder||nav.map(x=>x[0]))],fi=a.indexOf(dragKey),ti=a.indexOf(dropKey);if(fi>=0&&ti>=0){a.splice(fi,1);a.splice(ti,0,dragKey);update({settings:{...s.settings,navOrder:a}})}}setDragKey(null);setDropKey(null)};return <section><Title title="الإعدادات" sub="المظهر، الإشعارات، الحساب، الخطة والنسخ الاحتياطي."/><div className="settingsgrid"><SubscriptionCard auth={auth} notify={m=>{setNotice(m);setTimeout(()=>setNotice(''),4000)}}/><Card title="👤 المعلومات الشخصية"><div className="accountInfoGrid">
