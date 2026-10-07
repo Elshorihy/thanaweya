@@ -1138,7 +1138,8 @@ function telegramDashboardKeyboard(){
   return {inline_keyboard:[
     [{text:"⚡ مركز القيادة",callback_data:"dash_center"}],
     [{text:"📊 الرئيسية والإحصائيات",callback_data:"dash_stats"},{text:"🩺 حالة النظام",callback_data:"dash_system"}],
-    [{text:"👥 المستخدمين",callback_data:"dash_users"},{text:"🔎 بحث عن مستخدم",callback_data:"dash_search"}],
+    [{text:"👥 المستخدمين",callback_data:"dash_users"},{text:"💳 التوثيق",callback_data:"dash_verifications"}],
+    [{text:"🔎 بحث عن مستخدم",callback_data:"dash_search"}],
     [{text:"🟢 نشاط المستخدمين",callback_data:"dash_live"},{text:"🕐 آخر المستخدمين",callback_data:"dash_recent"}],
     [{text:"📈 الزيارات",callback_data:"dash_traffic"},{text:"📊 تحليلات 30 يوم",callback_data:"dash_traffic30"}],
     [{text:"🔐 الدخول و OTP",callback_data:"dash_auth"},{text:"📱 واتساب",callback_data:"dash_wa"}],
