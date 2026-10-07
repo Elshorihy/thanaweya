@@ -522,3 +522,17 @@ input:invalid,textarea:invalid,select:invalid{border-color:#ef4444}
 @media(max-width:650px){.personalStudyDayHead{padding:16px 18px}.personalStudyDayHead h3{font-size:20px}.personalStudyRow{grid-template-columns:6px minmax(0,1fr);padding:20px 18px;gap:13px}.personalStudyDuration{grid-column:2;justify-self:start;min-width:78px}.personalStudyClasses{padding:0 18px 18px}.studyClassRow{align-items:flex-start;flex-direction:column;gap:4px}}
 
 .verifiedBadge{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;font-size:12px;font-weight:900;background:#2196f3;color:#fff;box-shadow:0 0 0 2px rgba(33,150,243,.18);margin-inline-start:6px;vertical-align:middle}.accountChip{display:flex;align-items:center;gap:2px;max-width:180px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.aiPage{display:grid;gap:16px}.aiHero{display:flex;justify-content:space-between;gap:18px;align-items:center}.aiStats{display:flex;gap:10px;flex-wrap:wrap}.aiStats>b{display:flex;flex-direction:column;align-items:center;min-width:80px;font-size:24px}.aiStats small{font-size:11px;font-weight:500;opacity:.7}.aiQuick{display:grid;gap:14px}.aiAnswer{line-height:1.9}.aiAnswer p{margin:0 0 8px}.scheduleGenerateBtn{white-space:nowrap}@media(max-width:700px){.aiHero{flex-direction:column;align-items:stretch}.aiStats{justify-content:space-between}.accountChip{max-width:120px}}
+
+
+/* Thanaweya AI chat */
+.aiChat{display:flex;flex-direction:column;gap:12px;max-height:55vh;min-height:260px;overflow:auto;padding:14px;margin:14px 0;border:1px solid rgba(255,255,255,.08);border-radius:20px;background:rgba(0,0,0,.12)}
+.aiEmpty{text-align:center;padding:48px 18px;color:var(--muted,#9ca3af)}
+.aiEmpty span{display:block;font-size:38px;margin-bottom:10px}
+.aiEmpty strong{display:block;font-size:18px;color:inherit}
+.aiBubble{max-width:88%;padding:12px 14px;border-radius:18px;line-height:1.7;word-break:break-word}
+.aiBubble p{margin:0 0 5px}.aiBubble p:last-child{margin-bottom:0}
+.aiBubble.user{align-self:flex-start;border:1px solid rgba(99,102,241,.25);background:rgba(99,102,241,.12)}
+.aiBubble.assistant{align-self:flex-end;border:1px solid rgba(16,185,129,.22);background:rgba(16,185,129,.08)}
+.aiBubbleRole{display:block;font-size:11px;opacity:.65;margin-bottom:4px;font-weight:700}
+.aiQuick .choices{display:flex;flex-wrap:wrap;gap:8px}
+.aiQuick .choices button{flex:1 1 180px}
