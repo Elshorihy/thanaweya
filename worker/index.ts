@@ -1360,7 +1360,7 @@ async function handleTelegramUpdate(env:Env,update:any){
     if(data==="dash_stats"){await sendTelegramDashboard(env,chatId);return;}
     if(data==="dash_payment"){await setTelegramAdminMode(env,chatId,"payment_phone");await sendTelegramPaymentSettings(env,chatId);return;}
     if(data==="dash_verifications"){await clearTelegramAdminMode(env,chatId);await sendTelegramVerifications(env,chatId);return;}
-    if(data.startsWith("verification_view:")){await clearTelegramAdminMode(env,chatId);await sendVerificationRequestDetails(env,chatId,data.slice(19));return;}
+    if(data.startsWith("verification_view:")){await clearTelegramAdminMode(env,chatId);await sendVerificationRequestDetails(env,chatId,data.slice(18));return;}
     if(data.startsWith("verification_approve:")){await approveVerification(env,chatId,data.slice(21));return;}
     if(data.startsWith("verification_reject:")){await clearTelegramAdminMode(env,chatId);await rejectVerification(env,chatId,data.slice(20));return;}
     if(data.startsWith("verification_cancel:")){await clearTelegramAdminMode(env,chatId);await sendVerificationRequestDetails(env,chatId,data.slice(20));return;}
