@@ -1,22 +1,14 @@
-/* THANOWEYA LOGO — final no-crop / no-mask fix */
+/* THANOWEYA LOGO — safe-area wrapper: never visually crop the artwork */
 .brandLogo,
 .authGateLogo,
 .logo.big,
 .logo.big img{
   box-sizing:border-box !important;
   overflow:visible !important;
-}
-
-.brandLogo,
-.authGateLogo,
-.logo.big img{
-  display:block !important;
   object-fit:contain !important;
-  object-position:50% 50% !important;
-  max-width:none !important;
-  max-height:none !important;
-  border-radius:0 !important;
+  object-position:center !important;
   clip-path:none !important;
+  border-radius:0 !important;
   transform:none !important;
 }
 
@@ -28,8 +20,8 @@
 }
 
 .logo.big{
-  width:76px !important;
-  height:76px !important;
+  width:88px !important;
+  height:88px !important;
   margin:0 auto 10px !important;
   display:grid !important;
   place-items:center !important;
@@ -38,26 +30,19 @@
 }
 
 .logo.big img{
-  width:76px !important;
-  height:76px !important;
+  width:88px !important;
+  height:88px !important;
 }
 
 .authGateLogo{
-  width:104px !important;
-  height:104px !important;
+  width:116px !important;
+  height:116px !important;
   margin:0 auto 14px !important;
   background:transparent !important;
 }
 
-/* Never let the logo be clipped by its surrounding brand containers. */
 .brand,
 .authGateCard,
 .oncard{
   overflow:visible !important;
-}
-
-/* PWA/browser image elements should retain the complete square artwork. */
-img[src*="thanaweya-palestine-192.jpg"]{
-  object-fit:contain !important;
-  object-position:center !important;
 }
