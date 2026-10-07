@@ -245,8 +245,7 @@ async function sendVerificationRequestToTelegram(env:Env,requestId:string){
     "🕐 "+adminFormatDate(row.created_at),
     "",
     "راجع الإيصال ثم اختر القرار."
-  ].join("
-");
+  ].join("\n");
   await telegramCall(env,"sendPhoto",{chat_id:env.TELEGRAM_CHAT_ID,photo:fileId,caption,reply_markup:verificationKeyboard(requestId)});
 }
 
@@ -264,8 +263,7 @@ async function sendVerificationRequestDetails(env:Env,chatId:string,requestId:st
     "🕐 "+adminFormatDate(row.created_at),
     "",
     "الإيصال مرفق في الرسالة الأصلية."
-  ].join("
-");
+  ].join("\n");
   await telegramCall(env,"sendMessage",{chat_id:chatId,text,reply_markup:verificationKeyboard(requestId)});
 }
 
