@@ -544,3 +544,11 @@ input:invalid,textarea:invalid,select:invalid{border-color:#ef4444}
 .paymentInfo{display:grid;gap:7px;padding:16px 18px;border-radius:18px;border:1px solid #8b5cf633;background:#8b5cf60b;margin-bottom:14px}.paymentInfo span{font-size:12px;color:var(--muted)}.paymentInfo strong{font-size:21px;direction:ltr;letter-spacing:.4px}
 .subscriptionForm{display:grid;gap:12px}.subscriptionForm label{display:grid;gap:7px}.subscriptionForm input[type="file"]{padding:12px}.subscriptionForm .upload{cursor:pointer}
 @media(max-width:650px){.subscriptionStatus{align-items:flex-start;flex-direction:column}.subscriptionStatus>strong{align-self:flex-start}}
+
+
+.verificationHero{display:grid;grid-template-columns:auto 1fr;gap:14px;align-items:center;padding:18px;border:1px solid #8b5cf633;border-radius:20px;background:linear-gradient(135deg,#8b5cf612,#2563eb0d)}
+.verificationHeroIcon{width:48px;height:48px;border-radius:16px;display:grid;place-items:center;font-size:25px;font-weight:900;background:#8b5cf61a;border:1px solid #8b5cf644}
+.verificationHero h3{margin:0 0 5px}.verificationHero p{margin:0}.verificationHero .wide{grid-column:1/-1}
+.verificationBenefits{display:grid;gap:9px;padding:16px 18px;margin-bottom:14px;border-radius:18px;border:1px solid #8b5cf633;background:#8b5cf60b}
+.verificationBenefits b{font-size:17px;margin-bottom:3px}.verificationBenefits div{font-size:13px}
+@media(max-width:650px){.verificationHero{grid-template-columns:auto 1fr}.verificationHeroIcon{grid-row:1}.verificationHero h3{font-size:15px}}
