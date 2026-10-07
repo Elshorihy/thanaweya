@@ -140,7 +140,7 @@ function AIPage({auth,s,go,notify}:{auth:import('./auth').AuthUser;s:Store;go:(p
  const pending=s.tasks.filter(x=>x.status!=='completed').length,done=s.lessons.filter(x=>x.status==='completed').length;
  const quick=(q:string)=>{setInput(q);};
  return <section className="aiPage">
-  <Title title="🤖 ثانوية AI" sub="مساعد مذاكرة شخصي يفهم بيانات حسابك ويتكلم معاك في شات حقيقي."/>
+  <div className="title"><div><h1>🤖 ثانوية AI</h1><p>مساعد مذاكرة شخصي يفهم بيانات حسابك ويتكلم معاك في شات حقيقي.</p></div></div>
   <div className="aiHero card">
    <div><span className="eyebrow">GEMINI POWERED</span><h2>أهلاً {s.profile.name||auth.name} <VerifiedBadge/></h2><p className="muted">المساعد يقدر يشوف بيانات مذاكرتك المحفوظة في حسابك عشان يديك نصيحة مناسبة ليك.</p></div>
    <div className="aiStats"><b>{s.subjects.length}<small>مواد</small></b><b>{done}<small>دروس مكتملة</small></b><b>{pending}<small>مهام متبقية</small></b></div>
