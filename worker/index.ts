@@ -40,6 +40,7 @@ async function ensureSchema(env:Env){
     await env.DB.prepare("CREATE TABLE IF NOT EXISTS sessions (id TEXT PRIMARY KEY,user_id TEXT NOT NULL,token_hash TEXT NOT NULL UNIQUE,expires_at INTEGER NOT NULL,created_at INTEGER NOT NULL,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE)").run();
     await env.DB.prepare("CREATE TABLE IF NOT EXISTS auth_codes (id TEXT PRIMARY KEY,email TEXT NOT NULL,type TEXT NOT NULL,code_hash TEXT NOT NULL,payload_json TEXT,expires_at INTEGER NOT NULL,attempts INTEGER NOT NULL DEFAULT 0,created_at INTEGER NOT NULL)").run();
     await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_auth_codes_lookup ON auth_codes(email,type,expires_at)").run();
+    await env.DB.prepare("CREATE TABLE IF NOT EXISTS ai_usage (user_id TEXT NOT NULL, day TEXT NOT NULL, count INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(user_id,day), FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE)").run();
     await env.DB.prepare("CREATE TABLE IF NOT EXISTS user_data (user_id TEXT PRIMARY KEY,data_json TEXT NOT NULL DEFAULT '{}',updated_at INTEGER NOT NULL,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE)").run();
     await env.DB.prepare("CREATE TABLE IF NOT EXISTS global_lectures (id TEXT PRIMARY KEY,title TEXT NOT NULL,subject_name TEXT NOT NULL,url TEXT NOT NULL,description TEXT NOT NULL DEFAULT '',kind TEXT NOT NULL DEFAULT 'link',enabled INTEGER NOT NULL DEFAULT 1,created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL)").run();
     await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_global_lectures_subject ON global_lectures(subject_name,enabled)").run();
@@ -1548,6 +1549,33 @@ export default {
             const currentUser=await userFrom(request,env);
             if(currentUser) ctx.waitUntil(touchUserActivity(env,currentUser.id,url.pathname,request.method));
           }catch{}
+        }
+        if(url.pathname==="/api/ai/advice" && request.method==="POST") {
+          const u=await userFrom(request,env); if(!u) return json({error:"يجب تسجيل الدخول"},401);
+          if(Number(u.verified||0)!==1 && String(u.role||"")!=="owner") return json({error:"ثانوية AI متاحة للحسابات الموثقة فقط."},403);
+          const b=await body(request),question=String(b?.question||"").trim().slice(0,1000),data=b?.data||{};
+          if(!question)return json({error:"اكتب سؤالك أولًا."},400);
+          const day=new Date().toISOString().slice(0,10),limit=20;
+          const usage=await env.DB.prepare("SELECT count FROM ai_usage WHERE user_id=? AND day=?").bind(u.id,day).first<any>();
+          const used=Number(usage?.count||0); if(used>=limit)return json({error:"وصلت للحد اليومي للمساعد الذكي (20 طلب). جرّب بكرة."},429);
+          await env.DB.prepare("INSERT INTO ai_usage(user_id,day,count) VALUES(?,?,1) ON CONFLICT(user_id,day) DO UPDATE SET count=count+1").bind(u.id,day).run();
+          const subjects=Array.isArray(data.subjects)?data.subjects:[],lessons=Array.isArray(data.lessons)?data.lessons:[],tasks=Array.isArray(data.tasks)?data.tasks:[],sessions=Array.isArray(data.sessions)?data.sessions:[];
+          const pending=tasks.filter((x:any)=>x?.status!=="completed"),completed=lessons.filter((x:any)=>x?.status==="completed");
+          const overdue=pending.filter((x:any)=>String(x?.date||"")<day);
+          const minutes=sessions.reduce((n:number,x:any)=>n+Number(x?.duration||0),0);
+          let answer="";
+          if(/ماذا|إيه|اذاكر|أذاكر|أعمل|اعمل|دلوقتي|الآن|دلوقت/i.test(question)){
+            const t=overdue[0]||pending.sort((a:any,b:any)=>String(a?.date||"").localeCompare(String(b?.date||"")))[0];
+            answer=t?"ابدأ بالمهمة المتأخرة أو الأقرب موعدًا: "+String(t?.date||"اليوم")+"، والمدة المقترحة "+Number(t?.estimatedMinutes||30)+" دقيقة.":pending.length?"مفيش مهمة محددة، اختار أصعب درس عندك وابدأ جلسة تركيز قصيرة.":"أنت مخلص كل المهام الحالية؛ استخدم وقتك في مراجعة الدروس أو إضافة منهجك المتبقي.";
+          }else if(/حلل|تقدم|متأخر|متاخر/i.test(question)){
+            answer="عندك "+subjects.length+" مواد، "+lessons.length+" درس إجمالًا، خلصت "+completed.length+" درس، وعندك "+pending.length+" مهمة متبقية. إجمالي وقت المذاكرة المسجل: "+minutes+" دقيقة. "+(overdue.length?"في "+overdue.length+" مهمة متأخرة، فدي أول أولوية.":"مفيش مهام متأخرة حاليًا.");
+          }else if(/رتب|أولو|جدول|خطة/i.test(question)){
+            const names=pending.slice(0,5).map((x:any)=>String(x?.date||"")+" — "+Number(x?.estimatedMinutes||30)+"د").join(" | ");
+            answer=pending.length?"ترتيبي المبدئي: 1) المهام المتأخرة، 2) المهام الأقرب موعدًا، 3) الدروس ذات الأولوية العالية. أقرب مهام عندك: "+names:"مفيش مهام معلقة حاليًا.";
+          }else{
+            answer="أنا شايف بيانات حسابك: "+subjects.length+" مواد، "+lessons.length+" درس، "+pending.length+" مهمة متبقية، و"+minutes+" دقيقة مذاكرة مسجلة. سؤالك اتسجل ضمن حد الاستخدام اليومي؛ جرّب تسألني عن الأولويات أو التقدم أو جدول المذاكرة.";
+          }
+          return json({ok:true,answer,used:used+1,limit});
         }
         if(url.pathname==="/api/auth/register/start" && request.method==="POST") {
           const b=await body(request), email=cleanEmail(b?.email), name=cleanName(b?.name), password=String(b?.password||""), phone=cleanPhone(b?.phone);
