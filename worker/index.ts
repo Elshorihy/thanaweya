@@ -227,6 +227,52 @@ async function sendEmailOtp(env:Env,email:string,code:string,type:"register"|"re
       clearTimeout(timeout);
     }
   }
+  if(type==="reset"){
+    // Compatibility fallback: older Gmail Apps Script deployments may only
+    // recognize the registration OTP type. The stored/verified OTP remains "reset".
+    let fallbackError:unknown=null;
+    for(let attempt=1;attempt<=2;attempt++){
+      const u=new URL(url.toString());
+      u.searchParams.set("action","otp");
+      u.searchParams.set("type","register");
+      u.searchParams.set("email",email);
+      u.searchParams.set("code",code);
+      u.searchParams.set("otpCode",code);
+      u.searchParams.set("secret",secret);
+      u.searchParams.set("requestId",randomHex(20));
+      u.searchParams.set("_ts",String(Date.now()));
+      const controller=new AbortController();
+      const timeout=setTimeout(()=>controller.abort(),12000);
+      try{
+        const response=await fetch(u.toString(),{
+          method:"GET",
+          redirect:"follow",
+          headers:{"accept":"application/json,text/plain,*/*","cache-control":"no-cache"},
+          signal:controller.signal,
+          cf:{cacheTtl:0,cacheEverything:false}
+        } as RequestInit);
+        const raw=await response.text();
+        const cleaned=raw.replace(/^\\uFEFF/,"").trim();
+        let data:any=null;
+        try{data=JSON.parse(cleaned)}catch{}
+        if(data?.ok===true && (
+          data?.sent===true || data?.status==="sent" || data?.status==="ok" ||
+          data?.result==="sent" || data?.accepted===true ||
+          /otp email sent successfully|email sent successfully|تم إرسال.*كود|تم إرسال.*email/i.test(String(data?.message||""))
+        )) return;
+        if(data?.ok===false || data?.success===false || data?.status==="error"){
+          throw new Error(String(data?.error||data?.message||"Google Apps Script رفض إرسال كود الاستعادة").slice(0,400));
+        }
+        throw new Error("Google Apps Script لم يؤكد إرسال كود الاستعادة (HTTP "+response.status+").");
+      }catch(e){
+        fallbackError=e;
+        if(attempt<2) await new Promise(resolve=>setTimeout(resolve,1500));
+      }finally{
+        clearTimeout(timeout);
+      }
+    }
+    throw fallbackError instanceof Error?fallbackError:new Error("تعذر إرسال كود الاستعادة عبر Gmail");
+  }
   throw lastError instanceof Error?lastError:new Error("تعذر إرسال كود Gmail");
 }
 async function ensurePushSubscriptions(env:Env){
