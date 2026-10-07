@@ -1,5 +1,5 @@
-const CACHE='thanaweya-shell-v18';
-const CORE=['/','/manifest.webmanifest','/icons/thanaweya-palestine-192.jpg?v=20261008','/sw.js'];
+const CACHE='thanaweya-shell-v19-logo-final';
+const CORE=['/','/manifest.webmanifest','/icons/thanaweya-palestine-192.jpg?v=20261007-logo-final','/sw.js'];
 
 self.addEventListener('install',event=>{
  event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(CORE)).then(()=>self.skipWaiting()));
@@ -14,7 +14,7 @@ self.addEventListener('push',event=>{
   try{data=event.data?event.data.json():{}}catch{data={body:event.data?.text?.()||''}}
   const title=String(data.title||'ثانويه');
   const body=String(data.body||'');
-  const icon=String(data.icon||'/icons/thanaweya-palestine-192.jpg?v=20261008');
+  const icon=String(data.icon||'/icons/thanaweya-palestine-192.jpg?v=20261007-logo-final');
   const badge=String(data.badge||icon);
   const target=typeof data.url==='string'&&data.url.startsWith('/')?data.url:'/';
   event.waitUntil(self.registration.showNotification(title,{
