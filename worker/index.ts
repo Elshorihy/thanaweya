@@ -243,7 +243,7 @@ async function broadcastWebPush(env:Env,title:string,message:string,url="/"){
   const rows=await env.DB.prepare("SELECT id,user_id,endpoint,p256dh,auth FROM push_subscriptions ORDER BY updated_at DESC").all<any>();
   const items=rows.results||[];
   let sent=0,failed=0,removed=0; const errors:string[]=[];
-  const payload=JSON.stringify({title:title.slice(0,120),body:message.slice(0,3000),icon:"/icons/thanaweya-192.png",badge:"/icons/thanaweya-192.png",url:url.startsWith("/")?url:"/"});
+  const payload=JSON.stringify({title:title.slice(0,120),body:message.slice(0,3000),icon:"/icons/thanaweya-palestine-192.jpg",badge:"/icons/thanaweya-palestine-192.jpg",url:url.startsWith("/")?url:"/"});
   for(const row of items){
     try{
       const result=await sendNotification(
