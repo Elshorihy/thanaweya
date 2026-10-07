@@ -118,10 +118,51 @@ function getVideoEmbedUrl(raw:string){
 }
 function VerifiedBadge(){return <span className="verifiedBadge" title="حساب موثق" aria-label="حساب موثق">✓</span>}
 function AIPage({auth,s,go,notify}:{auth:import('./auth').AuthUser;s:Store;go:(p:string)=>void;notify:(m:string)=>void}){
- const [busy,setBusy]=useState(false),[answer,setAnswer]=useState(''),[input,setInput]=useState('');
- const ask=async()=>{if(!input.trim())return;setBusy(true);try{const r=await fetch('/api/ai/advice',{method:'POST',credentials:'include',headers:{'content-type':'application/json'},body:JSON.stringify({question:input.slice(0,1000),data:{profile:s.profile,subjects:s.subjects,units:s.units,lessons:s.lessons,tasks:s.tasks,sessions:s.sessions,studySchedule:s.studySchedule,classSchedule:s.classSchedule,settings:s.settings}})});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d?.error||'تعذر تشغيل المساعد');setAnswer(String(d.answer||''));}catch(e){notify(e instanceof Error?e.message:'تعذر تشغيل المساعد')}finally{setBusy(false)}};
+ const [busy,setBusy]=useState(false),[input,setInput]=useState(''),[messages,setMessages]=useState<Array<{role:'user'|'assistant';text:string}>>([]);
+ const listRef=useRef<HTMLDivElement|null>(null);
+ useEffect(()=>{listRef.current?.scrollTo({top:listRef.current.scrollHeight,behavior:'smooth'})},[messages,busy]);
+ const ask=async()=>{
+  const question=input.trim(); if(!question||busy)return;
+  const next=[...messages,{role:'user' as const,text:question}];
+  setMessages(next);setInput('');setBusy(true);
+  try{
+   const r=await fetch('/api/ai/advice',{
+    method:'POST',credentials:'include',headers:{'content-type':'application/json'},
+    body:JSON.stringify({question,history:messages.slice(-12)})
+   });
+   const d=await r.json().catch(()=>({}));
+   if(!r.ok)throw new Error(d?.error||'تعذر تشغيل المساعد');
+   setMessages(v=>[...v,{role:'assistant',text:String(d.answer||'')}]);
+  }catch(e){
+   setMessages(v=>[...v,{role:'assistant',text:'⚠️ '+(e instanceof Error?e.message:'تعذر تشغيل المساعد')}]);
+  }finally{setBusy(false)}
+ };
  const pending=s.tasks.filter(x=>x.status!=='completed').length,done=s.lessons.filter(x=>x.status==='completed').length;
- return <section className="aiPage"><Title title="🤖 ثانوية AI" sub="مساعد مذاكرة شخصي مبني على بيانات حسابك الحقيقية."/><div className="aiHero card"><div><span className="eyebrow">VERIFIED AI</span><h2>أهلاً {s.profile.name||auth.name} <VerifiedBadge/></h2><p className="muted">أنا شايف تقدمك وجدولك وموادك داخل ثانوية، وأقدر أساعدك في تحديد الخطوة الجاية.</p></div><div className="aiStats"><b>{s.subjects.length}<small>مواد</small></b><b>{done}<small>دروس مكتملة</small></b><b>{pending}<small>مهام متبقية</small></b></div></div><div className="aiQuick card"><div className="choices"><button onClick={()=>setInput('إيه أهم حاجة أذاكرها دلوقتي؟')}>🎯 أذاكر إيه دلوقتي؟</button><button onClick={()=>setInput('حلل تقدمي وقولي أنا متأخر فين.')}>📊 حلل تقدمي</button><button onClick={()=>setInput('رتبلي أولويات مذاكرتي النهارده.')}>📅 رتب أولوياتي</button></div><label>اسأل ثانوية AI<textarea value={input} onChange={e=>setInput(e.target.value)} placeholder="مثال: عندي ساعة واحدة، أعمل إيه؟"/></label><button className="primary wide" disabled={busy||!input.trim()} onClick={ask}>{busy?'🧠 جاري التحليل...':'🤖 اسأل ثانوية AI'}</button></div>{answer&&<Card title="💡 رد ثانوية AI"><div className="aiAnswer">{answer.split('\\n').map((x,i)=><p key={i}>{x||' '}</p>)}</div></Card>}<div className="card"><p className="muted">🔒 المساعد متاح للحسابات الموثقة فقط، ويستخدم بيانات المذاكرة الموجودة داخل حسابك.</p><button onClick={()=>go('settings')}>إدارة حسابي</button></div></section>}
+ const quick=(q:string)=>{setInput(q);};
+ return <section className="aiPage">
+  <Title title="🤖 ثانوية AI" sub="مساعد مذاكرة شخصي يفهم بيانات حسابك ويتكلم معاك في شات حقيقي."/>
+  <div className="aiHero card">
+   <div><span className="eyebrow">GEMINI POWERED</span><h2>أهلاً {s.profile.name||auth.name} <VerifiedBadge/></h2><p className="muted">المساعد يقدر يشوف بيانات مذاكرتك المحفوظة في حسابك عشان يديك نصيحة مناسبة ليك.</p></div>
+   <div className="aiStats"><b>{s.subjects.length}<small>مواد</small></b><b>{done}<small>دروس مكتملة</small></b><b>{pending}<small>مهام متبقية</small></b></div>
+  </div>
+  <div className="aiQuick card">
+   <div className="choices">
+    <button onClick={()=>quick('إيه أهم حاجة أذاكرها دلوقتي؟')}>🎯 أذاكر إيه دلوقتي؟</button>
+    <button onClick={()=>quick('حلل تقدمي وقولي أنا متأخر فين.')}>📊 حلل تقدمي</button>
+    <button onClick={()=>quick('رتبلي أولويات مذاكرتي النهارده.')}>📅 رتب أولوياتي</button>
+   </div>
+   <div className="aiChat" ref={listRef}>
+    {!messages.length&&<div className="aiEmpty"><span>🧠</span><strong>ابدأ الكلام</strong><p>اسألني عن المذاكرة، المواد، جدولك، أو أي حاجة تساعدك دراسيًا.</p></div>}
+    {messages.map((msg,i)=><div className={'aiBubble '+msg.role} key={i}><span className="aiBubbleRole">{msg.role==='user'?'أنت':'ثانوية AI'}</span><div>{msg.text.split('\n').map((x,j)=><p key={j}>{x||' '}</p>)}</div></div>)}
+    {busy&&<div className="aiBubble assistant"><span className="aiBubbleRole">ثانوية AI</span><div><p>🧠 بفكر في الرد...</p></div></div>}
+   </div>
+   <label>اتكلم مع ثانوية AI<textarea value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();ask()}}} placeholder="اكتب رسالتك هنا..."/></label>
+   <button className="primary wide" disabled={busy||!input.trim()} onClick={ask}>{busy?'🧠 جاري الرد...':'🤖 إرسال الرسالة'}</button>
+   {messages.length>0&&<button className="ghost wide" disabled={busy} onClick={()=>setMessages([])}>مسح المحادثة</button>}
+  </div>
+  <div className="card"><p className="muted">🔒 المساعد متاح للحسابات الموثقة فقط. بيانات حسابك تُرسل للموديل فقط عند طلب الرد، ولا نضع مفتاح Gemini داخل الواجهة.</p><button onClick={()=>go('settings')}>إدارة حسابي</button></div>
+ </section>
+}
 function Card({title,children,action}:{title:string;children:any;action?:any}){return <div className="card"><div className="cardhead"><h2>{title}</h2>{action}</div>{children}</div>}
 function Modal({title,children,onClose}:{title:string;children:any;onClose:()=>void}){return <div className="overlay" onClick={onClose}><div className="modal" onClick={e=>e.stopPropagation()}><div className="cardhead"><h2>{title}</h2><button aria-label="إغلاق" onClick={onClose}><X/></button></div>{children}</div></div>}
 function pushBase64ToBytes(value:string){
