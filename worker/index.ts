@@ -53,6 +53,12 @@ async function ensureSchema(env:Env){
     await env.DB.prepare("CREATE TABLE IF NOT EXISTS push_subscriptions (id TEXT PRIMARY KEY,user_id TEXT NOT NULL,endpoint TEXT NOT NULL UNIQUE,p256dh TEXT NOT NULL,auth TEXT NOT NULL,user_agent TEXT,created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE)").run();
     await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_push_subscriptions_user ON push_subscriptions(user_id)").run();
     await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_push_subscriptions_updated ON push_subscriptions(updated_at)").run();
+    await env.DB.prepare("CREATE TABLE IF NOT EXISTS subscriptions (id TEXT PRIMARY KEY,user_id TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'active',started_at INTEGER NOT NULL,expires_at INTEGER NOT NULL,payment_reference TEXT,created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE)").run();
+    await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_subscriptions_user ON subscriptions(user_id,expires_at)").run();
+    await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_subscriptions_active ON subscriptions(status,expires_at)").run();
+    await env.DB.prepare("CREATE TABLE IF NOT EXISTS verification_requests (id TEXT PRIMARY KEY,user_id TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'pending',transfer_phone TEXT NOT NULL,receipt_file_id TEXT NOT NULL,telegram_message_id TEXT,created_at INTEGER NOT NULL,reviewed_at INTEGER,reviewed_by TEXT,rejection_reason TEXT,payment_reference TEXT,subscription_id TEXT,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE)").run();
+    await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_verification_requests_status ON verification_requests(status,created_at)").run();
+    await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_verification_requests_user ON verification_requests(user_id,created_at)").run();
   })().catch(e=>{schemaReady=null;throw e});
   await schemaReady;
 }
@@ -185,6 +191,147 @@ async function telegramCall(env:Env,method:string,payload:Record<string,unknown>
   const data=await r.json() as any;
   if(!r.ok || !data?.ok) throw new Error(data?.description||`Telegram API error: ${r.status}`);
   return data;
+}
+
+async function telegramSendPhoto(env:Env,chatId:string,file:File,caption:string,replyMarkup:any){
+  const form=new FormData();
+  form.append("chat_id",chatId);
+  form.append("photo",file,file.name||"receipt.jpg");
+  form.append("caption",caption.slice(0,1024));
+  form.append("reply_markup",JSON.stringify(replyMarkup));
+  const r=await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendPhoto`,{method:"POST",body:form});
+  const data=await r.json() as any;
+  if(!r.ok||!data?.ok) throw new Error(data?.description||`Telegram sendPhoto error: ${r.status}`);
+  return data;
+}
+
+async function getSubscription(env:Env,userId:string){
+  const now=Date.now();
+  const row=await env.DB.prepare("SELECT id,status,started_at,expires_at,payment_reference FROM subscriptions WHERE user_id=? ORDER BY expires_at DESC LIMIT 1").bind(userId).first<any>();
+  if(!row) return {status:"none",startedAt:null,expiresAt:null,daysLeft:0,id:null,paymentReference:null};
+  const expires=Number(row.expires_at||0);
+  const active=String(row.status)==="active"&&expires>now;
+  if(String(row.status)==="active"&&expires<=now){
+    await env.DB.prepare("UPDATE subscriptions SET status='expired',updated_at=? WHERE id=?").bind(now,String(row.id)).run();
+  }
+  return {status:active?"active":(expires>0?"expired":"none"),startedAt:Number(row.started_at||0)||null,expiresAt:expires||null,daysLeft:active?Math.max(0,Math.ceil((expires-now)/86400000)):0,id:String(row.id||"")||null,paymentReference:row.payment_reference?String(row.payment_reference):null};
+}
+
+async function hasActiveSubscription(env:Env,userId:string){
+  const s=await getSubscription(env,userId);
+  return s.status==="active";
+}
+
+function verificationKeyboard(id:string){
+  return {inline_keyboard:[
+    [{text:"✅ قبول",callback_data:"verification_approve:"+id},{text:"❌ رفض",callback_data:"verification_reject:"+id}]
+  ]};
+}
+
+async function sendVerificationRequestToTelegram(env:Env,requestId:string){
+  const row=await env.DB.prepare("SELECT vr.id,vr.transfer_phone,vr.created_at,u.name,u.email,p.phone FROM verification_requests vr JOIN users u ON u.id=vr.user_id LEFT JOIN user_phones p ON p.user_id=vr.user_id WHERE vr.id=?").bind(requestId).first<any>();
+  if(!row) throw new Error("طلب التوثيق غير موجود.");
+  const fileRow=await env.DB.prepare("SELECT receipt_file_id FROM verification_requests WHERE id=?").bind(requestId).first<any>();
+  const fileId=String(fileRow?.receipt_file_id||"");
+  if(!fileId) throw new Error("إيصال التحويل غير موجود.");
+  const caption=[
+    "💳 طلب توثيق مدفوع جديد",
+    "",
+    "👤 الاسم: "+String(row.name||"—"),
+    "✉️ الإيميل: "+String(row.email||"—"),
+    "📱 رقم حساب واتساب: "+String(row.phone||"غير مرتبط"),
+    "💸 الرقم المحوَّل منه: "+String(row.transfer_phone||"—"),
+    "🆔 Request: "+requestId,
+    "🕐 "+adminFormatDate(row.created_at),
+    "",
+    "راجع الإيصال ثم اختر القرار."
+  ].join("
+");
+  await telegramCall(env,"sendPhoto",{chat_id:env.TELEGRAM_CHAT_ID,photo:fileId,caption,reply_markup:verificationKeyboard(requestId)});
+}
+
+async function sendVerificationRequestDetails(env:Env,chatId:string,requestId:string){
+  const row=await env.DB.prepare("SELECT vr.*,u.name,u.email,p.phone FROM verification_requests vr JOIN users u ON u.id=vr.user_id LEFT JOIN user_phones p ON p.user_id=vr.user_id WHERE vr.id=?").bind(requestId).first<any>();
+  if(!row){await telegramCall(env,"sendMessage",{chat_id:chatId,text:"❌ طلب التوثيق غير موجود.",reply_markup:dashBack()});return;}
+  const text=[
+    "💳 طلب توثيق",
+    "",
+    "👤 "+String(row.name||"—"),
+    "✉️ "+String(row.email||"—"),
+    "📱 واتساب الحساب: "+String(row.phone||"غير مرتبط"),
+    "💸 حوّل من: "+String(row.transfer_phone||"—"),
+    "📌 الحالة: "+String(row.status||"pending"),
+    "🕐 "+adminFormatDate(row.created_at),
+    "",
+    "الإيصال مرفق في الرسالة الأصلية."
+  ].join("
+");
+  await telegramCall(env,"sendMessage",{chat_id:chatId,text,reply_markup:verificationKeyboard(requestId)});
+}
+
+async function approveVerification(env:Env,chatId:string,requestId:string){
+  const row=await env.DB.prepare("SELECT id,user_id,status FROM verification_requests WHERE id=?").bind(requestId).first<any>();
+  if(!row){await telegramCall(env,"sendMessage",{chat_id:chatId,text:"❌ الطلب غير موجود."});return;}
+  if(String(row.status)!=="pending"){await telegramCall(env,"sendMessage",{chat_id:chatId,text:"⚠️ الطلب ده اتراجع فيه بالفعل: "+String(row.status)});return;}
+  await setTelegramAdminMode(env,chatId,"verification_duration",{requestId});
+  await telegramCall(env,"sendMessage",{chat_id:chatId,text:"✅ اختر مدة الاشتراك للطلب "+requestId,reply_markup:{inline_keyboard:[
+    [{text:"30 يوم",callback_data:"verification_months:1:"+requestId},{text:"3 شهور",callback_data:"verification_months:3:"+requestId}],
+    [{text:"6 شهور",callback_data:"verification_months:6:"+requestId},{text:"سنة",callback_data:"verification_months:12:"+requestId}],
+    [{text:"✏️ مدة مخصصة",callback_data:"verification_custom:"+requestId"}],
+    [{text:"❌ إلغاء",callback_data:"verification_cancel:"+requestId}]
+  ]}});
+}
+
+async function activateVerification(env:Env,chatId:string,requestId:string,months:number){
+  months=Math.max(1,Math.min(120,Math.floor(months)));
+  const now=Date.now();
+  const row=await env.DB.prepare("SELECT vr.id,vr.user_id,vr.status,u.name,u.email FROM verification_requests vr JOIN users u ON u.id=vr.user_id WHERE vr.id=?").bind(requestId).first<any>();
+  if(!row) throw new Error("طلب التوثيق غير موجود.");
+  if(String(row.status)!=="pending") throw new Error("الطلب تم التعامل معه بالفعل.");
+  const current=await env.DB.prepare("SELECT id,expires_at FROM subscriptions WHERE user_id=? AND status='active' AND expires_at>? ORDER BY expires_at DESC LIMIT 1").bind(String(row.user_id),now).first<any>();
+  const start=Math.max(now,Number(current?.expires_at||0));
+  const expires=start+months*30*86400000;
+  const subId=randomHex(16);
+  await env.DB.batch([
+    env.DB.prepare("INSERT INTO subscriptions(id,user_id,status,started_at,expires_at,created_at,updated_at) VALUES(?,?,?,?,?,?,?)").bind(subId,row.user_id,"active",start,expires,now,now),
+    env.DB.prepare("UPDATE verification_requests SET status='approved',reviewed_at=?,reviewed_by=?,subscription_id=? WHERE id=? AND status='pending'").bind(now,chatId,subId,requestId),
+    env.DB.prepare("UPDATE users SET verified=1,updated_at=? WHERE id=?").bind(now,row.user_id)
+  ]);
+  await adminLog(env,chatId,"APPROVE_VERIFICATION",String(row.user_id),months+" months");
+  await telegramCall(env,"sendMessage",{chat_id:chatId,text:[
+    "✅ تم تفعيل التوثيق",
+    "",
+    "👤 "+String(row.name||"—"),
+    "✉️ "+String(row.email||"—"),
+    "📅 المدة: "+months+" شهر",
+    "🟢 يبدأ: "+adminFormatDate(start),
+    "⏳ ينتهي: "+adminFormatDate(expires)
+  ].join("\n"),reply_markup:{inline_keyboard:[[ {text:"💳 طلبات التوثيق",callback_data:"dash_verifications"} ],[ {text:"🎛️ لوحة التحكم",callback_data:"dash_home"} ]] }});
+}
+
+async function rejectVerification(env:Env,chatId:string,requestId:string){
+  const row=await env.DB.prepare("SELECT id,user_id,status FROM verification_requests WHERE id=?").bind(requestId).first<any>();
+  if(!row){await telegramCall(env,"sendMessage",{chat_id:chatId,text:"❌ الطلب غير موجود."});return;}
+  if(String(row.status)!=="pending"){await telegramCall(env,"sendMessage",{chat_id:chatId,text:"⚠️ الطلب اتراجع فيه بالفعل."});return;}
+  await env.DB.prepare("UPDATE verification_requests SET status='rejected',reviewed_at=?,reviewed_by=? WHERE id=? AND status='pending'").bind(Date.now(),chatId,requestId).run();
+  await adminLog(env,chatId,"REJECT_VERIFICATION",String(row.user_id));
+  await telegramCall(env,"sendMessage",{chat_id:chatId,text:"❌ تم رفض طلب التوثيق.
+
+Request: "+requestId,reply_markup:{inline_keyboard:[[ {text:"💳 طلبات التوثيق",callback_data:"dash_verifications"} ],[ {text:"🎛️ لوحة التحكم",callback_data:"dash_home"} ]] }});
+}
+
+async function sendTelegramVerifications(env:Env,chatId:string){
+  const rows=await env.DB.prepare("SELECT vr.id,vr.status,vr.transfer_phone,vr.created_at,u.name,u.email FROM verification_requests vr JOIN users u ON u.id=vr.user_id WHERE vr.status='pending' ORDER BY vr.created_at ASC LIMIT 20").all<any>();
+  const items=rows.results||[];
+  const lines=["💳 طلبات التوثيق المعلقة","",...(items.length?items.map((x:any,i:number)=>(i+1)+". "+String(x.name||"—")+" — "+String(x.email||"—")+"\n   💸 "+String(x.transfer_phone||"—")+" · "+adminFormatDate(x.created_at)):["لا توجد طلبات معلقة."])];
+  await telegramCall(env,"sendMessage",{chat_id:chatId,text:lines.join("\n"),reply_markup:{inline_keyboard:[
+    ...items.map((x:any)=>[{text:"👤 "+String(x.name||"طلب").slice(0,40),callback_data:"verification_view:"+String(x.id)}]),
+    [{text:"⬅️ اللوحة",callback_data:"dash_home"}]
+  ]}});
+}
+
+async function getPaymentPhone(env:Env){
+  return await getAdminSetting(env,"payment_phone","");
 }
 
 async function greenApiCall(env:Env,phone:string,message:string){
@@ -729,6 +876,8 @@ async function sendTelegramAdminActivity(env:Env,chatId:string){
 async function sendTelegramAdminReport(env:Env,chatId:string){
   const s=await getPageViewStats(env);
   const verified=await env.DB.prepare("SELECT COUNT(*) AS n FROM users WHERE email_verified_at IS NOT NULL").first<any>();
+  const activeSubs=await env.DB.prepare("SELECT COUNT(*) AS n FROM subscriptions WHERE status='active' AND expires_at>?").bind(Date.now()).first<any>();
+  const pendingVerifications=await env.DB.prepare("SELECT COUNT(*) AS n FROM verification_requests WHERE status='pending'").first<any>();
   const phones=await env.DB.prepare("SELECT COUNT(*) AS n FROM user_phones WHERE phone IS NOT NULL AND phone<>''").first<any>();
   const active=await env.DB.prepare("SELECT COUNT(*) AS n FROM sessions WHERE expires_at>?").bind(Date.now()).first<any>();
   const new24=await env.DB.prepare("SELECT COUNT(*) AS n FROM users WHERE created_at>=?").bind(Date.now()-86400000).first<any>();
@@ -741,6 +890,8 @@ async function sendTelegramAdminReport(env:Env,chatId:string){
     "✅ حسابات مؤكدة: "+Number(verified?.n||0),
     "📱 أرقام واتساب: "+Number(phones?.n||0),
     "🟢 جلسات فعالة: "+Number(active?.n||0),
+    "💳 اشتراكات AI فعالة: "+Number(activeSubs?.n||0),
+    "⏳ طلبات توثيق معلقة: "+Number(pendingVerifications?.n||0),
     "👀 زيارات اليوم: "+s.todayVisits,
     "🗓️ زيارات 7 أيام: "+s.last7DaysVisits,
     "📨 رسائل واتساب 24 ساعة: "+Number(wa?.n||0),
@@ -1201,6 +1352,23 @@ async function handleTelegramUpdate(env:Env,update:any){
     if(data==="dash_campaigns"){await clearTelegramAdminMode(env,chatId);await sendTelegramCampaigns(env,chatId);return;}
     if(data==="dash_home"){await clearTelegramAdminMode(env,chatId);await sendTelegramDashboard(env,chatId);return;}
     if(data==="dash_stats"){await sendTelegramDashboard(env,chatId);return;}
+    if(data==="dash_verifications"){await clearTelegramAdminMode(env,chatId);await sendTelegramVerifications(env,chatId);return;}
+    if(data.startsWith("verification_view:")){await clearTelegramAdminMode(env,chatId);await sendVerificationRequestDetails(env,chatId,data.slice(19));return;}
+    if(data.startsWith("verification_approve:")){await approveVerification(env,chatId,data.slice(21));return;}
+    if(data.startsWith("verification_reject:")){await clearTelegramAdminMode(env,chatId);await rejectVerification(env,chatId,data.slice(20));return;}
+    if(data.startsWith("verification_cancel:")){await clearTelegramAdminMode(env,chatId);await sendVerificationRequestDetails(env,chatId,data.slice(20));return;}
+    if(data.startsWith("verification_custom:")){
+      const requestId=data.slice(20);
+      await setTelegramAdminMode(env,chatId,"verification_custom_months",{requestId});
+      await telegramCall(env,"sendMessage",{chat_id:chatId,text:"✏️ اكتب عدد الشهور من 1 إلى 120.",reply_markup:{inline_keyboard:[[ {text:"❌ إلغاء",callback_data:"dash_verifications"} ]] }});
+      return;
+    }
+    if(data.startsWith("verification_months:")){
+      const parts=data.split(":"); const months=Number(parts[1]); const requestId=parts.slice(2).join(":");
+      await clearTelegramAdminMode(env,chatId);
+      try{await activateVerification(env,chatId,requestId,months);}catch(e){await telegramCall(env,"sendMessage",{chat_id:chatId,text:"⚠️ "+(e instanceof Error?e.message:String(e)).slice(0,500)});}
+      return;
+    }
     if(data==="dash_users"){await clearTelegramAdminMode(env,chatId);await sendTelegramUsers(env,chatId,1);return;}
     if(data.startsWith("users_page:")){await clearTelegramAdminMode(env,chatId);await sendTelegramUsers(env,chatId,Number(data.slice(11))||1);return;}
     if(data==="dash_recent"){await clearTelegramAdminMode(env,chatId);await sendTelegramRecentUsers(env,chatId);return;}    if(data==="dash_search"){await setTelegramAdminMode(env,chatId,"user_search");await telegramCall(env,"sendMessage",{chat_id:chatId,text:"🔎 ابعت الاسم أو الإيميل أو رقم الواتساب اللي عايز تدور عليه.",reply_markup:{inline_keyboard:[[ {text:"❌ إلغاء",callback_data:"dash_cancel"} ]] }});return;}
@@ -1435,6 +1603,15 @@ async function handleTelegramUpdate(env:Env,update:any){
     await telegramCall(env,"sendMessage",{chat_id:chatId,text:"📝 الرسالة جاهزة للإرسال:\n\n"+text+"\n\nهل أنت متأكد إنك عايز تبعتها لكل أرقام واتساب؟",reply_markup:{inline_keyboard:[[ {text:"✅ تأكيد الإرسال",callback_data:"dash_broadcast_confirm"},{text:"❌ إلغاء",callback_data:"dash_cancel"} ]] }});
     return;
   }
+  if(state.mode==="verification_custom_months" && text){
+    const months=Number(text.replace(/[^0-9]/g,""));
+    const requestId=String(state.payload?.requestId||"");
+    if(!Number.isFinite(months)||months<1||months>120){await telegramCall(env,"sendMessage",{chat_id:chatId,text:"❌ اكتب رقم شهور من 1 إلى 120."});return;}
+    await clearTelegramAdminMode(env,chatId);
+    try{await activateVerification(env,chatId,requestId,months);}catch(e){await telegramCall(env,"sendMessage",{chat_id:chatId,text:"⚠️ "+(e instanceof Error?e.message:String(e)).slice(0,500)});}
+    return;
+  }
+
   if(state.mode==="user_search" && text){
     await clearTelegramAdminMode(env,chatId);
     await sendTelegramUserSearch(env,chatId,text);
@@ -1591,7 +1768,7 @@ export default {
         if(url.pathname==="/api/ai/advice" && request.method==="POST") {
           const u=await userFrom(request,env);
           if(!u) return json({error:"يجب تسجيل الدخول"},401);
-          if(Number(u.verified||0)!==1 && String(u.role||"")!=="owner") return json({error:"ثانوية AI متاحة للحسابات الموثقة فقط."},403);
+          if(String(u.role||"")!=="owner" && !(await hasActiveSubscription(env,u.id))) return json({error:"ثانوية AI متاحة للاشتراكات المفعّلة فقط."},403);
 
           const b=await body(request);
           const question=String(b?.question||"").trim().slice(0,4000);
@@ -1740,6 +1917,44 @@ export default {
           const token=await createSession(u.id,env);
           return json({user:{id:u.id,email:u.email,name:u.name,phone:phoneRow?.phone||null,role:u.role||"user",verified:Number(u.verified||0)===1}},200,{"set-cookie":sessionCookie(token)});
         }
+        if(url.pathname==="/api/subscription/status" && request.method==="GET") {
+          const u=await userFrom(request,env); if(!u) return json({error:"يجب تسجيل الدخول"},401);
+          const subscription=await getSubscription(env,u.id);
+          const pending=await env.DB.prepare("SELECT id,status,created_at,transfer_phone FROM verification_requests WHERE user_id=? AND status='pending' ORDER BY created_at DESC LIMIT 1").bind(u.id).first<any>();
+          return json({ok:true,subscription,pending:pending?{id:String(pending.id),status:String(pending.status),createdAt:Number(pending.created_at||0),transferPhone:String(pending.transfer_phone||"")} : null,paymentPhone:await getPaymentPhone(env)});
+        }
+        if(url.pathname==="/api/subscription/submit" && request.method==="POST") {
+          const u=await userFrom(request,env); if(!u) return json({error:"يجب تسجيل الدخول"},401);
+          const active=await hasActiveSubscription(env,u.id);
+          if(active) return json({error:"اشتراكك ما زال مفعّلًا بالفعل."},409);
+          const pending=await env.DB.prepare("SELECT id FROM verification_requests WHERE user_id=? AND status='pending' LIMIT 1").bind(u.id).first<any>();
+          if(pending) return json({error:"عندك طلب توثيق قيد المراجعة بالفعل."},409);
+          const form=await request.formData();
+          const transferPhone=cleanPhone(form.get("transferPhone"));
+          const file=form.get("receipt");
+          if(!validPhone(transferPhone)) return json({error:"اكتب رقم الموبايل اللي حوّلت منه بشكل صحيح."},400);
+          if(!(file instanceof File)) return json({error:"ارفع صورة إيصال التحويل."},400);
+          const type=String(file.type||"").toLowerCase();
+          if(!type.startsWith("image/")) return json({error:"الإيصال لازم يكون صورة."},400);
+          if(file.size<1024 || file.size>5*1024*1024) return json({error:"حجم صورة الإيصال لازم يكون بين 1KB و5MB."},400);
+          const requestId=randomHex(16),now=Date.now();
+          await env.DB.prepare("INSERT INTO verification_requests(id,user_id,status,transfer_phone,receipt_file_id,created_at) VALUES(?,?,?,?,?,?)").bind(requestId,u.id,"pending",""+transferPhone,"pending",now).run();
+          try{
+            const uRow=await env.DB.prepare("SELECT name,email FROM users WHERE id=?").bind(u.id).first<any>();
+            const caption=["💳 طلب توثيق مدفوع جديد","","👤 الاسم: "+String(uRow?.name||u.name||"—"),"✉️ الإيميل: "+String(uRow?.email||u.email||"—"),"📱 رقم التحويل: "+transferPhone,"🆔 Request: "+requestId,"🕐 "+adminFormatDate(now),"","راجع الإيصال ثم اختر القرار."].join("\n");
+            const replyMarkup=verificationKeyboard(requestId);
+            const tg=await telegramSendPhoto(env,String(env.TELEGRAM_CHAT_ID),file,caption,replyMarkup);
+            const photo=Array.isArray(tg?.result?.photo)?tg.result.photo[tg.result.photo.length-1]:null;
+            const fileId=String(photo?.file_id||"");
+            const messageId=String(tg?.result?.message_id||"");
+            if(!fileId) throw new Error("Telegram لم يعطِ file_id للإيصال.");
+            await env.DB.prepare("UPDATE verification_requests SET receipt_file_id=?,telegram_message_id=? WHERE id=?").bind(fileId,messageId,requestId).run();
+            return json({ok:true,requestId,messageId});
+          }catch(e){
+            await env.DB.prepare("DELETE FROM verification_requests WHERE id=?").bind(requestId).run();
+            throw e;
+          }
+        }
         if(url.pathname==="/api/account/whatsapp" && (request.method==="GET"||request.method==="PUT")) {
           const u=await userFrom(request,env); if(!u) return json({error:"يجب تسجيل الدخول"},401);
           if(request.method==="GET") {
@@ -1759,7 +1974,8 @@ export default {
         if(url.pathname==="/api/auth/me" && request.method==="GET") {
           const u=await userFrom(request,env); if(!u) return json({user:null});
           const row=await env.DB.prepare("SELECT phone FROM user_phones WHERE user_id=?").bind(u.id).first<any>();
-          return json({user:{id:u.id,email:u.email,name:u.name,phone:row?.phone||null,role:u.role||"user",verified:Number(u.verified||0)===1}});
+          const subscription=await getSubscription(env,u.id);
+          return json({user:{id:u.id,email:u.email,name:u.name,phone:row?.phone||null,role:u.role||"user",verified:Number(u.verified||0)===1,subscription}});
         }
         if(url.pathname==="/api/account/profile" && (request.method==="GET"||request.method==="PUT")) {
           const u=await userFrom(request,env); if(!u) return json({error:"يجب تسجيل الدخول"},401);
