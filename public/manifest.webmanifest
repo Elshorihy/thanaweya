@@ -11,9 +11,9 @@
   "dir": "rtl",
   "icons": [
     {
-      "src": "/icons/thanaweya-logo-safe.svg?v=20261007-logo-safe",
+      "src": "/icons/thanaweya-palestine-192.jpg?v=20261007-logo-new",
       "sizes": "192x192",
-      "type": "image/svg+xml",
+      "type": "image/jpeg",
       "purpose": "any"
     }
   ],
