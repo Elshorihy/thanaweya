@@ -825,7 +825,51 @@ function Dashboard(){const due=s.lessons.filter(l=>l.nextReviewAt&&l.nextReviewA
   </Card>
  </section>
 }
- function SettingsPage(){const dragKey=settingsDragKey,dropKey=settingsDropKey;const setDragKey=setSettingsDragKey,setDropKey=setSettingsDropKey;const finishDrag=()=>{if(dragKey&&dropKey&&dragKey!==dropKey){const a=[...(s.settings.navOrder||nav.map(x=>x[0]))],fi=a.indexOf(dragKey),ti=a.indexOf(dropKey);if(fi>=0&&ti>=0){a.splice(fi,1);a.splice(ti,0,dragKey);update({settings:{...s.settings,navOrder:a}})}}setDragKey(null);setDropKey(null)};return <section><Title title="الإعدادات" sub="المظهر، الإشعارات، الحساب، الخطة والنسخ الاحتياطي."/><div className="settingsgrid"><Card title="👤 المعلومات الشخصية"><div className="accountInfoGrid">
+ function SubscriptionCard({auth,notify}:{auth:import('./auth').AuthUser|null;notify:(m:string)=>void}){
+ const [loading,setLoading]=useState(true),[sending,setSending]=useState(false),[status,setStatus]=useState<any>(null),[transferPhone,setTransferPhone]=useState(''),[file,setFile]=useState<File|null>(null);
+ const load=async()=>{
+  if(!auth){setLoading(false);return}
+  try{const r=await fetch('/api/subscription/status',{credentials:'include',cache:'no-store'});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d?.error||'تعذر تحميل حالة الاشتراك');setStatus(d)}catch(e){notify(e instanceof Error?e.message:'تعذر تحميل حالة الاشتراك')}finally{setLoading(false)}
+ };
+ useEffect(()=>{load();const t=window.setInterval(load,30000);return()=>window.clearInterval(t)},[auth?.id]);
+ const submit=async()=>{
+  if(!file||!transferPhone.trim()){notify('اكتب رقم الموبايل اللي حوّلت منه وارفع صورة الإيصال.');return}
+  setSending(true);
+  try{
+   const form=new FormData();form.append('transferPhone',transferPhone);form.append('receipt',file);
+   const r=await fetch('/api/subscription/submit',{method:'POST',credentials:'include',body:form});
+   const d=await r.json().catch(()=>({}));
+   if(!r.ok)throw new Error(d?.error||'تعذر إرسال طلب التوثيق');
+   notify('تم إرسال طلب التوثيق. راجع حالة الطلب بعد قليل.');
+   setFile(null);setTransferPhone('');await load();
+  }catch(e){notify(e instanceof Error?e.message:'تعذر إرسال طلب التوثيق')}
+  finally{setSending(false)}
+ };
+ const sub=status?.subscription||{status:'none',daysLeft:0};
+ const active=sub.status==='active';
+ const pending=!!status?.pending;
+ const expires=sub.expiresAt?new Date(Number(sub.expiresAt)).toLocaleString('ar-EG',{dateStyle:'medium',timeStyle:'short'}):'—';
+ if(!auth)return <Card title="💳 التوثيق المدفوع"><p className="muted">سجّل الدخول أولًا لطلب التوثيق.</p></Card>;
+ return <Card title="💳 التوثيق والاشتراك">
+  {loading?<p className="muted">جاري تحميل حالة الاشتراك...</p>:<>
+   <div className="subscriptionStatus">
+    <div><b>{active?'🟢 اشتراكك مفعّل':pending?'🟡 طلبك قيد المراجعة':'⚪ لا يوجد اشتراك مفعّل'}</b><span>{active?'ثانوية AI متاحة لحسابك الآن.':pending?'تم إرسال الإيصال وسيتم مراجعته من الإدارة.':'التوثيق يفتح لك ثانوية AI.'}</span></div>
+    {active&&<strong>{sub.daysLeft} يوم متبقي</strong>}
+   </div>
+   {active?<p className="muted">ينتهي الاشتراك: <b>{expires}</b></p>:pending?<p className="muted">رقم الطلب: <b>{String(status?.pending?.id||'—')}</b></p>:<>
+    <div className="paymentInfo"><b>💰 سعر التوثيق: 30 جنيه / شهر</b><span>حوّل المبلغ إلى الرقم التالي:</span><strong>{status?.paymentPhone||'لم تحدد الإدارة رقم التحويل بعد.'}</strong></div>
+    <div className="subscriptionForm">
+     <label>رقم الموبايل اللي حوّلت منه<input type="tel" inputMode="tel" value={transferPhone} onChange={e=>setTransferPhone(e.target.value)} placeholder="01xxxxxxxxx"/></label>
+     <label className="upload">📷 صورة إيصال التحويل<input type="file" accept="image/*" onChange={e=>setFile(e.target.files?.[0]||null)}/></label>
+     {file&&<small className="muted">تم اختيار: {file.name}</small>}
+     <button className="primary wide" disabled={sending||!status?.paymentPhone||!file||!transferPhone.trim()} onClick={submit}>{sending?'جاري إرسال الطلب...':'📨 إرسال طلب التوثيق'}</button>
+    </div>
+   </>}
+   <button className="ghost" onClick={load} disabled={loading||sending}>🔄 تحديث الحالة</button>
+  </>}
+ </Card>
+}
+function SettingsPage(){const dragKey=settingsDragKey,dropKey=settingsDropKey;const setDragKey=setSettingsDragKey,setDropKey=setSettingsDropKey;const finishDrag=()=>{if(dragKey&&dropKey&&dragKey!==dropKey){const a=[...(s.settings.navOrder||nav.map(x=>x[0]))],fi=a.indexOf(dragKey),ti=a.indexOf(dropKey);if(fi>=0&&ti>=0){a.splice(fi,1);a.splice(ti,0,dragKey);update({settings:{...s.settings,navOrder:a}})}}setDragKey(null);setDropKey(null)};return <section><Title title="الإعدادات" sub="المظهر، الإشعارات، الحساب، الخطة والنسخ الاحتياطي."/><div className="settingsgrid"><SubscriptionCard auth={auth} notify={m=>{setNotice(m);setTimeout(()=>setNotice(''),4000)}}/><Card title="👤 المعلومات الشخصية"><div className="accountInfoGrid">
  <label>البريد الإلكتروني<input value={auth?.email||''} readOnly aria-readonly="true" placeholder="سجّل الدخول أولًا"/></label>
  <label>الاسم<input data-focus-key="settings-account-name" value={s.profile.name} onChange={e=>update({profile:{...s.profile,name:clean(e.target.value)}})} /></label>
  <label>رقم واتساب<input data-focus-key="settings-account-phone" type="tel" inputMode="tel" value={s.profile.whatsapp||''} onChange={e=>update({profile:{...s.profile,whatsapp:clean(e.target.value)}})} placeholder="01xxxxxxxxx"/></label>
