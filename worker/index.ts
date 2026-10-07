@@ -1553,8 +1553,10 @@ export default {
         if(url.pathname==="/api/ai/advice" && request.method==="POST") {
           const u=await userFrom(request,env); if(!u) return json({error:"يجب تسجيل الدخول"},401);
           if(Number(u.verified||0)!==1 && String(u.role||"")!=="owner") return json({error:"ثانوية AI متاحة للحسابات الموثقة فقط."},403);
-          const b=await body(request),question=String(b?.question||"").trim().slice(0,1000),data=b?.data||{};
+          const b=await body(request),question=String(b?.question||"").trim().slice(0,1000);
           if(!question)return json({error:"اكتب سؤالك أولًا."},400);
+          const stored=await env.DB.prepare("SELECT data_json FROM user_data WHERE user_id=?").bind(u.id).first<any>();
+          let data:any={}; try{data=stored?.data_json?JSON.parse(stored.data_json)||{}:{}}catch{data={}}
           const day=new Date().toISOString().slice(0,10),limit=20;
           const usage=await env.DB.prepare("SELECT count FROM ai_usage WHERE user_id=? AND day=?").bind(u.id,day).first<any>();
           const used=Number(usage?.count||0); if(used>=limit)return json({error:"وصلت للحد اليومي للمساعد الذكي (20 طلب). جرّب بكرة."},429);
