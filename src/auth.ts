@@ -1,4 +1,4 @@
-export type AuthUser={id:string;email:string;name:string;phone?:string|null;role?:string;verified?:boolean};
+export type AuthUser={id:string;email:string;name:string;phone?:string|null;role?:string;verified?:boolean;subscription?:{status:string;startedAt:number|null;expiresAt:number|null;daysLeft:number}};
 async function req(path:string,options:RequestInit={}) {
   const headers=new Headers(options.headers||{});
   if(options.body!==undefined && !headers.has('content-type')) headers.set('content-type','application/json');
