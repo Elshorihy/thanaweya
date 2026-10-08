@@ -873,7 +873,8 @@ function Dashboard(){const due=s.lessons.filter(l=>l.nextReviewAt&&l.nextReviewA
     </div>
    </>}
    <div className="actions"><button className="ghost" onClick={load} disabled={loading||sending}>🔄 تحديث الحالة</button><button className="ghost" onClick={()=>setShow(false)}>إخفاء التفاصيل</button></div>
-  </>}</>
+  </>}
+ </>}
  </Card>
 }
 function SettingsPage(){const dragKey=settingsDragKey,dropKey=settingsDropKey;const setDragKey=setSettingsDragKey,setDropKey=setSettingsDropKey;const finishDrag=()=>{if(dragKey&&dropKey&&dragKey!==dropKey){const a=[...(s.settings.navOrder||nav.map(x=>x[0]))],fi=a.indexOf(dragKey),ti=a.indexOf(dropKey);if(fi>=0&&ti>=0){a.splice(fi,1);a.splice(ti,0,dragKey);update({settings:{...s.settings,navOrder:a}})}}setDragKey(null);setDropKey(null)};return <section><Title title="الإعدادات" sub="المظهر، الإشعارات، الحساب، الخطة والنسخ الاحتياطي."/><div className="settingsgrid"><SubscriptionCard auth={auth} notify={m=>{setNotice(m);setTimeout(()=>setNotice(''),4000)}}/><Card title="👤 المعلومات الشخصية"><div className="accountInfoGrid">
