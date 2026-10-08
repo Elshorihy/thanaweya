@@ -273,6 +273,8 @@ function App(){
         (Array.isArray(x.mistakes)&&x.mistakes.length) ||
         (Array.isArray(x.notes)&&x.notes.length) ||
         (Array.isArray(x.lectures)&&x.lectures.length) ||
+        (Array.isArray(x.studySchedule)&&x.studySchedule.length) ||
+        (Array.isArray(x.classSchedule)&&x.classSchedule.length) ||
         Number(x.xp||0)>0 ||
         Boolean(x.onboarded)
       );
@@ -282,7 +284,7 @@ function App(){
       setS({...initial,...cloud,profile:{...initial.profile,...(cloud.profile||{}),name:auth.name,whatsapp:auth.phone||cloud?.profile?.whatsapp||''},settings:{...initial.settings,...(cloud.settings||{})}});
     }else{
       const local=load();
-      const localHasData=local.challengeClaims.length||local.subjects.length||local.units.length||local.lessons.length||local.tasks.length||local.sessions.length||local.questions.length||local.mistakes.length||local.notes.length||local.lectures.length||local.xp||local.onboarded;
+      const localHasData=local.challengeClaims.length||local.subjects.length||local.units.length||local.lessons.length||local.tasks.length||local.sessions.length||local.questions.length||local.mistakes.length||local.notes.length||local.lectures.length||local.studySchedule.length||local.classSchedule.length||local.xp||local.onboarded;
       if(localHasData){
        const next={...local,profile:{...local.profile,name:auth.name,whatsapp:auth.phone||local.profile.whatsapp||''}};
        setS(next);
