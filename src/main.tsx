@@ -119,55 +119,26 @@ function getVideoEmbedUrl(raw:string){
 function Title({title,sub,action}:{title:string;sub:string;action?:any}){return <div className="title"><div><h1>{title}</h1><p>{sub}</p></div>{action}</div>};function VerifiedBadge(){return <span className="verifiedBadge" title="حساب موثق" aria-label="حساب موثق">✓</span>}
 function AIGate({auth,go}:{auth:import('./auth').AuthUser;go:(p:string)=>void}){return <section className="aiPage"><Title title="🤖 ثانوية AI" sub="المساعد الشخصي متاح للحسابات ذات الاشتراك المفعّل."/><Card title="🔐 ثانوية AI متاحة بالتوثيق"><div className="verificationBenefits"><b>✨ هتستفيد بإيه؟</b><div>🤖 شات نصي فعلي مع ثانوية AI</div><div>📅 إنشاء وتنظيم جدول مذاكرتك داخل الموقع</div><div>📝 تنظيم المهام والخطط والتقدم</div><div>⚡ تنفيذ الإجراءات المسموح بها داخل حسابك</div></div><p className="muted">فعّل اشتراك التوثيق بـ30 جنيه شهريًا، وبعد موافقة الإدارة هتفتح لك ثانوية AI تلقائيًا.</p><button className="primary wide" onClick={()=>go('settings')}>🔐 توثيق الحساب — 30 جنيه / شهر</button></Card></section>}
 function AIPage({auth,s,go,notify}:{auth:import('./auth').AuthUser;s:Store;go:(p:string)=>void;notify:(m:string)=>void}){
- const [busy,setBusy]=useState(false),[input,setInput]=useState(''),[messages,setMessages]=useState<Array<{role:'user'|'assistant';text:string}>>([]);
- const listRef=useRef<HTMLDivElement|null>(null);
- useEffect(()=>{listRef.current?.scrollTo({top:listRef.current.scrollHeight,behavior:'smooth'})},[messages,busy]);
- const ask=async()=>{
-  const question=input.trim(); if(!question||busy)return;
-  const next=[...messages,{role:'user' as const,text:question}];
-  setMessages(next);setInput('');setBusy(true);
-  try{
-   let answer='';
-   for(let attempt=0;attempt<7&&!answer;attempt++){
-    try{
-     const r=await fetch('/api/ai/advice',{
-      method:'POST',credentials:'include',headers:{'content-type':'application/json'},
-      body:JSON.stringify({question,history:messages.slice(-12)})
-     });
-     const d=await r.json().catch(()=>({}));
-     if(r.ok&&String(d?.answer||'').trim()) answer=String(d.answer).trim();
-     else if(r.status===401||r.status===403) break;
-    }catch{}
-    if(!answer&&attempt<6) await new Promise(resolve=>setTimeout(resolve,350+attempt*450));
-   }
-   if(answer)setMessages(v=>[...v,{role:'assistant',text:answer}]);
-  }finally{setBusy(false)}
- };
- const pending=s.tasks.filter(x=>x.status!=='completed').length,done=s.lessons.filter(x=>x.status==='completed').length;
- const quick=(q:string)=>{setInput(q);};
- return <section className="aiPage">
-  <div className="title"><div><h1>🤖 ثانوية AI</h1><p>مساعد مذاكرة شخصي يفهم بيانات حسابك ويتكلم معاك في شات حقيقي.</p></div></div>
-  <div className="aiHero card">
-   <div><span className="eyebrow">GEMINI POWERED</span><h2>أهلاً {s.profile.name||auth.name} <VerifiedBadge/></h2><p className="muted">المساعد يقدر يشوف بيانات مذاكرتك المحفوظة في حسابك عشان يديك نصيحة مناسبة ليك.</p></div>
-   <div className="aiStats"><b>{s.subjects.length}<small>مواد</small></b><b>{done}<small>دروس مكتملة</small></b><b>{pending}<small>مهام متبقية</small></b></div>
-  </div>
-  <div className="aiQuick card">
-   <div className="choices">
-    <button onClick={()=>quick('إيه أهم حاجة أذاكرها دلوقتي؟')}>🎯 أذاكر إيه دلوقتي؟</button>
-    <button onClick={()=>quick('حلل تقدمي وقولي أنا متأخر فين.')}>📊 حلل تقدمي</button>
-    <button onClick={()=>quick('رتبلي أولويات مذاكرتي النهارده.')}>📅 رتب أولوياتي</button>
-   </div>
-   <div className="aiChat" ref={listRef}>
-    {!messages.length&&<div className="aiEmpty"><span>🧠</span><strong>ابدأ الكلام</strong><p>اسألني عن المذاكرة، المواد، جدولك، أو أي حاجة تساعدك دراسيًا.</p></div>}
-    {messages.map((msg,i)=><div className={'aiBubble '+msg.role} key={i}><span className="aiBubbleRole">{msg.role==='user'?'أنت':'ثانوية AI'}</span><div>{msg.text.split('\n').map((x,j)=><p key={j}>{x||' '}</p>)}</div></div>)}
-    {busy&&<div className="aiBubble assistant"><span className="aiBubbleRole">ثانوية AI</span><div><p>🧠 بفكر في الرد...</p></div></div>}
-   </div>
-   <label>اتكلم مع ثانوية AI<textarea value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();ask()}}} placeholder="اكتب رسالتك هنا..."/></label>
-   <button className="primary wide" disabled={busy||!input.trim()} onClick={ask}>{busy?'🧠 جاري الرد...':'🤖 إرسال الرسالة'}</button>
-   {messages.length>0&&<button className="ghost wide" disabled={busy} onClick={()=>setMessages([])}>مسح المحادثة</button>}
-  </div>
-  <div className="card"><p className="muted">🔒 المساعد متاح للحسابات الموثقة فقط. بيانات حسابك تُرسل للموديل فقط عند طلب الرد، ولا نضع مفتاح Gemini داخل الواجهة.</p><button onClick={()=>go('settings')}>إدارة حسابي</button></div>
- </section>
+  type Chat={id:string;title:string;created_at:number;updated_at:number};type Msg={role:'user'|'assistant';text:string;created_at?:number};
+  const [busy,setBusy]=useState(false),[input,setInput]=useState(''),[messages,setMessages]=useState<Msg[]>([]),[chats,setChats]=useState<Chat[]>([]),[chatId,setChatId]=useState(''),[loadingChats,setLoadingChats]=useState(true),[loadingMessages,setLoadingMessages]=useState(false);
+  const listRef=useRef<HTMLDivElement|null>(null);
+  const loadMessages=async(id:string)=>{if(!id)return;setLoadingMessages(true);try{const r=await fetch('/api/ai/chats/'+encodeURIComponent(id),{credentials:'include',cache:'no-store'});const d=await r.json().catch(()=>({}));if(r.ok&&Array.isArray(d?.messages))setMessages(d.messages.map((x:any)=>({role:x.role==='assistant'?'assistant':'user',text:String(x.text||''),created_at:Number(x.created_at||0)})))}catch{}finally{setLoadingMessages(false)}};
+  const loadChats=async(selectId?:string)=>{setLoadingChats(true);try{const r=await fetch('/api/ai/chats',{credentials:'include',cache:'no-store'});const d=await r.json().catch(()=>({}));if(!r.ok||!Array.isArray(d?.chats))return;const next=d.chats as Chat[];setChats(next);const target=selectId||chatId||next[0]?.id||'';if(target){setChatId(target);await loadMessages(target)}else{setChatId('');setMessages([])}}catch{}finally{setLoadingChats(false)}};
+  useEffect(()=>{loadChats()},[auth.id]);useEffect(()=>{listRef.current?.scrollTo({top:listRef.current.scrollHeight,behavior:'smooth'})},[messages,busy,loadingMessages]);
+  const newChat=()=>{setChatId('');setMessages([]);setInput('')};
+  const deleteChat=async(id:string)=>{if(!id||busy)return;try{const r=await fetch('/api/ai/chats/'+encodeURIComponent(id),{method:'DELETE',credentials:'include'});if(!r.ok)return;const remaining=chats.filter(x=>x.id!==id);setChats(remaining);if(chatId===id){const next=remaining[0]?.id||'';setChatId(next);if(next)await loadMessages(next);else setMessages([])}}catch{}};
+  const ask=async()=>{const question=input.trim();if(!question||busy)return;setMessages(v=>[...v,{role:'user',text:question}]);setInput('');setBusy(true);try{let answer='',rd:any=null;for(let attempt=0;attempt<7&&!answer;attempt++){try{const r=await fetch('/api/ai/advice',{method:'POST',credentials:'include',headers:{'content-type':'application/json'},body:JSON.stringify({question,conversationId:chatId||undefined})});const d=await r.json().catch(()=>({}));if(r.ok&&String(d?.answer||'').trim()){answer=String(d.answer).trim();rd=d}else if(r.status===401||r.status===403)break}catch{}if(!answer&&attempt<6)await new Promise(resolve=>setTimeout(resolve,350+attempt*450))}if(answer){const rid=String(rd?.conversationId||chatId||'');setChatId(rid);setChats(prev=>{const now=Date.now(),old=prev.find(x=>x.id===rid);if(old)return prev.map(x=>x.id===rid?{...x,updated_at:now}:x).sort((a,b)=>b.updated_at-a.updated_at);return[{id:rid,title:question.slice(0,70),created_at:now,updated_at:now},...prev]});setMessages(v=>[...v,{role:'assistant',text:answer}]);if(rd?.action?.executed){notify('✅ تم تنفيذ طلبك داخل جدولي.');window.dispatchEvent(new CustomEvent('thanaweya-ai-data-updated'))}}}finally{setBusy(false)}};
+  const pending=s.tasks.filter(x=>x.status!=='completed').length,done=s.lessons.filter(x=>x.status==='completed').length;const quick=(q:string)=>setInput(q);
+  return <section className="aiPage">
+   <div className="title"><div><h1>🤖 ثانوية AI</h1><p>مساعد مذاكرة شخصي يفهم بيانات حسابك ويتكلم معاك في شات حقيقي.</p></div><button className="primary" onClick={newChat}>＋ محادثة جديدة</button></div>
+   <div className="aiHero card"><div><span className="eyebrow">GEMINI POWERED</span><h2>أهلاً {s.profile.name||auth.name} <VerifiedBadge/></h2><p className="muted">المساعد يقدر يشوف بيانات مذاكرتك المحفوظة في حسابك، وكمان ينفذ الإجراءات المسموح بها داخل حسابك.</p></div><div className="aiStats"><b>{s.subjects.length}<small>مواد</small></b><b>{done}<small>دروس مكتملة</small></b><b>{pending}<small>مهام متبقية</small></b></div></div>
+   <div className="aiWorkspace"><aside className="aiHistory card"><div className="cardhead"><h2>💬 محادثاتي</h2><button className="ghost" onClick={newChat}>＋ جديدة</button></div><div className="aiHistoryList">{loadingChats&&<p className="muted">جاري تحميل المحادثات...</p>}{!loadingChats&&!chats.length&&<p className="muted">لسه مفيش محادثات محفوظة.</p>}{chats.map(c=><div className={'aiHistoryItem '+(chatId===c.id?'active':'')} key={c.id} onClick={()=>{setChatId(c.id);loadMessages(c.id)}}><button className="aiHistoryDelete" aria-label="حذف المحادثة" title="حذف المحادثة" onClick={e=>{e.stopPropagation();deleteChat(c.id)}}><Trash2 size={15}/></button><b>{c.title||'محادثة جديدة'}</b><small>{new Date(c.updated_at).toLocaleDateString('ar-EG')}</small></div>)}</div></aside>
+    <div className="aiChatCard card"><div className="aiChatHeader"><div><b>{chats.find(x=>x.id===chatId)?.title||'محادثة جديدة'}</b><small>{chatId?'المحادثة محفوظة في حسابك':'هتتحفظ تلقائيًا عند أول رسالة'}</small></div>{chatId&&<button className="ghost" disabled={busy} onClick={()=>deleteChat(chatId)}>🗑️ حذف المحادثة</button>}</div>
+      <div className="aiQuick"><div className="choices"><button onClick={()=>quick('إيه أهم حاجة أذاكرها دلوقتي؟')}>🎯 أذاكر إيه دلوقتي؟</button><button onClick={()=>quick('حلل تقدمي وقولي أنا متأخر فين.')}>📊 حلل تقدمي</button><button onClick={()=>quick('رتبلي أولويات مذاكرتي النهارده.')}>📅 رتب أولوياتي</button><button onClick={()=>quick('اعمل لي جدول مذاكرة مناسب لبياناتي، وبعدها نظمه في قسم جدولي.')}>🗓️ نظّملي جدولي</button></div></div>
+      <div className="aiChat" ref={listRef}>{!messages.length&&!loadingMessages&&<div className="aiEmpty"><span>🧠</span><strong>ابدأ الكلام</strong><p>اسألني عن المذاكرة، المواد، جدولك، أو اطلب مني أنظم جدولك داخل «جدولي».</p></div>}{loadingMessages&&<div className="aiEmpty"><span>⏳</span><strong>جاري فتح المحادثة...</strong></div>}{messages.map((msg,i)=><div className={'aiBubble '+msg.role} key={i}><span className="aiBubbleRole">{msg.role==='user'?'أنت':'ثانوية AI'}</span><div>{msg.text.split('\n').map((x,j)=><p key={j}>{x||' '}</p>)}</div></div>)}{busy&&<div className="aiBubble assistant"><span className="aiBubbleRole">ثانوية AI</span><div><p>🧠 بفكر في الرد...</p></div></div>}</div>
+      <label>اتكلم مع ثانوية AI<textarea value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();ask()}}} placeholder="اكتب رسالتك هنا..."/></label><button className="primary wide" disabled={busy||!input.trim()} onClick={ask}>{busy?'🧠 جاري الرد...':'🤖 إرسال الرسالة'}</button><p className="muted aiPrivacy">🔒 المحادثات محفوظة في حسابك. حذف المحادثة يحذف رسائلها من قاعدة بيانات الموقع. الموقع لا يضع مفتاح Gemini في الواجهة.</p>
+    </div></div>
+  </section>
 }
 function Card({title,children,action}:{title:string;children:any;action?:any}){return <div className="card"><div className="cardhead"><h2>{title}</h2>{action}</div>{children}</div>}
 function Modal({title,children,onClose}:{title:string;children:any;onClose:()=>void}){return <div className="overlay" onClick={onClose}><div className="modal" onClick={e=>e.stopPropagation()}><div className="cardhead"><h2>{title}</h2><button aria-label="إغلاق" onClick={onClose}><X/></button></div>{children}</div></div>}
@@ -362,7 +333,7 @@ useEffect(()=>{if(!auth)return;let cancelled=false;(async()=>{try{await syncPush
  const activityScore=Math.round(recentMinutes/5)+recentTasks*10+recentQuestions*2+Math.min(streak,30)*2;
  const studentBadges=[{name:'مبتدئ',icon:'🌱',min:0},{name:'أقل من المتوسط',icon:'🟤',min:40},{name:'متوسط',icon:'🟢',min:100},{name:'أعلى من المتوسط',icon:'🔵',min:200},{name:'متفوق',icon:'🟣',min:350},{name:'نابغ',icon:'👑',min:550}];
  const studentBadge=[...studentBadges].reverse().find(b=>activityScore>=b.min)||studentBadges[0];
- function update(p:Partial<Store>){setS(x=>({...x,...p}))}
+ function update(p:Partial<Store>){setS(x=>({...x,...p}))} useEffect(()=>{const refresh=async()=>{try{const r=await fetch('/api/data',{credentials:'include',cache:'no-store'});const d=await r.json().catch(()=>({}));if(r.ok&&d?.data)setS((prev:any)=>({...prev,...d.data}))}catch{}};window.addEventListener('thanaweya-ai-data-updated',refresh);return()=>window.removeEventListener('thanaweya-ai-data-updated',refresh)},[auth?.id]);
  async function saveAccountProfile(nextName:string,nextPhone:string){
   if(!auth?.id)return;
   setAuthBusy(true);
