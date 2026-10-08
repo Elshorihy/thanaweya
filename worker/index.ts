@@ -129,89 +129,39 @@ async function createSession(userId:string,env:Env) {
 }
 async function body(request:Request){try{return await request.json() as any}catch{return null}}
 
-async function callGemini(env:Env, contents:any[], systemInstruction:string, generationConfigExtra:any={}){
+async function callGemini(env:Env, contents:any[], systemInstruction:string, generationConfigExtra:any={}) {
   const apiKey=String(env.GEMINI_API_KEY||"").trim();
   if(!apiKey) throw new Error("NO_AI");
-
   const configured=String(env.GEMINI_MODEL||"").trim();
-  const preferred=[configured,"gemini-2.5-flash","gemini-2.5-flash-lite","gemini-2.0-flash","gemini-1.5-flash"].filter(Boolean);
-  let models:string[]=[...new Set(preferred)];
-
-  // Ask Gemini which models this key can actually use, so a stale/invalid
-  // GEMINI_MODEL never becomes a dead end.
-  try{
-    const list=await fetch("https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000",{
-      headers:{"x-goog-api-key":apiKey}
-    });
-    if(list.ok){
-      const data:any=await list.json();
-      const available=(Array.isArray(data?.models)?data.models:[])
-        .filter((m:any)=>Array.isArray(m?.supportedGenerationMethods)&&m.supportedGenerationMethods.includes("generateContent"))
-        .map((m:any)=>String(m?.name||"").replace(/^models\//,""))
-        .filter(Boolean);
-      const ranked=available.filter((m:string)=>preferred.includes(m));
-      models=[...new Set([...preferred.filter((m:string)=>available.includes(m)),...ranked,...available])];
-    }
-  }catch{}
-
+  const models=[...new Set([configured,"gemini-2.5-flash","gemini-2.5-flash-lite","gemini-2.0-flash"].filter(Boolean))];
   let lastError="";
   for(const model of models){
     const endpoint="https://generativelanguage.googleapis.com/v1beta/models/"+encodeURIComponent(model)+":generateContent";
-    for(let attempt=0;attempt<2;attempt++){
-      try{
-        const response=await fetch(endpoint,{
-          method:"POST",
-          headers:{"content-type":"application/json","x-goog-api-key":apiKey},
-          body:JSON.stringify({
-            systemInstruction:{parts:[{text:systemInstruction}]},
-            contents,
-            generationConfig:{maxOutputTokens:1800,temperature:0.7,...(generationConfigExtra||{})}
-          })
-        });
-        const raw=await response.text();
-        let data:any=null;
-        try{data=JSON.parse(raw)}catch{}
-
-        if(response.ok){
-          const answer=(data?.candidates||[])
-            .flatMap((x:any)=>x?.content?.parts||[])
-            .map((x:any)=>String(x?.text||""))
-            .filter(Boolean)
-            .join("\n").trim();
-          if(answer)return answer;
-          lastError="EMPTY";
-          break;
-        }
-
-        const status=response.status;
-        lastError=String(data?.error?.message||status);
-
-        // Overload/rate-limit/server errors: one quick retry, then move on.
-        if(status===429||status===500||status===502||status===503){
-          if(attempt===0){
-            await new Promise(resolve=>setTimeout(resolve,350));
-            continue;
-          }
-          break;
-        }
-
-        // Unsupported/stale model: move to the next available model.
-        if(status===404)break;
-        break;
-      }catch(e){
-        lastError=e instanceof Error?e.message:"NETWORK";
-        if(attempt===0){
-          await new Promise(resolve=>setTimeout(resolve,250));
-          continue;
-        }
-        break;
+    try{
+      const response=await fetch(endpoint,{
+        method:"POST",
+        headers:{"content-type":"application/json","x-goog-api-key":apiKey},
+        body:JSON.stringify({
+          systemInstruction:{parts:[{text:systemInstruction}]},
+          contents,
+          generationConfig:{maxOutputTokens:1200,temperature:0.45,...(generationConfigExtra||{})}
+        })
+      });
+      const raw=await response.text();
+      let data:any=null; try{data=JSON.parse(raw)}catch{}
+      if(response.ok){
+        const answer=(data?.candidates||[]).flatMap((x:any)=>x?.content?.parts||[]).map((x:any)=>String(x?.text||"")).filter(Boolean).join("\n").trim();
+        if(answer)return answer;
+        lastError="EMPTY";
+        continue;
       }
-    }
+      lastError=String(data?.error?.message||response.status);
+      if(response.status===404)continue;
+      if(response.status===429||response.status===500||response.status===502||response.status===503)continue;
+      break;
+    }catch(e){lastError=e instanceof Error?e.message:"NETWORK";continue}
   }
-
-  // The frontend must never expose provider errors. The caller can retry the
-  // whole request without leaking Gemini's transient "high demand" message.
-  throw new Error("AI_UNAVAILABLE");
+  throw new Error("AI_UNAVAILABLE:"+lastError);
 }
 async function getPageViewStats(env:Env){
   const today=new Date().toISOString().slice(0,10);
@@ -1865,65 +1815,199 @@ export default {
         }
         if(url.pathname==="/api/ai/advice" && request.method==="POST") {
           const u=await userFrom(request,env); if(!u)return json({error:"يجب تسجيل الدخول"},401);
-          if(String(u.role||"")!=="owner" && !(await hasActiveSubscription(env,u.id)))return json({error:"ثانوية AI متاحة للاشتراكات المفعّلة فقط."},403);
+          if(String(u.role||"")!=="owner" && !(await hasActiveSubscription(env,u.id)))return json({error:"ثانوية AI متاحة بالتوثيق فقط."},403);
           const b=await body(request),question=String(b?.question||"").trim().slice(0,4000);
           if(!question)return json({error:"اكتب سؤالك أولًا."},400);
+          const day=new Date().toISOString().slice(0,10),limit=40;
+          const usage=await env.DB.prepare("SELECT count FROM ai_usage WHERE user_id=? AND day=?").bind(u.id,day).first<any>();
+          const used=Number(usage?.count||0);
+          if(used>=limit)return json({error:"وصلت للحد اليومي للمساعد الذكي (40 رسالة). جرّب بكرة.",used,remaining:0,limit},429);
+
           let chatId=String(b?.conversationId||"").trim().slice(0,80);
           if(chatId){
             const exists=await env.DB.prepare("SELECT id FROM ai_chats WHERE id=? AND user_id=?").bind(chatId,u.id).first<any>();
             if(!exists)return json({error:"المحادثة غير موجودة"},404);
           }else{
-            chatId=randomHex(16);const now=Date.now();
+            chatId=randomHex(16);
+            const now=Date.now();
             await env.DB.prepare("INSERT INTO ai_chats(id,user_id,title,created_at,updated_at) VALUES(?,?,?,?,?)").bind(chatId,u.id,question.slice(0,70)||"محادثة جديدة",now,now).run();
           }
+
           const stored=await env.DB.prepare("SELECT data_json FROM user_data WHERE user_id=?").bind(u.id).first<any>();
-          let data:any={};try{data=stored?.data_json?JSON.parse(stored.data_json)||{}:{}}catch{data={}}
-          const day=new Date().toISOString().slice(0,10),limit=40;
-          const usage=await env.DB.prepare("SELECT count FROM ai_usage WHERE user_id=? AND day=?").bind(u.id,day).first<any>();
-          const used=Number(usage?.count||0);if(used>=limit)return json({error:"وصلت للحد اليومي للمساعد الذكي (40 رسالة). جرّب بكرة."},429);
-          const dbHistory=await env.DB.prepare("SELECT role,text FROM ai_messages WHERE chat_id=? ORDER BY created_at DESC LIMIT 20").bind(chatId).all<any>();
-          const history=(dbHistory.results||[]).reverse().map((x:any)=>({role:String(x.role)==="assistant"?"model":"user",parts:[{text:String(x.text||"").slice(0,4000)}]})).filter((x:any)=>x.parts[0].text);
-          const safeData={profile:data?.profile||{},subjects:Array.isArray(data?.subjects)?data.subjects:[],units:Array.isArray(data?.units)?data.units:[],lessons:Array.isArray(data?.lessons)?data.lessons:[],tasks:Array.isArray(data?.tasks)?data.tasks:[],sessions:Array.isArray(data?.sessions)?data.sessions:[],studySchedule:Array.isArray(data?.studySchedule)?data.studySchedule:[],classSchedule:Array.isArray(data?.classSchedule)?data.classSchedule:[],settings:data?.settings||{}};
+          let data:any={};
+          try{data=stored?.data_json?JSON.parse(stored.data_json)||{}:{}}catch{data={}}
+          const safeData={
+            profile:data?.profile||{},
+            subjects:Array.isArray(data?.subjects)?data.subjects:[],
+            units:Array.isArray(data?.units)?data.units:[],
+            lessons:Array.isArray(data?.lessons)?data.lessons:[],
+            tasks:Array.isArray(data?.tasks)?data.tasks:[],
+            sessions:Array.isArray(data?.sessions)?data.sessions:[],
+            questions:Array.isArray(data?.questions)?data.questions:[],
+            mistakes:Array.isArray(data?.mistakes)?data.mistakes:[],
+            notes:Array.isArray(data?.notes)?data.notes:[],
+            lectures:Array.isArray(data?.lectures)?data.lectures:[],
+            studySchedule:Array.isArray(data?.studySchedule)?data.studySchedule:[],
+            classSchedule:Array.isArray(data?.classSchedule)?data.classSchedule:[],
+            settings:data?.settings||{}
+          };
+
+          const dbHistory=await env.DB.prepare("SELECT role,text FROM ai_messages WHERE chat_id=? ORDER BY created_at DESC LIMIT 12").bind(chatId).all<any>();
+          const history=(dbHistory.results||[]).reverse().map((x:any)=>({role:String(x.role)==="assistant"?"model":"user",parts:[{text:String(x.text||"").slice(0,3000)}]})).filter((x:any)=>x.parts[0].text);
+
           const systemInstruction=[
             "أنت ثانوية AI، مساعد مذاكرة شخصي داخل منصة ثانوية لطلاب الصف الثالث الثانوي في مصر.",
-            "اتكلم بالمصري الطبيعي، بشكل ودود ومباشر، ومن غير مبالغة أو كلام روبوتي.",
-            "اعتمد على بيانات الحساب المرسلة لك فقط عندما تتكلم عن تقدم الطالب أو جدوله أو مواده.",
-            "لو البيانات ناقصة قل إنك لا تملك المعلومة بدل اختلاقها.",
-            "ساعد في المذاكرة، التخطيط، شرح المفاهيم الدراسية، تنظيم الوقت، وتحليل التقدم.",
-            "لو المستخدم طلب إنشاء أو تعديل أو إعادة تنظيم أو حذف جدول المذاكرة داخل قسم «جدولي»، استخدم action المناسب.",
-            "replace_study_schedule يستبدل جدول المذاكرة بالكامل بالـslots المقترحة، باستخدام subjectId موجود فعلًا في المواد، وتاريخ YYYY-MM-DD ومدة بالدقائق.",
-            "clear_study_schedule يمسح جدول المذاكرة بالكامل.",
-            "لو مفيش إجراء مطلوب استخدم type=none وslots=[].",
-            "لا تدّعي تنفيذ إجراء داخل الموقع إلا لو السيرفر نفذه فعلًا.",
-            "صلاحيات التنفيذ هنا مقتصرة على جدول المذاكرة فقط؛ لا تعدّل المواد أو الدروس أو المهام.",
-            "بيانات الطالب الحالية:\n"+JSON.stringify(safeData),
-            "أعد JSON فقط بالمخطط المطلوب."
+            "اتكلم بالمصري الطبيعي وباختصار نسبي، وابدأ بالإجابة مباشرة.",
+            "اعتمد على بيانات الحساب المرسلة لك فقط، ولا تخترع أي بيانات.",
+            "أنت قادر على تنفيذ إجراءات حقيقية داخل حساب الطالب، وليس مجرد اقتراحات.",
+            "لو طلب المستخدم إضافة أو تعديل أو حذف أو تنظيم شيء داخل الموقع، نفّذ ذلك باستخدام operations.",
+            "collections المتاحة: studySchedule, classSchedule, subjects, units, lessons, tasks, questions, mistakes, notes, lectures, profile.",
+            "لكل عملية استخدم op=add أو update أو delete أو replace. delete يستخدم ids، وadd/update يستخدم item.",
+            "عند إضافة درس استخدم unitId موجود فعليًا. عند إضافة مهمة استخدم lessonId موجود فعليًا. عند إضافة مصدر استخدم subjectId موجود فعليًا.",
+            "في studySchedule استخدم date بصيغة YYYY-MM-DD وsubjectId موجود فعليًا وduration بالدقائق.",
+            "لو المستخدم قال جدول مذاكرة، استخدم studySchedule. لو قال جدول الحصص، استخدم classSchedule.",
+            "لا تنفذ أي عملية لم يطلبها المستخدم بوضوح.",
+            "بعد التنفيذ قل باختصار ما تم تنفيذه.",
+            "بيانات الطالب الحالية:\n"+JSON.stringify(safeData)
           ].join("\n");
-          const actionSchema={type:"OBJECT",properties:{type:{type:"STRING",enum:["none","replace_study_schedule","clear_study_schedule"]},slots:{type:"ARRAY",items:{type:"OBJECT",properties:{date:{type:"STRING"},subjectId:{type:"STRING"},duration:{type:"INTEGER"}},required:["date","subjectId","duration"]}}},required:["type","slots"]};
+
+          const itemSchema={type:"OBJECT",properties:{
+            id:{type:"STRING"},name:{type:"STRING"},title:{type:"STRING"},subjectId:{type:"STRING"},unitId:{type:"STRING"},lessonId:{type:"STRING"},
+            question:{type:"STRING"},answer:{type:"STRING"},correctAnswer:{type:"STRING"},reason:{type:"STRING"},notes:{type:"STRING"},content:{type:"STRING"},
+            date:{type:"STRING"},duration:{type:"INTEGER"},estimatedMinutes:{type:"INTEGER"},status:{type:"STRING"},priority:{type:"STRING"},startTime:{type:"STRING"},
+            dayOfWeek:{type:"INTEGER"},endTime:{type:"STRING"},type:{type:"STRING"},difficulty:{type:"STRING"},kind:{type:"STRING"},description:{type:"STRING"},
+            url:{type:"STRING"},fileName:{type:"STRING"},size:{type:"INTEGER"},favorite:{type:"BOOLEAN"},color:{type:"STRING"},goal:{type:"STRING"},
+            grade:{type:"STRING"},section:{type:"STRING"},school:{type:"STRING"},whatsapp:{type:"STRING"}
+          }};
+          const operationSchema={type:"OBJECT",properties:{
+            op:{type:"STRING",enum:["add","update","delete","replace"]},
+            collection:{type:"STRING",enum:["studySchedule","classSchedule","subjects","units","lessons","tasks","questions","mistakes","notes","lectures","profile"]},
+            item:itemSchema,
+            ids:{type:"ARRAY",items:{type:"STRING"}}
+          },required:["op","collection"]};
+          const responseSchema={type:"OBJECT",properties:{
+            answer:{type:"STRING"},
+            operations:{type:"ARRAY",items:operationSchema}
+          },required:["answer","operations"]};
+
           const contents=[...history,{role:"user",parts:[{text:question}]}];
           try{
-            const raw=await callGemini(env,contents,systemInstruction,{responseMimeType:"application/json",responseSchema:{type:"OBJECT",properties:{answer:{type:"STRING"},action:actionSchema},required:["answer","action"]}});
+            const raw=await callGemini(env,contents,systemInstruction,{responseMimeType:"application/json",responseSchema});
             let result:any;try{result=JSON.parse(raw)}catch{throw new Error("AI_BAD_JSON")}
             const answer=String(result?.answer||"").trim();if(!answer)throw new Error("AI_EMPTY");
-            const actionType=String(result?.action?.type||"none"),rawSlots=Array.isArray(result?.action?.slots)?result.action.slots:[];let executed=false;
-            if(actionType==="clear_study_schedule"){data.studySchedule=[];executed=true}
-            else if(actionType==="replace_study_schedule"){
-              const subjects=new Set((Array.isArray(data?.subjects)?data.subjects:[]).map((x:any)=>String(x?.id||"")).filter(Boolean)),slots:any[]=[],seen=new Set<string>();
-              for(const item of rawSlots.slice(0,31)){
-                const date=String(item?.date||"").trim(),subjectId=String(item?.subjectId||"").trim(),duration=Math.round(Number(item?.duration||0));
-                if(!/^\d{4}-\d{2}-\d{2}$/.test(date)||!subjects.has(subjectId)||duration<15||duration>480)continue;
-                const key=date+"|"+subjectId;if(seen.has(key))continue;seen.add(key);slots.push({id:randomHex(8),date,subjectId,duration});
+            const ops=Array.isArray(result?.operations)?result.operations.slice(0,12):[];
+            let executed=0;
+
+            const arr=(k:string)=>Array.isArray(data?.[k])?data[k]:[];
+            const saveArray=(k:string,v:any[])=>{data[k]=v};
+
+            for(const op of ops){
+              const collection=String(op?.collection||"");
+              const kind=String(op?.op||"");
+              if(!["studySchedule","classSchedule","subjects","units","lessons","tasks","questions","mistakes","notes","lectures","profile"].includes(collection))continue;
+
+              if(collection==="profile"){
+                if(kind==="update"||kind==="replace"){
+                  const item=op?.item&&typeof op.item==="object"?op.item:{};
+                  for(const key of ["name","grade","section","school","goal","whatsapp"]){
+                    if(item[key]!==undefined)data.profile={...(data.profile||{}),[key]:String(item[key]).slice(0,500)};
+                  }
+                  executed++;
+                }
+                continue;
               }
-              if(!slots.length)throw new Error("AI_ACTION_INVALID");data.studySchedule=slots;executed=true;
+
+              let list=arr(collection);
+              if(kind==="delete"){
+                const ids=new Set((Array.isArray(op?.ids)?op.ids:[]).map((x:any)=>String(x)));
+                if(ids.size){const next=list.filter((x:any)=>!ids.has(String(x?.id)));if(next.length!==list.length){saveArray(collection,next);executed++;}}
+                continue;
+              }
+
+              const rawItem=op?.item&&typeof op.item==="object"?op.item:{};
+              const normalized:any={...rawItem};
+              if(kind==="add"){
+                normalized.id=randomHex(8);
+                if(collection==="studySchedule"){
+                  if(!/^\d{4}-\d{2}-\d{2}$/.test(String(normalized.date||"")))continue;
+                  if(!safeData.subjects.some((x:any)=>String(x.id)===String(normalized.subjectId)))continue;
+                  normalized.duration=Math.max(15,Math.min(480,Math.round(Number(normalized.duration||0))));
+                  if(!normalized.duration)continue;
+                }else if(collection==="subjects"){
+                  normalized.name=String(normalized.name||"").trim().slice(0,80);if(!normalized.name)continue;
+                  normalized.color=String(normalized.color||"#7C3AED");normalized.priority=["low","medium","high"].includes(String(normalized.priority))?normalized.priority:"medium";
+                }else if(collection==="units"){
+                  if(!safeData.subjects.some((x:any)=>String(x.id)===String(normalized.subjectId)))continue;
+                  normalized.name=String(normalized.name||"").trim().slice(0,100);if(!normalized.name)continue;
+                }else if(collection==="lessons"){
+                  if(!safeData.units.some((x:any)=>String(x.id)===String(normalized.unitId)))continue;
+                  normalized.name=String(normalized.name||"").trim().slice(0,120);if(!normalized.name)continue;
+                  normalized.estimatedMinutes=Math.max(5,Math.min(720,Math.round(Number(normalized.estimatedMinutes||45))));
+                  normalized.status=["not_started","in_progress","completed","skipped"].includes(String(normalized.status))?normalized.status:"not_started";
+                  normalized.priority=["low","medium","high"].includes(String(normalized.priority))?normalized.priority:"medium";
+                }else if(collection==="tasks"){
+                  if(!safeData.lessons.some((x:any)=>String(x.id)===String(normalized.lessonId)))continue;
+                  normalized.date=/^\d{4}-\d{2}-\d{2}$/.test(String(normalized.date||""))?String(normalized.date):day;
+                  normalized.estimatedMinutes=Math.max(5,Math.min(720,Math.round(Number(normalized.estimatedMinutes||45))));
+                  normalized.status=["not_started","in_progress","completed","skipped"].includes(String(normalized.status))?normalized.status:"not_started";
+                  normalized.priority=["low","medium","high"].includes(String(normalized.priority))?normalized.priority:"medium";
+                }else if(collection==="questions"){
+                  if(!safeData.subjects.some((x:any)=>String(x.id)===String(normalized.subjectId)))continue;
+                  if(!String(normalized.question||"").trim()||!String(normalized.answer||"").trim())continue;
+                  normalized.difficulty=["easy","medium","hard"].includes(String(normalized.difficulty))?normalized.difficulty:"medium";
+                  normalized.type=["mcq","tf","written"].includes(String(normalized.type))?normalized.type:"written";
+                }else if(collection==="mistakes"){
+                  if(!safeData.subjects.some((x:any)=>String(x.id)===String(normalized.subjectId)))continue;
+                  if(!String(normalized.question||"").trim()||!String(normalized.correctAnswer||"").trim())continue;
+                  normalized.status=normalized.status==="fixed"?"fixed":"needs_review";
+                }else if(collection==="notes"){
+                  if(!safeData.subjects.some((x:any)=>String(x.id)===String(normalized.subjectId)))continue;
+                  if(!String(normalized.title||"").trim()||!String(normalized.content||"").trim())continue;
+                  normalized.updatedAt=day;
+                }else if(collection==="lectures"){
+                  if(!safeData.subjects.some((x:any)=>String(x.id)===String(normalized.subjectId)))continue;
+                  if(!String(normalized.title||"").trim())continue;
+                  normalized.kind=["book","pdf","lecture","link","notes","other"].includes(String(normalized.kind))?normalized.kind:"link";
+                  normalized.description=String(normalized.description||"");
+                  normalized.createdAt=day;normalized.favorite=Boolean(normalized.favorite);
+                }else if(collection==="classSchedule"){
+                  if(normalized.subjectId&&!safeData.subjects.some((x:any)=>String(x.id)===String(normalized.subjectId)))continue;
+                  normalized.dayOfWeek=Math.max(0,Math.min(6,Math.round(Number(normalized.dayOfWeek||0))));
+                  normalized.startTime=String(normalized.startTime||"17:00");normalized.endTime=String(normalized.endTime||"18:00");
+                  normalized.title=String(normalized.title||"موعد").slice(0,100);
+                }
+                list=[...list,normalized];saveArray(collection,list);executed++;
+              }else if(kind==="replace"){
+                if(collection==="studySchedule"){
+                  const items=Array.isArray(result?.operations)?result.operations.filter((x:any)=>x.collection==="studySchedule"&&x.op==="add").map((x:any)=>x.item):[];
+                  const next:any[]=[];
+                  for(const item of items.slice(0,31)){
+                    if(/^\d{4}-\d{2}-\d{2}$/.test(String(item?.date||""))&&safeData.subjects.some((x:any)=>String(x.id)===String(item?.subjectId))&&Number(item?.duration)>=15){
+                      next.push({id:randomHex(8),date:String(item.date),subjectId:String(item.subjectId),duration:Math.min(480,Math.round(Number(item.duration)))});
+                    }
+                  }
+                  if(next.length){data.studySchedule=next;executed++;}
+                }
+              }else if(kind==="update"){
+                const itemId=String(rawItem?.id||"").trim();if(!itemId)continue;
+                const idx=list.findIndex((x:any)=>String(x?.id)===itemId);if(idx<0)continue;
+                const current={...list[idx],...rawItem,id:itemId};list[idx]=current;saveArray(collection,list);executed++;
+              }
             }
+
             const now=Date.now();
-            if(executed){const serialized=JSON.stringify(data);if(serialized.length>900000)throw new Error("DATA_TOO_LARGE");await env.DB.prepare("INSERT INTO user_data(user_id,data_json,updated_at) VALUES(?,?,?) ON CONFLICT(user_id) DO UPDATE SET data_json=excluded.data_json,updated_at=excluded.updated_at").bind(u.id,serialized,now).run()}
+            if(executed){
+              const serialized=JSON.stringify(data);
+              if(serialized.length>900000)throw new Error("DATA_TOO_LARGE");
+              await env.DB.prepare("INSERT INTO user_data(user_id,data_json,updated_at) VALUES(?,?,?) ON CONFLICT(user_id) DO UPDATE SET data_json=excluded.data_json,updated_at=excluded.updated_at").bind(u.id,serialized,now).run();
+            }
+
             await env.DB.prepare("INSERT INTO ai_messages(id,chat_id,role,text,created_at) VALUES(?,?,?,?,?)").bind(randomHex(12),chatId,"user",question,now).run();
             await env.DB.prepare("INSERT INTO ai_messages(id,chat_id,role,text,created_at) VALUES(?,?,?,?,?)").bind(randomHex(12),chatId,"assistant",answer,now+1).run();
             await env.DB.prepare("UPDATE ai_chats SET updated_at=? WHERE id=? AND user_id=?").bind(now+1,chatId,u.id).run();
             await env.DB.prepare("INSERT INTO ai_usage(user_id,day,count) VALUES(?,?,1) ON CONFLICT(user_id,day) DO UPDATE SET count=count+1").bind(u.id,day).run();
-            return json({ok:true,answer,conversationId:chatId,action:executed?{type:actionType,executed:true}:null,used:used+1,limit,model:String(env.GEMINI_MODEL||"gemini-3.8-flash")});
-          }catch(e){console.error("AI provider exhausted",e);return json({ok:false,retry:true},503)}
+            return json({ok:true,answer,conversationId:chatId,action:{executed:executed>0,count:executed},used:used+1,remaining:Math.max(0,limit-used-1),limit,model:String(env.GEMINI_MODEL||"gemini-2.5-flash")});
+          }catch(e){console.error("AI request failed",e);return json({ok:false,retry:true,error:"تعذر تنفيذ الطلب حاليًا. جرّب تاني."},503)}
         }
         if(url.pathname==="/api/auth/register/start" && request.method==="POST") {
           const b=await body(request), email=cleanEmail(b?.email), name=cleanName(b?.name), password=String(b?.password||""), phone=cleanPhone(b?.phone);
