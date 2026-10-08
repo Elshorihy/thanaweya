@@ -1862,7 +1862,7 @@ export default {
             "أنت قادر على تنفيذ إجراءات حقيقية داخل حساب الطالب، وليس مجرد اقتراحات.",
             "لو طلب المستخدم إضافة أو تعديل أو حذف أو تنظيم شيء داخل الموقع، نفّذ ذلك باستخدام operations.",
             "collections المتاحة: studySchedule, classSchedule, subjects, units, lessons, tasks, questions, mistakes, notes, lectures, profile.",
-            "لكل عملية استخدم op=add أو update أو delete أو replace. delete يستخدم ids، وadd/update يستخدم item.",
+            "لكل عملية استخدم op=add أو update أو delete أو replace. delete يستخدم ids، وadd/update يستخدم item، وreplace يستخدم items. عند إنشاء جدول مذاكرة كامل استخدم replace على studySchedule مع items.",
             "عند إضافة درس استخدم unitId موجود فعليًا. عند إضافة مهمة استخدم lessonId موجود فعليًا. عند إضافة مصدر استخدم subjectId موجود فعليًا.",
             "في studySchedule استخدم date بصيغة YYYY-MM-DD وsubjectId موجود فعليًا وduration بالدقائق.",
             "لو المستخدم قال جدول مذاكرة، استخدم studySchedule. لو قال جدول الحصص، استخدم classSchedule.",
@@ -1883,7 +1883,8 @@ export default {
             op:{type:"STRING",enum:["add","update","delete","replace"]},
             collection:{type:"STRING",enum:["studySchedule","classSchedule","subjects","units","lessons","tasks","questions","mistakes","notes","lectures","profile"]},
             item:itemSchema,
-            ids:{type:"ARRAY",items:{type:"STRING"}}
+            ids:{type:"ARRAY",items:{type:"STRING"}},
+            items:{type:"ARRAY",items:itemSchema}
           },required:["op","collection"]};
           const responseSchema={type:"OBJECT",properties:{
             answer:{type:"STRING"},
@@ -1979,9 +1980,9 @@ export default {
                 list=[...list,normalized];saveArray(collection,list);executed++;
               }else if(kind==="replace"){
                 if(collection==="studySchedule"){
-                  const items=Array.isArray(result?.operations)?result.operations.filter((x:any)=>x.collection==="studySchedule"&&x.op==="add").map((x:any)=>x.item):[];
+                  const sourceItems=Array.isArray(op?.items)?op.items:(Array.isArray(result?.operations)?result.operations.filter((x:any)=>x.collection==="studySchedule"&&x.op==="add").map((x:any)=>x.item):[]);
                   const next:any[]=[];
-                  for(const item of items.slice(0,31)){
+                  for(const item of sourceItems.slice(0,31)){
                     if(/^\d{4}-\d{2}-\d{2}$/.test(String(item?.date||""))&&safeData.subjects.some((x:any)=>String(x.id)===String(item?.subjectId))&&Number(item?.duration)>=15){
                       next.push({id:randomHex(8),date:String(item.date),subjectId:String(item.subjectId),duration:Math.min(480,Math.round(Number(item.duration)))});
                     }
