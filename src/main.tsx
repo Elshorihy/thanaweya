@@ -120,14 +120,56 @@ function Title({title,sub,action}:{title:string;sub:string;action?:any}){return 
 function AIGate({auth,go}:{auth:import('./auth').AuthUser;go:(p:string)=>void}){return <section className="aiPage"><Title title="🤖 ثانوية AI" sub="المساعد الشخصي متاح للحسابات ذات الاشتراك المفعّل."/><Card title="🔐 ثانوية AI متاحة بالتوثيق"><div className="verificationBenefits"><b>✨ هتستفيد بإيه؟</b><div>🤖 شات نصي فعلي مع ثانوية AI</div><div>📅 إنشاء وتنظيم جدول مذاكرتك داخل الموقع</div><div>📝 تنظيم المهام والخطط والتقدم</div><div>⚡ تنفيذ الإجراءات المسموح بها داخل حسابك</div></div><p className="muted">فعّل اشتراك التوثيق بـ30 جنيه شهريًا، وبعد موافقة الإدارة هتفتح لك ثانوية AI تلقائيًا.</p><button className="primary wide" onClick={()=>go('settings')}>🔐 توثيق الحساب — 30 جنيه / شهر</button></Card></section>}
 function AIPage({auth,s,go,notify}:{auth:import('./auth').AuthUser;s:Store;go:(p:string)=>void;notify:(m:string)=>void}){
   type Chat={id:string;title:string;created_at:number;updated_at:number};type Msg={role:'user'|'assistant';text:string;created_at?:number};
-  const [busy,setBusy]=useState(false),[input,setInput]=useState(''),[messages,setMessages]=useState<Msg[]>([]),[chats,setChats]=useState<Chat[]>([]),[chatId,setChatId]=useState(''),[loadingChats,setLoadingChats]=useState(true),[loadingMessages,setLoadingMessages]=useState(false);
+  const [busy,setBusy]=useState(false),[input,setInput]=useState(''),[messages,setMessages]=useState<Msg[]>([]),[chats,setChats]=useState<Chat[]>([]),[chatId,setChatId]=useState(''),[loadingChats,setLoadingChats]=useState(true),[loadingMessages,setLoadingMessages]=useState(false),[used,setUsed]=useState(0),[limit,setLimit]=useState(40);
   const listRef=useRef<HTMLDivElement|null>(null);
   const loadMessages=async(id:string)=>{if(!id)return;setLoadingMessages(true);try{const r=await fetch('/api/ai/chats/'+encodeURIComponent(id),{credentials:'include',cache:'no-store'});const d=await r.json().catch(()=>({}));if(r.ok&&Array.isArray(d?.messages))setMessages(d.messages.map((x:any)=>({role:x.role==='assistant'?'assistant':'user',text:String(x.text||''),created_at:Number(x.created_at||0)})))}catch{}finally{setLoadingMessages(false)}};
   const loadChats=async(selectId?:string)=>{setLoadingChats(true);try{const r=await fetch('/api/ai/chats',{credentials:'include',cache:'no-store'});const d=await r.json().catch(()=>({}));if(!r.ok||!Array.isArray(d?.chats))return;const next=d.chats as Chat[];setChats(next);const target=selectId||chatId||next[0]?.id||'';if(target){setChatId(target);await loadMessages(target)}else{setChatId('');setMessages([])}}catch{}finally{setLoadingChats(false)}};
   const loadUsage=async()=>{try{const r=await fetch('/api/ai/usage',{credentials:'include',cache:'no-store'});const d=await r.json().catch(()=>({}));if(r.ok){setUsed(Number(d?.used||0));setLimit(Number(d?.limit||40))}}catch{}}; useEffect(()=>{loadChats();loadUsage()},[auth.id]);useEffect(()=>{listRef.current?.scrollTo({top:listRef.current.scrollHeight,behavior:'smooth'})},[messages,busy,loadingMessages]);
   const newChat=()=>{setChatId('');setMessages([]);setInput('')};
   const deleteChat=async(id:string)=>{if(!id||busy)return;try{const r=await fetch('/api/ai/chats/'+encodeURIComponent(id),{method:'DELETE',credentials:'include'});if(!r.ok)return;const remaining=chats.filter(x=>x.id!==id);setChats(remaining);if(chatId===id){const next=remaining[0]?.id||'';setChatId(next);if(next)await loadMessages(next);else setMessages([])}}catch{}};
-  const ask=async()=>{const question=input.trim();if(!question||busy)return;setMessages(v=>[...v,{role:'user',text:question}]);setInput('');setBusy(true);try{let answer='',rd:any=null;for(let attempt=0;attempt<7&&!answer;attempt++){try{const r=await fetch('/api/ai/advice',{method:'POST',credentials:'include',headers:{'content-type':'application/json'},body:JSON.stringify({question,conversationId:chatId||undefined})});const d=await r.json().catch(()=>({}));if(r.ok&&String(d?.answer||'').trim()){answer=String(d.answer).trim();rd=d}else if(r.status===401||r.status===403)break}catch{}if(!answer&&attempt<6)await new Promise(resolve=>setTimeout(resolve,350+attempt*450))}if(answer){setUsed(Number(rd?.used||used+1));setLimit(Number(rd?.limit||limit));const rid=String(rd?.conversationId||chatId||'');setChatId(rid);setChats(prev=>{const now=Date.now(),old=prev.find(x=>x.id===rid);if(old)return prev.map(x=>x.id===rid?{...x,updated_at:now}:x).sort((a,b)=>b.updated_at-a.updated_at);return[{id:rid,title:question.slice(0,70),created_at:now,updated_at:now},...prev]});setMessages(v=>[...v,{role:'assistant',text:answer}]);if(rd?.action?.executed){notify('✅ تم تنفيذ طلبك داخل جدولي.');window.dispatchEvent(new CustomEvent('thanaweya-ai-data-updated'))}}}finally{setBusy(false)}};
+  const ask=async()=>{
+    const question=input.trim();
+    if(!question||busy||used>=limit)return;
+    setMessages(v=>[...v,{role:'user',text:question}]);
+    setInput('');
+    setBusy(true);
+    try{
+      let answer='',rd:any=null;
+      for(let attempt=0;attempt<2&&!answer;attempt++){
+        try{
+          const r=await fetch('/api/ai/advice',{
+            method:'POST',
+            credentials:'include',
+            headers:{'content-type':'application/json'},
+            body:JSON.stringify({question,conversationId:chatId||undefined})
+          });
+          const d=await r.json().catch(()=>({}));
+          if(r.ok&&String(d?.answer||'').trim()){answer=String(d.answer).trim();rd=d}
+          else if(r.status===429){setUsed(Number(d?.used||limit));setLimit(Number(d?.limit||limit));notify(String(d?.error||'وصلت للحد اليومي.'));break}
+          else if(r.status===401||r.status===403){notify(String(d?.error||'غير مسموح.'));break}
+        }catch{}
+        if(!answer&&attempt===0)await new Promise(resolve=>setTimeout(resolve,250));
+      }
+      if(answer){
+        setUsed(Number(rd?.used||used+1));
+        setLimit(Number(rd?.limit||limit));
+        const rid=String(rd?.conversationId||chatId||'');
+        setChatId(rid);
+        setChats(prev=>{
+          const now=Date.now(),old=prev.find(x=>x.id===rid);
+          if(old)return prev.map(x=>x.id===rid?{...x,updated_at:now}:x).sort((a,b)=>b.updated_at-a.updated_at);
+          return[{id:rid,title:question.slice(0,70),created_at:now,updated_at:now},...prev]
+        });
+        setMessages(v=>[...v,{role:'assistant',text:answer}]);
+        if(rd?.action?.executed){
+          notify('✅ تم تنفيذ طلبك داخل الموقع.');
+          window.dispatchEvent(new CustomEvent('thanaweya-ai-data-updated'));
+        }
+      }else{
+        setMessages(v=>[...v,{role:'assistant',text:'معلش، حصل تأخير بسيط من خدمة الذكاء الاصطناعي. جرّب الرسالة تاني.'}]);
+      }
+    }finally{setBusy(false)}
+  };
   const pending=s.tasks.filter(x=>x.status!=='completed').length,done=s.lessons.filter(x=>x.status==='completed').length;const quick=(q:string)=>setInput(q);
   return <section className="aiPage">
    <div className="title"><div><h1>🤖 ثانوية AI</h1><p>مساعد مذاكرة شخصي يفهم بيانات حسابك ويتكلم معاك في شات حقيقي.</p></div><button className="primary" onClick={newChat}>＋ محادثة جديدة</button></div>
