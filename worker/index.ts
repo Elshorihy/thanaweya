@@ -127,39 +127,75 @@ async function body(request:Request){try{return await request.json() as any}catc
 
 async function callGemini(env:Env, contents:any[], systemInstruction:string){
   const apiKey=String(env.GEMINI_API_KEY||"").trim();
-  if(!apiKey) throw new Error("مفتاح Gemini غير مفعّل في Cloudflare.");
-  const model=String(env.GEMINI_MODEL||"gemini-3.8-flash").trim()||"gemini-3.8-flash";
-  const endpoint="https://generativelanguage.googleapis.com/v1beta/models/"+encodeURIComponent(model)+":generateContent";
-  const response=await fetch(endpoint,{
-    method:"POST",
-    headers:{
-      "content-type":"application/json",
-      "x-goog-api-key":apiKey
-    },
-    body:JSON.stringify({
-      systemInstruction:{parts:[{text:systemInstruction}]},
-      contents,
-      generationConfig:{maxOutputTokens:1800}
-    })
-  });
-  const raw=await response.text();
-  let data:any=null;
-  try{data=JSON.parse(raw)}catch{}
-  if(!response.ok){
-    const msg=String(data?.error?.message||"Gemini API error");
-    if(response.status===429) throw new Error("المساعد وصل لحد الاستخدام الحالي. جرّب بعد شوية.");
-    throw new Error(msg.slice(0,300));
-  }
-  const text=(data?.candidates||[])
-    .flatMap((c:any)=>c?.content?.parts||[])
-    .map((p:any)=>String(p?.text||""))
-    .filter(Boolean)
-    .join("\n")
-    .trim();
-  if(!text) throw new Error("Gemini لم يُرجع ردًا.");
-  return text;
-}
+  if(!apiKey) throw new Error("مفتاح المساعد غير مفعّل حاليًا.");
 
+  const configured=String(env.GEMINI_MODEL||"").trim();
+  const models=[...new Set([configured,"gemini-2.5-flash","gemini-2.5-flash-lite"].filter(Boolean))];
+  let lastError="تعذر تشغيل المساعد حاليًا.";
+
+  for(const model of models){
+    const endpoint="https://generativelanguage.googleapis.com/v1beta/models/"+encodeURIComponent(model)+":generateContent";
+    for(let attempt=0;attempt<2;attempt++){
+      try{
+        const response=await fetch(endpoint,{
+          method:"POST",
+          headers:{
+            "content-type":"application/json",
+            "x-goog-api-key":apiKey
+          },
+          body:JSON.stringify({
+            systemInstruction:{parts:[{text:systemInstruction}]},
+            contents,
+            generationConfig:{maxOutputTokens:1800}
+          })
+        });
+        const raw=await response.text();
+        let data:any=null;
+        try{data=JSON.parse(raw)}catch{}
+
+        if(response.ok){
+          const answer=(data?.candidates||[])
+            .flatMap((x:any)=>x?.content?.parts||[])
+            .map((x:any)=>String(x?.text||""))
+            .filter(Boolean)
+            .join("\n")
+            .trim();
+          if(answer)return answer;
+          lastError="المساعد لم يُرجع ردًا.";
+          break;
+        }
+
+        const status=response.status;
+        const providerMessage=String(data?.error?.message||"");
+        lastError=providerMessage||"تعذر تشغيل المساعد حاليًا.";
+
+        // Temporary overload/rate-limit: retry once, then try the fallback model.
+        if(status===429||status===500||status===502||status===503){
+          if(attempt===0){
+            await new Promise(resolve=>setTimeout(resolve,700));
+            continue;
+          }
+          break;
+        }
+
+        // Model unavailable/not found: immediately try the next configured fallback.
+        if(status===404)break;
+
+        // Other provider errors should not be retried against the same model.
+        break;
+      }catch(e){
+        lastError=e instanceof Error?e.message:"تعذر الاتصال بالمساعد.";
+        if(attempt===0){
+          await new Promise(resolve=>setTimeout(resolve,500));
+          continue;
+        }
+        break;
+      }
+    }
+  }
+
+  throw new Error("المساعد مشغول حاليًا، حاول تبعت الرسالة تاني بعد ثواني.");
+}
 
 async function getPageViewStats(env:Env){
   const today=new Date().toISOString().slice(0,10);
