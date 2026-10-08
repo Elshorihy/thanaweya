@@ -1831,6 +1831,14 @@ export default {
             if(currentUser) ctx.waitUntil(touchUserActivity(env,currentUser.id,url.pathname,request.method));
           }catch{}
         }
+        if(url.pathname==="/api/ai/usage" && request.method==="GET") {
+          const u=await userFrom(request,env); if(!u)return json({error:"يجب تسجيل الدخول"},401);
+          if(String(u.role||"")!=="owner" && !(await hasActiveSubscription(env,u.id)))return json({error:"ثانوية AI متاحة للاشتراكات المفعّلة فقط."},403);
+          const day=new Date().toISOString().slice(0,10),limit=40;
+          const row=await env.DB.prepare("SELECT count FROM ai_usage WHERE user_id=? AND day=?").bind(u.id,day).first<any>();
+          const used=Math.min(Number(row?.count||0),limit);
+          return json({ok:true,used,remaining:Math.max(0,limit-used),limit});
+        }
         if(url.pathname==="/api/ai/chats" && request.method==="GET") {
           const u=await userFrom(request,env); if(!u)return json({error:"يجب تسجيل الدخول"},401);
           if(String(u.role||"")!=="owner" && !(await hasActiveSubscription(env,u.id)))return json({error:"ثانوية AI متاحة للاشتراكات المفعّلة فقط."},403);
