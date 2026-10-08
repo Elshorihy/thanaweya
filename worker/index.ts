@@ -43,6 +43,10 @@ async function ensureSchema(env:Env){
     await env.DB.prepare("CREATE TABLE IF NOT EXISTS auth_codes (id TEXT PRIMARY KEY,email TEXT NOT NULL,type TEXT NOT NULL,code_hash TEXT NOT NULL,payload_json TEXT,expires_at INTEGER NOT NULL,attempts INTEGER NOT NULL DEFAULT 0,created_at INTEGER NOT NULL)").run();
     await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_auth_codes_lookup ON auth_codes(email,type,expires_at)").run();
     await env.DB.prepare("CREATE TABLE IF NOT EXISTS ai_usage (user_id TEXT NOT NULL, day TEXT NOT NULL, count INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(user_id,day), FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE)").run();
+    await env.DB.prepare("CREATE TABLE IF NOT EXISTS ai_chats (id TEXT PRIMARY KEY,user_id TEXT NOT NULL,title TEXT NOT NULL DEFAULT 'محادثة جديدة',created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE)").run();
+    await env.DB.prepare("CREATE TABLE IF NOT EXISTS ai_messages (id TEXT PRIMARY KEY,chat_id TEXT NOT NULL,role TEXT NOT NULL,text TEXT NOT NULL,created_at INTEGER NOT NULL,FOREIGN KEY(chat_id) REFERENCES ai_chats(id) ON DELETE CASCADE)").run();
+    await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_ai_chats_user_updated ON ai_chats(user_id,updated_at)").run();
+    await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_ai_messages_chat_created ON ai_messages(chat_id,created_at)").run();
     await env.DB.prepare("CREATE TABLE IF NOT EXISTS user_data (user_id TEXT PRIMARY KEY,data_json TEXT NOT NULL DEFAULT '{}',updated_at INTEGER NOT NULL,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE)").run();
     await env.DB.prepare("CREATE TABLE IF NOT EXISTS global_lectures (id TEXT PRIMARY KEY,title TEXT NOT NULL,subject_name TEXT NOT NULL,url TEXT NOT NULL,description TEXT NOT NULL DEFAULT '',kind TEXT NOT NULL DEFAULT 'link',enabled INTEGER NOT NULL DEFAULT 1,created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL)").run();
     await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_global_lectures_subject ON global_lectures(subject_name,enabled)").run();
@@ -125,7 +129,7 @@ async function createSession(userId:string,env:Env) {
 }
 async function body(request:Request){try{return await request.json() as any}catch{return null}}
 
-async function callGemini(env:Env, contents:any[], systemInstruction:string){
+async function callGemini(env:Env, contents:any[], systemInstruction:string, generationConfigExtra:any={}){
   const apiKey=String(env.GEMINI_API_KEY||"").trim();
   if(!apiKey) throw new Error("NO_AI");
 
@@ -161,7 +165,7 @@ async function callGemini(env:Env, contents:any[], systemInstruction:string){
           body:JSON.stringify({
             systemInstruction:{parts:[{text:systemInstruction}]},
             contents,
-            generationConfig:{maxOutputTokens:1800,temperature:0.7}
+            generationConfig:{maxOutputTokens:1800,temperature:0.7,...(generationConfigExtra||{})}
           })
         });
         const raw=await response.text();
@@ -1827,65 +1831,91 @@ export default {
             if(currentUser) ctx.waitUntil(touchUserActivity(env,currentUser.id,url.pathname,request.method));
           }catch{}
         }
+        if(url.pathname==="/api/ai/chats" && request.method==="GET") {
+          const u=await userFrom(request,env); if(!u)return json({error:"يجب تسجيل الدخول"},401);
+          if(String(u.role||"")!=="owner" && !(await hasActiveSubscription(env,u.id)))return json({error:"ثانوية AI متاحة للاشتراكات المفعّلة فقط."},403);
+          const rows=await env.DB.prepare("SELECT id,title,created_at,updated_at FROM ai_chats WHERE user_id=? ORDER BY updated_at DESC").bind(u.id).all<any>();
+          return json({ok:true,chats:rows.results||[]});
+        }
+        if(url.pathname.startsWith("/api/ai/chats/") && request.method==="GET") {
+          const u=await userFrom(request,env); if(!u)return json({error:"يجب تسجيل الدخول"},401);
+          if(String(u.role||"")!=="owner" && !(await hasActiveSubscription(env,u.id)))return json({error:"ثانوية AI متاحة للاشتراكات المفعّلة فقط."},403);
+          const chatId=decodeURIComponent(url.pathname.slice("/api/ai/chats/".length)).trim();
+          const chat=await env.DB.prepare("SELECT id,title,created_at,updated_at FROM ai_chats WHERE id=? AND user_id=?").bind(chatId,u.id).first<any>();
+          if(!chat)return json({error:"المحادثة غير موجودة"},404);
+          const rows=await env.DB.prepare("SELECT role,text,created_at FROM ai_messages WHERE chat_id=? ORDER BY created_at ASC").bind(chatId).all<any>();
+          return json({ok:true,chat,messages:rows.results||[]});
+        }
+        if(url.pathname.startsWith("/api/ai/chats/") && request.method==="DELETE") {
+          const u=await userFrom(request,env); if(!u)return json({error:"يجب تسجيل الدخول"},401);
+          const chatId=decodeURIComponent(url.pathname.slice("/api/ai/chats/".length)).trim();
+          const chat=await env.DB.prepare("SELECT id FROM ai_chats WHERE id=? AND user_id=?").bind(chatId,u.id).first<any>();
+          if(!chat)return json({error:"المحادثة غير موجودة"},404);
+          await env.DB.prepare("DELETE FROM ai_messages WHERE chat_id=?").bind(chatId).run();
+          await env.DB.prepare("DELETE FROM ai_chats WHERE id=? AND user_id=?").bind(chatId,u.id).run();
+          return json({ok:true});
+        }
         if(url.pathname==="/api/ai/advice" && request.method==="POST") {
-          const u=await userFrom(request,env);
-          if(!u) return json({error:"يجب تسجيل الدخول"},401);
-          if(String(u.role||"")!=="owner" && !(await hasActiveSubscription(env,u.id))) return json({error:"ثانوية AI متاحة للاشتراكات المفعّلة فقط."},403);
-
-          const b=await body(request);
-          const question=String(b?.question||"").trim().slice(0,4000);
-          if(!question) return json({error:"اكتب سؤالك أولًا."},400);
-
+          const u=await userFrom(request,env); if(!u)return json({error:"يجب تسجيل الدخول"},401);
+          if(String(u.role||"")!=="owner" && !(await hasActiveSubscription(env,u.id)))return json({error:"ثانوية AI متاحة للاشتراكات المفعّلة فقط."},403);
+          const b=await body(request),question=String(b?.question||"").trim().slice(0,4000);
+          if(!question)return json({error:"اكتب سؤالك أولًا."},400);
+          let chatId=String(b?.conversationId||"").trim().slice(0,80);
+          if(chatId){
+            const exists=await env.DB.prepare("SELECT id FROM ai_chats WHERE id=? AND user_id=?").bind(chatId,u.id).first<any>();
+            if(!exists)return json({error:"المحادثة غير موجودة"},404);
+          }else{
+            chatId=randomHex(16);const now=Date.now();
+            await env.DB.prepare("INSERT INTO ai_chats(id,user_id,title,created_at,updated_at) VALUES(?,?,?,?,?)").bind(chatId,u.id,question.slice(0,70)||"محادثة جديدة",now,now).run();
+          }
           const stored=await env.DB.prepare("SELECT data_json FROM user_data WHERE user_id=?").bind(u.id).first<any>();
-          let data:any={};
-          try{data=stored?.data_json?JSON.parse(stored.data_json)||{}:{}}catch{data={}}
-
-          const day=new Date().toISOString().slice(0,10), limit=40;
+          let data:any={};try{data=stored?.data_json?JSON.parse(stored.data_json)||{}:{}}catch{data={}}
+          const day=new Date().toISOString().slice(0,10),limit=40;
           const usage=await env.DB.prepare("SELECT count FROM ai_usage WHERE user_id=? AND day=?").bind(u.id,day).first<any>();
-          const used=Number(usage?.count||0);
-          if(used>=limit) return json({error:"وصلت للحد اليومي للمساعد الذكي (40 رسالة). جرّب بكرة."},429);
-
-          const rawHistory=Array.isArray(b?.history)?b.history:[];
-          const history=rawHistory.slice(-12).map((m:any)=>{
-            const role=m?.role==="assistant"?"model":"user";
-            const text=String(m?.text||"").trim().slice(0,4000);
-            return text?{role,parts:[{text}]}:null;
-          }).filter(Boolean);
-
-          const safeData={
-            profile:data?.profile||{},
-            subjects:Array.isArray(data?.subjects)?data.subjects:[],
-            units:Array.isArray(data?.units)?data.units:[],
-            lessons:Array.isArray(data?.lessons)?data.lessons:[],
-            tasks:Array.isArray(data?.tasks)?data.tasks:[],
-            sessions:Array.isArray(data?.sessions)?data.sessions:[],
-            studySchedule:Array.isArray(data?.studySchedule)?data.studySchedule:[],
-            classSchedule:Array.isArray(data?.classSchedule)?data.classSchedule:[],
-            settings:data?.settings||{}
-          };
-
+          const used=Number(usage?.count||0);if(used>=limit)return json({error:"وصلت للحد اليومي للمساعد الذكي (40 رسالة). جرّب بكرة."},429);
+          const dbHistory=await env.DB.prepare("SELECT role,text FROM ai_messages WHERE chat_id=? ORDER BY created_at DESC LIMIT 20").bind(chatId).all<any>();
+          const history=(dbHistory.results||[]).reverse().map((x:any)=>({role:String(x.role)==="assistant"?"model":"user",parts:[{text:String(x.text||"").slice(0,4000)}]})).filter((x:any)=>x.parts[0].text);
+          const safeData={profile:data?.profile||{},subjects:Array.isArray(data?.subjects)?data.subjects:[],units:Array.isArray(data?.units)?data.units:[],lessons:Array.isArray(data?.lessons)?data.lessons:[],tasks:Array.isArray(data?.tasks)?data.tasks:[],sessions:Array.isArray(data?.sessions)?data.sessions:[],studySchedule:Array.isArray(data?.studySchedule)?data.studySchedule:[],classSchedule:Array.isArray(data?.classSchedule)?data.classSchedule:[],settings:data?.settings||{}};
           const systemInstruction=[
             "أنت ثانوية AI، مساعد مذاكرة شخصي داخل منصة ثانوية لطلاب الصف الثالث الثانوي في مصر.",
             "اتكلم بالمصري الطبيعي، بشكل ودود ومباشر، ومن غير مبالغة أو كلام روبوتي.",
             "اعتمد على بيانات الحساب المرسلة لك فقط عندما تتكلم عن تقدم الطالب أو جدوله أو مواده.",
             "لو البيانات ناقصة قل إنك لا تملك المعلومة بدل اختلاقها.",
             "ساعد في المذاكرة، التخطيط، شرح المفاهيم الدراسية، تنظيم الوقت، وتحليل التقدم.",
-            "لا تدّعي أنك اتخذت إجراء داخل الموقع إذا لم يتم تنفيذ إجراء فعلي.",
-            "لا تكشف أي بيانات سرية أو مفاتيح أو تفاصيل داخلية عن النظام.",
-            "بيانات الطالب الحالية (قد تكون فارغة):",
-            JSON.stringify(safeData)
+            "لو المستخدم طلب إنشاء أو تعديل أو إعادة تنظيم أو حذف جدول المذاكرة داخل قسم «جدولي»، استخدم action المناسب.",
+            "replace_study_schedule يستبدل جدول المذاكرة بالكامل بالـslots المقترحة، باستخدام subjectId موجود فعلًا في المواد، وتاريخ YYYY-MM-DD ومدة بالدقائق.",
+            "clear_study_schedule يمسح جدول المذاكرة بالكامل.",
+            "لو مفيش إجراء مطلوب استخدم type=none وslots=[].",
+            "لا تدّعي تنفيذ إجراء داخل الموقع إلا لو السيرفر نفذه فعلًا.",
+            "صلاحيات التنفيذ هنا مقتصرة على جدول المذاكرة فقط؛ لا تعدّل المواد أو الدروس أو المهام.",
+            "بيانات الطالب الحالية:\n"+JSON.stringify(safeData),
+            "أعد JSON فقط بالمخطط المطلوب."
           ].join("\n");
-
+          const actionSchema={type:"OBJECT",properties:{type:{type:"STRING",enum:["none","replace_study_schedule","clear_study_schedule"]},slots:{type:"ARRAY",items:{type:"OBJECT",properties:{date:{type:"STRING"},subjectId:{type:"STRING"},duration:{type:"INTEGER"}},required:["date","subjectId","duration"]}}},required:["type","slots"]};
           const contents=[...history,{role:"user",parts:[{text:question}]}];
-
           try{
-            const answer=await callGemini(env,contents,systemInstruction);
+            const raw=await callGemini(env,contents,systemInstruction,{responseMimeType:"application/json",responseSchema:{type:"OBJECT",properties:{answer:{type:"STRING"},action:actionSchema},required:["answer","action"]}});
+            let result:any;try{result=JSON.parse(raw)}catch{throw new Error("AI_BAD_JSON")}
+            const answer=String(result?.answer||"").trim();if(!answer)throw new Error("AI_EMPTY");
+            const actionType=String(result?.action?.type||"none"),rawSlots=Array.isArray(result?.action?.slots)?result.action.slots:[];let executed=false;
+            if(actionType==="clear_study_schedule"){data.studySchedule=[];executed=true}
+            else if(actionType==="replace_study_schedule"){
+              const subjects=new Set((Array.isArray(data?.subjects)?data.subjects:[]).map((x:any)=>String(x?.id||"")).filter(Boolean)),slots:any[]=[],seen=new Set<string>();
+              for(const item of rawSlots.slice(0,31)){
+                const date=String(item?.date||"").trim(),subjectId=String(item?.subjectId||"").trim(),duration=Math.round(Number(item?.duration||0));
+                if(!/^\d{4}-\d{2}-\d{2}$/.test(date)||!subjects.has(subjectId)||duration<15||duration>480)continue;
+                const key=date+"|"+subjectId;if(seen.has(key))continue;seen.add(key);slots.push({id:randomHex(8),date,subjectId,duration});
+              }
+              if(!slots.length)throw new Error("AI_ACTION_INVALID");data.studySchedule=slots;executed=true;
+            }
+            const now=Date.now();
+            if(executed){const serialized=JSON.stringify(data);if(serialized.length>900000)throw new Error("DATA_TOO_LARGE");await env.DB.prepare("INSERT INTO user_data(user_id,data_json,updated_at) VALUES(?,?,?) ON CONFLICT(user_id) DO UPDATE SET data_json=excluded.data_json,updated_at=excluded.updated_at").bind(u.id,serialized,now).run()}
+            await env.DB.prepare("INSERT INTO ai_messages(id,chat_id,role,text,created_at) VALUES(?,?,?,?,?)").bind(randomHex(12),chatId,"user",question,now).run();
+            await env.DB.prepare("INSERT INTO ai_messages(id,chat_id,role,text,created_at) VALUES(?,?,?,?,?)").bind(randomHex(12),chatId,"assistant",answer,now+1).run();
+            await env.DB.prepare("UPDATE ai_chats SET updated_at=? WHERE id=? AND user_id=?").bind(now+1,chatId,u.id).run();
             await env.DB.prepare("INSERT INTO ai_usage(user_id,day,count) VALUES(?,?,1) ON CONFLICT(user_id,day) DO UPDATE SET count=count+1").bind(u.id,day).run();
-            return json({ok:true,answer,used:used+1,limit,model:String(env.GEMINI_MODEL||"gemini-3.8-flash")});
-          }catch(e){
-            console.error("AI provider exhausted",e);
-            return json({ok:false,retry:true},503);
-          }
+            return json({ok:true,answer,conversationId:chatId,action:executed?{type:actionType,executed:true}:null,used:used+1,limit,model:String(env.GEMINI_MODEL||"gemini-3.8-flash")});
+          }catch(e){console.error("AI provider exhausted",e);return json({ok:false,retry:true},503)}
         }
         if(url.pathname==="/api/auth/register/start" && request.method==="POST") {
           const b=await body(request), email=cleanEmail(b?.email), name=cleanName(b?.name), password=String(b?.password||""), phone=cleanPhone(b?.phone);
