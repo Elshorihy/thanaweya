@@ -127,15 +127,20 @@ function AIPage({auth,s,go,notify}:{auth:import('./auth').AuthUser;s:Store;go:(p
   const next=[...messages,{role:'user' as const,text:question}];
   setMessages(next);setInput('');setBusy(true);
   try{
-   const r=await fetch('/api/ai/advice',{
-    method:'POST',credentials:'include',headers:{'content-type':'application/json'},
-    body:JSON.stringify({question,history:messages.slice(-12)})
-   });
-   const d=await r.json().catch(()=>({}));
-   if(!r.ok)throw new Error(d?.error||'تعذر تشغيل المساعد');
-   setMessages(v=>[...v,{role:'assistant',text:String(d.answer||'')}]);
-  }catch(e){
-   setMessages(v=>[...v,{role:'assistant',text:'⚠️ '+(e instanceof Error?e.message:'تعذر تشغيل المساعد')}]);
+   let answer='';
+   for(let attempt=0;attempt<7&&!answer;attempt++){
+    try{
+     const r=await fetch('/api/ai/advice',{
+      method:'POST',credentials:'include',headers:{'content-type':'application/json'},
+      body:JSON.stringify({question,history:messages.slice(-12)})
+     });
+     const d=await r.json().catch(()=>({}));
+     if(r.ok&&String(d?.answer||'').trim()) answer=String(d.answer).trim();
+     else if(r.status===401||r.status===403) break;
+    }catch{}
+    if(!answer&&attempt<6) await new Promise(resolve=>setTimeout(resolve,350+attempt*450));
+   }
+   if(answer)setMessages(v=>[...v,{role:'assistant',text:answer}]);
   }finally{setBusy(false)}
  };
  const pending=s.tasks.filter(x=>x.status!=='completed').length,done=s.lessons.filter(x=>x.status==='completed').length;
