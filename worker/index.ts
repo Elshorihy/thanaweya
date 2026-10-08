@@ -127,26 +127,41 @@ async function body(request:Request){try{return await request.json() as any}catc
 
 async function callGemini(env:Env, contents:any[], systemInstruction:string){
   const apiKey=String(env.GEMINI_API_KEY||"").trim();
-  if(!apiKey) throw new Error("مفتاح المساعد غير مفعّل حاليًا.");
+  if(!apiKey) throw new Error("NO_AI");
 
   const configured=String(env.GEMINI_MODEL||"").trim();
-  const models=[...new Set([configured,"gemini-2.5-flash","gemini-2.5-flash-lite"].filter(Boolean))];
-  let lastError="تعذر تشغيل المساعد حاليًا.";
+  const preferred=[configured,"gemini-2.5-flash","gemini-2.5-flash-lite","gemini-2.0-flash","gemini-1.5-flash"].filter(Boolean);
+  let models:string[]=[...new Set(preferred)];
 
+  // Ask Gemini which models this key can actually use, so a stale/invalid
+  // GEMINI_MODEL never becomes a dead end.
+  try{
+    const list=await fetch("https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000",{
+      headers:{"x-goog-api-key":apiKey}
+    });
+    if(list.ok){
+      const data:any=await list.json();
+      const available=(Array.isArray(data?.models)?data.models:[])
+        .filter((m:any)=>Array.isArray(m?.supportedGenerationMethods)&&m.supportedGenerationMethods.includes("generateContent"))
+        .map((m:any)=>String(m?.name||"").replace(/^models\//,""))
+        .filter(Boolean);
+      const ranked=available.filter((m:string)=>preferred.includes(m));
+      models=[...new Set([...preferred.filter((m:string)=>available.includes(m)),...ranked,...available])];
+    }
+  }catch{}
+
+  let lastError="";
   for(const model of models){
     const endpoint="https://generativelanguage.googleapis.com/v1beta/models/"+encodeURIComponent(model)+":generateContent";
     for(let attempt=0;attempt<2;attempt++){
       try{
         const response=await fetch(endpoint,{
           method:"POST",
-          headers:{
-            "content-type":"application/json",
-            "x-goog-api-key":apiKey
-          },
+          headers:{"content-type":"application/json","x-goog-api-key":apiKey},
           body:JSON.stringify({
             systemInstruction:{parts:[{text:systemInstruction}]},
             contents,
-            generationConfig:{maxOutputTokens:1800}
+            generationConfig:{maxOutputTokens:1800,temperature:0.7}
           })
         });
         const raw=await response.text();
@@ -158,35 +173,31 @@ async function callGemini(env:Env, contents:any[], systemInstruction:string){
             .flatMap((x:any)=>x?.content?.parts||[])
             .map((x:any)=>String(x?.text||""))
             .filter(Boolean)
-            .join("\n")
-            .trim();
+            .join("\n").trim();
           if(answer)return answer;
-          lastError="المساعد لم يُرجع ردًا.";
+          lastError="EMPTY";
           break;
         }
 
         const status=response.status;
-        const providerMessage=String(data?.error?.message||"");
-        lastError=providerMessage||"تعذر تشغيل المساعد حاليًا.";
+        lastError=String(data?.error?.message||status);
 
-        // Temporary overload/rate-limit: retry once, then try the fallback model.
+        // Overload/rate-limit/server errors: one quick retry, then move on.
         if(status===429||status===500||status===502||status===503){
           if(attempt===0){
-            await new Promise(resolve=>setTimeout(resolve,700));
+            await new Promise(resolve=>setTimeout(resolve,350));
             continue;
           }
           break;
         }
 
-        // Model unavailable/not found: immediately try the next configured fallback.
+        // Unsupported/stale model: move to the next available model.
         if(status===404)break;
-
-        // Other provider errors should not be retried against the same model.
         break;
       }catch(e){
-        lastError=e instanceof Error?e.message:"تعذر الاتصال بالمساعد.";
+        lastError=e instanceof Error?e.message:"NETWORK";
         if(attempt===0){
-          await new Promise(resolve=>setTimeout(resolve,500));
+          await new Promise(resolve=>setTimeout(resolve,250));
           continue;
         }
         break;
@@ -194,9 +205,10 @@ async function callGemini(env:Env, contents:any[], systemInstruction:string){
     }
   }
 
-  throw new Error("المساعد مشغول حاليًا، حاول تبعت الرسالة تاني بعد ثواني.");
+  // The frontend must never expose provider errors. The caller can retry the
+  // whole request without leaking Gemini's transient "high demand" message.
+  throw new Error("AI_UNAVAILABLE");
 }
-
 async function getPageViewStats(env:Env){
   const today=new Date().toISOString().slice(0,10);
   let totalUsers=0,totalVisits=0,todayVisits=0,last7DaysVisits=0;
@@ -1871,8 +1883,8 @@ export default {
             await env.DB.prepare("INSERT INTO ai_usage(user_id,day,count) VALUES(?,?,1) ON CONFLICT(user_id,day) DO UPDATE SET count=count+1").bind(u.id,day).run();
             return json({ok:true,answer,used:used+1,limit,model:String(env.GEMINI_MODEL||"gemini-3.8-flash")});
           }catch(e){
-            const message=e instanceof Error?e.message:String(e);
-            return json({error:message.slice(0,400)},503);
+            console.error("AI provider exhausted",e);
+            return json({ok:false,retry:true},503);
           }
         }
         if(url.pathname==="/api/auth/register/start" && request.method==="POST") {
