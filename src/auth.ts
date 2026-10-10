@@ -6,15 +6,20 @@ async function req(path:string,options:RequestInit={}) {
   const init:RequestInit={...options,credentials:'same-origin',cache:'no-store',mode:'same-origin',headers};
   let lastError:unknown=null;
   for(let attempt=0;attempt<2;attempt++){
+    const controller=new AbortController();
+    const timeout=window.setTimeout(()=>controller.abort(),10000);
     try{
-      const r=await fetch(path,init);
+      const r=await fetch(path,{...init,signal:controller.signal});
       const data=await r.json().catch(()=>({}));
       if(!r.ok) throw new Error(data.detail?String(data.error||'حدث خطأ')+': '+String(data.detail):(data.error||'حدث خطأ'));
       return data;
     }catch(e){
       lastError=e;
+      if(e instanceof DOMException && e.name==='AbortError') throw new Error('الخادم اتأخر في الرد. جرّب تحديث الصفحة.');
       if(attempt===0 && e instanceof TypeError){await new Promise(resolve=>setTimeout(resolve,500));continue;}
       throw e;
+    }finally{
+      window.clearTimeout(timeout);
     }
   }
   throw lastError instanceof Error?lastError:new Error('تعذر الاتصال بالخادم');
