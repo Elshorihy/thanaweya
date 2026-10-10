@@ -556,3 +556,80 @@ input:invalid,textarea:invalid,select:invalid{border-color:#ef4444}
 .aiWorkspace{display:grid;grid-template-columns:minmax(210px,280px) 1fr;gap:14px;align-items:stretch}.aiHistory{min-height:560px;max-height:720px;overflow:hidden}.aiHistoryList{display:flex;flex-direction:column;gap:8px;overflow:auto;max-height:630px;padding:4px}.aiHistoryItem{position:relative;display:flex;flex-direction:column;gap:3px;padding:11px 38px 10px 11px;border:1px solid var(--border,rgba(255,255,255,.08));border-radius:12px;cursor:pointer}.aiHistoryItem.active{outline:1px solid var(--accent,#7c3aed);background:rgba(124,58,237,.10)}.aiHistoryItem small{opacity:.65;font-size:.75rem}.aiHistoryDelete{position:absolute;right:7px;top:8px;border:0;background:transparent;cursor:pointer;padding:5px}.aiChatCard{min-width:0}.aiChatHeader{display:flex;align-items:center;justify-content:space-between;gap:10px;padding-bottom:12px;margin-bottom:8px;border-bottom:1px solid var(--border,rgba(255,255,255,.08))}.aiChatHeader small{display:block;opacity:.65;margin-top:3px}.aiPrivacy{font-size:.82rem;margin-top:10px}@media(max-width:850px){.aiWorkspace{grid-template-columns:1fr}.aiHistory{min-height:auto;max-height:250px}.aiHistoryList{max-height:170px}}
 
 .aiUsage{margin-top:12px;padding:10px 12px;border:1px solid var(--border,rgba(255,255,255,.08));border-radius:12px;background:rgba(255,255,255,.025)}.aiUsage>div:first-child{display:flex;justify-content:space-between;gap:10px;font-size:.85rem}.aiUsage span{opacity:.75}.aiUsage strong{opacity:1}.aiUsageBar{height:6px!important;margin-top:8px;background:rgba(127,127,127,.18);border-radius:99px;overflow:hidden}.aiUsageBar i{display:block;height:100%;background:var(--accent,#7c3aed);border-radius:inherit;transition:width .25s ease}
+
+/* Thanaweya AI — refreshed chat UI */
+.aiPage{gap:18px}
+.aiPage>.title{align-items:center;gap:14px}
+.aiHero{padding:clamp(16px,2.5vw,26px);border-radius:24px;background:linear-gradient(125deg,rgba(99,102,241,.13),rgba(16,185,129,.07));border:1px solid var(--border,rgba(255,255,255,.1))}
+.aiWorkspace{grid-template-columns:minmax(220px,270px) minmax(0,1fr);gap:16px;align-items:stretch}
+.aiHistory,.aiChatCard{border-radius:22px;padding:clamp(12px,1.8vw,20px);border:1px solid var(--border,rgba(255,255,255,.1));box-shadow:0 12px 35px rgba(0,0,0,.08)}
+.aiHistory{min-height:620px;max-height:780px;background:linear-gradient(180deg,rgba(99,102,241,.055),transparent)}
+.aiHistory .cardhead{align-items:center}
+.aiHistoryItem{padding:13px 38px 12px 12px;border-radius:14px;transition:background .18s,border-color .18s,transform .18s}
+.aiHistoryItem:hover{transform:translateY(-1px);border-color:var(--accent,#7c3aed)}
+.aiChatCard{display:flex;flex-direction:column;min-height:620px;background:linear-gradient(180deg,rgba(255,255,255,.025),transparent)}
+.aiChatHeader{gap:12px;flex-wrap:wrap;padding-bottom:14px}
+.aiChatHeader>div{min-width:0}
+.aiChatHeader b{font-size:1.05rem}
+.aiChatHeader button{flex-shrink:0}
+.aiQuick{gap:8px}
+.aiQuick .choices{gap:8px}
+.aiQuick .choices button{flex:1 1 155px;min-height:40px;border-radius:13px;font-size:.88rem;transition:transform .16s,border-color .16s}
+.aiQuick .choices button:hover{transform:translateY(-1px)}
+.aiChat{flex:1 1 auto;min-height:360px;max-height:68vh;gap:16px;padding:clamp(12px,2vw,22px);margin:12px 0 16px;border-radius:22px;border:1px solid var(--border,rgba(255,255,255,.1));background:radial-gradient(ellipse at top,rgba(99,102,241,.07),transparent 60%),var(--panel,rgba(0,0,0,.12));scroll-behavior:smooth}
+.aiBubble{max-width:min(84%,760px);padding:14px 17px;border-radius:19px;font-size:15px;line-height:1.9;box-shadow:0 5px 16px rgba(0,0,0,.045);overflow-wrap:anywhere}
+.aiBubble.user{align-self:flex-end;border-radius:19px 19px 5px 19px;background:linear-gradient(135deg,rgba(99,102,241,.22),rgba(124,58,237,.13));border-color:rgba(129,140,248,.35)}
+.aiBubble.assistant{align-self:flex-start;border-radius:19px 19px 19px 5px;background:linear-gradient(135deg,rgba(16,185,129,.12),rgba(20,184,166,.055));border-color:rgba(16,185,129,.25)}
+.aiBubbleRole{font-size:11px;letter-spacing:.02em;opacity:.78}
+.aiBubble p{white-space:pre-wrap}
+.aiEmpty{margin:auto;max-width:440px}
+.aiChatCard>label{display:block;font-weight:700;margin-top:2px}
+.aiChatCard>label textarea{display:block;width:100%;min-height:94px;max-height:200px;resize:vertical;margin-top:8px;padding:14px 16px;border-radius:16px;line-height:1.7}
+.aiChatCard>button.wide{min-height:48px;border-radius:15px;margin-top:10px}
+.aiUsage{margin-top:14px;border-radius:15px}
+.aiPrivacy{line-height:1.7}
+@media(max-width:850px){
+ .aiWorkspace{grid-template-columns:minmax(0,1fr)}
+ .aiHistory{min-height:0;max-height:230px}
+ .aiHistoryList{max-height:155px}
+ .aiChatCard{min-height:580px}
+ .aiChat{min-height:320px}
+}
+@media(max-width:620px){
+ .aiPage>.title{align-items:stretch}
+ .aiPage>.title .primary{white-space:nowrap}
+ .aiHero{border-radius:18px}
+ .aiHistory,.aiChatCard{padding:12px;border-radius:18px}
+ .aiChatCard{min-height:0}
+ .aiChat{min-height:42vh;max-height:58vh;padding:11px;border-radius:16px}
+ .aiBubble{max-width:94%;padding:11px 13px;font-size:14px}
+ .aiQuick .choices button{flex:1 1 140px;font-size:.82rem}
+ .aiChatHeader button{font-size:.8rem}
+}
+@media (orientation:landscape) and (max-height:600px){
+ .aiPage{gap:10px}
+ .aiPage>.title,.aiHero{padding-block:10px}
+ .aiHero{gap:10px}
+ .aiWorkspace{grid-template-columns:minmax(170px,220px) minmax(0,1fr);gap:10px;align-items:stretch}
+ .aiHistory{min-height:0;max-height:calc(100dvh - 125px)}
+ .aiHistoryList{max-height:calc(100dvh - 205px)}
+ .aiChatCard{min-height:0;height:calc(100dvh - 125px);overflow:hidden}
+ .aiChat{flex:1 1 0;min-height:0;max-height:none;height:auto;margin:8px 0;padding:10px}
+ .aiBubble{padding:9px 12px;line-height:1.65}
+ .aiQuick{gap:5px}
+ .aiQuick .choices{gap:5px}
+ .aiQuick .choices button{min-height:32px;padding:6px 9px}
+ .aiChatCard>label textarea{min-height:54px;max-height:72px;padding:8px 12px}
+ .aiChatCard>button.wide{min-height:36px;margin-top:6px}
+ .aiUsage{margin-top:7px;padding:7px 10px}
+ .aiPrivacy{display:none}
+}
+@media (orientation:landscape) and (max-height:600px) and (max-width:850px){
+ .aiWorkspace{grid-template-columns:minmax(150px,190px) minmax(0,1fr)}
+ .aiHistory{max-height:calc(100dvh - 90px)}
+ .aiHistoryList{max-height:calc(100dvh - 165px)}
+ .aiChatCard{height:calc(100dvh - 90px);padding:10px}
+ .aiChatHeader{padding-bottom:7px;margin-bottom:3px}
+ .aiChatHeader small{font-size:10px}
+ .aiQuick .choices button{flex-basis:110px;font-size:11px}
+}
