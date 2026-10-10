@@ -681,3 +681,21 @@ input:invalid,textarea:invalid,select:invalid{border-color:#ef4444}
   .aiChatCard>label textarea{min-height:36px;max-height:48px}
   .aiUsage{margin-top:4px;padding:4px 7px}
 }
+
+
+/* Full-width AI chat in landscape: prioritize the conversation over side panels */
+@media (orientation:landscape) and (max-height:800px) {
+  .app:has(.aiPage) aside { display:none !important; }
+  .app:has(.aiPage) main { margin:0 !important; width:100% !important; max-width:none !important; padding:10px 14px !important; }
+  .app:has(.aiPage) .bottomNav { display:none !important; }
+  .aiPage { width:100% !important; max-width:none !important; }
+  .aiWorkspace { display:grid !important; grid-template-columns:minmax(0,1fr) !important; width:100% !important; gap:0 !important; }
+  .aiHistory { display:none !important; }
+  .aiChatCard { width:100% !important; min-width:0 !important; height:calc(100dvh - 74px) !important; min-height:0 !important; max-height:none !important; }
+  .aiChat { width:100% !important; max-width:none !important; }
+}
+@media (orientation:landscape) and (max-height:430px) {
+  .app:has(.aiPage) main { padding:5px 8px !important; }
+  .aiPage>.title { margin-bottom:5px !important; }
+  .aiChatCard { height:calc(100dvh - 48px) !important; }
+}
