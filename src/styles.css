@@ -927,3 +927,45 @@ input[type=checkbox]{accent-color:#8b7bff}
  .whatsappChannelCta{bottom:82px}
 }
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
+
+
+/* Keep the optional light theme readable after the dark-first refresh. */
+body.light{
+ color-scheme:light;
+ --panel:#ffffff;
+ --surface:#ffffff;
+ --surface2:#f7f9fd;
+ --border:#dce4ef;
+ --border2:#c5d0df;
+ --text:#172033;
+ --muted:#637187;
+ --input:#f7f9fd;
+}
+.light .app>aside{background:rgba(255,255,255,.96);border-color:#e0e7f0;box-shadow:8px 0 35px rgba(22,35,60,.06)}
+.light .brand{border-color:#e4eaf3}
+.light .brand small{color:#718096}
+.light .app>aside nav button{color:#65748b}
+.light .app>aside nav button.active{background:linear-gradient(100deg,#eeeaff,#f8f7ff);border-color:#ded8ff;color:#342b70;box-shadow:inset -3px 0 0 #7968e8}
+.light .app>aside nav button:hover:not(.active){background:#f2f5fb;color:#172033}
+.light .app>aside .rescue{background:#fff1f2;color:#b4233a;border-color:#ffe0e5}
+.light .appMain>header{background:rgba(255,255,255,.92);border-color:#e0e7f0;box-shadow:0 8px 28px rgba(22,35,60,.045)}
+.light .accountChip,.light .headActions button,.light .appMain>header button:not(.mobileMenu){background:#f8faff;border-color:#e0e7f0;color:#26334a}
+.light .card,.light .aiHistory,.light .aiChatCard{background:linear-gradient(145deg,#fff,#f9fbff);border-color:#e0e7f0;box-shadow:0 10px 28px rgba(22,35,60,.045)}
+.light .stat:after{background:linear-gradient(90deg,rgba(111,91,226,.45),transparent 70%)}
+.light .stat .iconbox,.light .iconbox{background:#f0edff;color:#6858ce}
+.light .taskrow,.light .reviewrow,.light .listrow,.light .lessonTreeRow,.light .unitHead{border-color:#e5ebf3}
+.light .unitTree,.light .calday,.light .aiHistoryItem{background:#f8faff;border-color:#e0e7f0}
+.light .aiHistoryItem.active{background:#f0edff}
+.light .aiChat{background:radial-gradient(ellipse at top,rgba(99,102,241,.06),transparent 60%),#f7f9fd;border-color:#e0e7f0}
+.light .aiBubble.user{background:#efedff;border-color:#d8d2ff;color:#29234d}
+.light .aiBubble.assistant{background:#eaf8f4;border-color:#cdeee4;color:#163e36}
+.light .aiUsage{background:#f7f9fd;border-color:#e0e7f0}
+.light .bottomNav{background:rgba(255,255,255,.97);border-color:#e0e7f0;box-shadow:0 -10px 28px rgba(22,35,60,.07)}
+.light .bottomNav button.active{color:#342b70;background:#eeeaff}
+.light .modal,.light .oncard,.light .authGateCard{background:linear-gradient(150deg,#fff,#f7f9fd);border-color:#e0e7f0;box-shadow:0 25px 90px rgba(22,35,60,.18)}
+.light .toast{background:#fff;border-color:#dce4ef;color:#172033;box-shadow:0 12px 36px rgba(22,35,60,.16)}
+.light .primary{color:#fff}
+.light .muted{color:#637187}
+.light .siteFooter{border-color:#e0e7f0}
+.light .footerContact a{color:#26334a;border-color:#dce4ef}
+.light .rpgLevels span{background:#f7f9fd;border-color:#e0e7f0;color:#637187}
