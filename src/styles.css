@@ -633,3 +633,51 @@ input:invalid,textarea:invalid,select:invalid{border-color:#ef4444}
  .aiChatHeader small{font-size:10px}
  .aiQuick .choices button{flex-basis:110px;font-size:11px}
 }
+
+
+/* Landscape-first AI workspace for tablets and phones */
+@media (orientation:landscape) and (max-height:720px) and (min-width:600px){
+  .aiPage{gap:8px;min-width:0}
+  .aiPage>.title{padding:0 2px;min-height:38px;gap:10px}
+  .aiPage>.title h1{font-size:1.25rem;margin:0}
+  .aiPage>.title p{display:none}
+  .aiPage>.title .primary{min-height:34px;padding:6px 12px;font-size:.82rem}
+  .aiHero{display:none}
+  .aiWorkspace{grid-template-columns:minmax(165px,22vw) minmax(0,1fr);gap:10px;align-items:stretch}
+  .aiHistory,.aiChatCard{height:calc(100dvh - 112px);min-height:0;max-height:none;padding:10px;border-radius:16px}
+  .aiHistory{display:flex;flex-direction:column}
+  .aiHistory .cardhead{flex-shrink:0;margin-bottom:8px}
+  .aiHistoryList{flex:1;min-height:0;max-height:none;overflow:auto;padding:2px}
+  .aiHistoryItem{padding:9px 30px 8px 9px;font-size:.82rem}
+  .aiHistoryDelete{right:3px;top:4px}
+  .aiChatCard{display:flex;flex-direction:column;overflow:hidden}
+  .aiChatHeader{flex-shrink:0;padding-bottom:7px;margin-bottom:2px;gap:8px}
+  .aiChatHeader b{font-size:.9rem}
+  .aiChatHeader small{font-size:.68rem}
+  .aiQuick{flex-shrink:0}
+  .aiQuick .choices{display:flex;flex-wrap:nowrap;overflow-x:auto;padding-bottom:3px}
+  .aiQuick .choices button{flex:0 0 auto;min-height:30px;padding:5px 9px;font-size:.72rem;white-space:nowrap}
+  .aiChat{flex:1 1 0;min-height:0;max-height:none;height:auto;margin:6px 0;padding:10px;gap:9px;border-radius:14px}
+  .aiBubble{max-width:min(88%,850px);padding:8px 11px;font-size:.84rem;line-height:1.65}
+  .aiBubbleRole{font-size:10px}
+  .aiChatCard>label{flex-shrink:0;font-size:.82rem}
+  .aiChatCard>label textarea{min-height:44px;max-height:62px;margin-top:4px;padding:8px 11px;font-size:.86rem;line-height:1.5;resize:none}
+  .aiChatCard>button.wide{flex-shrink:0;min-height:34px;margin-top:5px;padding:6px 10px;font-size:.82rem}
+  .aiUsage{flex-shrink:0;margin-top:6px;padding:6px 9px}
+  .aiUsage>div:first-child{font-size:.72rem}
+  .aiUsageBar{height:4px!important;margin-top:5px}
+  .aiPrivacy{display:none}
+}
+@media (orientation:landscape) and (max-height:430px) and (min-width:600px){
+  .aiPage>.title{min-height:30px}
+  .aiPage>.title h1{font-size:1.05rem}
+  .aiWorkspace{grid-template-columns:minmax(145px,19vw) minmax(0,1fr);gap:7px}
+  .aiHistory,.aiChatCard{height:calc(100dvh - 88px);padding:7px}
+  .aiHistory .cardhead h2{font-size:.88rem}
+  .aiHistory .cardhead button{padding:4px 7px;font-size:.7rem}
+  .aiChatHeader{padding-bottom:5px}
+  .aiQuick .choices button{min-height:26px;padding:4px 7px;font-size:.67rem}
+  .aiChat{margin:4px 0;padding:7px}
+  .aiChatCard>label textarea{min-height:36px;max-height:48px}
+  .aiUsage{margin-top:4px;padding:4px 7px}
+}
