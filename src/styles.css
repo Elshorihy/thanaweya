@@ -10,3 +10,204 @@ body.light{color-scheme:light;--bg:#f3f6fc;--surface:#fff;--surface2:#f7f9fd;--s
 @media(max-width:820px){.app>aside{width:76px;padding:18px 9px}.brand{justify-content:center;padding:0 0 18px}.brand>div:not(.brandLogo){display:none}.app nav button{justify-content:center;padding:12px 6px;font-size:0}.app nav button span{display:none}.app nav button svg{width:19px;height:19px}.rescue{font-size:0;padding:12px}.appMain{margin-right:76px;width:calc(100% - 76px);padding:17px}.appMain>header{gap:8px;padding:8px}.accountChip{max-width:105px}.headActions button{padding:10px}.statsgrid{gap:10px}.grid2,.settingsgrid{grid-template-columns:1fr}.sourceGrid,.memoryGrid,.rpgWorlds{grid-template-columns:repeat(2,minmax(0,1fr))}.aiWorkspace{grid-template-columns:1fr}.aiHistory{max-height:180px;overflow:auto}.aiHistoryList{grid-template-columns:repeat(2,minmax(0,1fr))}.aiChat{max-height:52vh}.scheduleStats{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media(max-width:560px){.app>aside{display:none}.appMain{margin:0 0 72px;width:100%;padding:11px 12px 18px}.appMain>header{position:sticky;top:7px;z-index:10;min-height:54px;margin-bottom:20px;border-radius:15px;background:rgba(12,18,32,.94);backdrop-filter:blur(18px)}body.light .appMain>header{background:rgba(255,255,255,.95)}.mobileMenu{display:inline-flex;padding:9px;background:var(--surface2);border:1px solid var(--border)}.search{padding:0 9px;gap:6px}.search input{font-size:12px;padding:10px 0}.accountChip{display:none}.headActions{gap:4px}.headActions button{padding:9px 8px;font-size:0;min-width:36px}.headActions button svg{width:17px}.bottomNav{position:fixed;display:flex;bottom:0;right:0;left:0;height:70px;padding:5px max(6px,env(safe-area-inset-right)) calc(5px + env(safe-area-inset-bottom));background:rgba(12,18,32,.96);backdrop-filter:blur(20px);border-top:1px solid var(--border);z-index:30;justify-content:space-around;gap:2px}.bottomNav button{display:grid;place-items:center;align-content:center;gap:3px;flex:1;min-width:0;padding:5px 2px;font-size:10px;color:var(--muted);border-radius:10px}.bottomNav button.active{color:#c5bdff;background:rgba(139,124,255,.13)}.hero,.title{align-items:flex-start;flex-direction:column;gap:12px;margin-bottom:17px}.hero h1,.title h1{font-size:25px}.hero>.primary{width:100%}.smartAction{align-items:stretch;flex-direction:column;padding:17px}.smartAction .primary{width:100%}.statsgrid{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.stat{grid-template-columns:34px minmax(0,1fr);padding:13px;gap:8px;border-radius:15px}.stat .iconbox{width:34px;height:34px;border-radius:11px}.stat span{font-size:10px}.stat b{font-size:17px;overflow-wrap:anywhere}.grid2,.subjectGrid,.timeline,.formgrid,.achievementGrid,.settingsgrid,.sourceGrid,.sourceStats,.memoryGrid,.rpgWorlds,.personalStudyClasses,.badgeGrid,.scheduleStats,.accountInfoGrid{grid-template-columns:1fr}.card{padding:16px;border-radius:17px}.cardhead{align-items:flex-start}.actions{width:100%}.actions button{flex:1;justify-content:center}.quick{overflow:auto}.focuspage{padding:18px 10px;margin:15px auto}.focuspage h1{font-size:65px}.focusring{width:145px;height:145px}.focuspage.runningFocus{min-height:calc(100vh - 95px);padding:24px 12px;border-radius:17px}.focuspage.runningFocus .focuscontext{padding:13px}.focusBlessing{margin-top:6px}.focusTopbar{align-items:flex-start;flex-wrap:wrap}.fab{bottom:82px;left:14px}.calendar{grid-template-columns:repeat(7,minmax(36px,1fr));gap:4px;overflow-x:auto}.calday{min-width:36px;min-height:65px;padding:5px;font-size:10px}.calday span,.calday small{font-size:9px}.filterrow>*{min-width:100%}.quickmodal{grid-template-columns:1fr}.lessonTreeRow{grid-template-columns:minmax(0,1fr) auto}.lessonTreeRow .dangerlink{grid-column:2}.lessonTreeRow>div{grid-column:1/3}.subjectTreeHead,.unitHead{align-items:flex-start;flex-wrap:wrap}.subjectTreeHead .actions,.unitHead .actions{flex-wrap:wrap;justify-content:flex-end}.sourceCard{gap:9px}.sourceIcon{width:35px;font-size:26px}.missionHero,.scheduleHero,.challengeHero{flex-direction:column;align-items:flex-start}.hourGrid{overflow:auto;grid-template-columns:repeat(24,27px);gap:4px}.hourGrid>div{width:27px}.aiChatCard{min-height:430px}.aiChat{padding:12px;max-height:48vh}.aiBubble{max-width:95%;font-size:13px;padding:11px 12px}.aiHistoryList{grid-template-columns:1fr}.aiChatHeader{padding:12px}.aiQuick{padding:10px;gap:5px}.aiQuick button{font-size:11px;padding:8px}.aiWorkspace{gap:10px}.scheduleEvent{gap:8px;padding:9px}.scheduleEventTime{min-width:65px;padding-left:8px}.siteFooter{margin:25px 0 10px;justify-content:center}.footerContact{width:100%}.footerContact a{flex:1;justify-content:center;min-width:85px}.twoCols{grid-template-columns:1fr}.modal{padding:18px}.oncard{padding:24px 18px}.otpInputs{gap:5px}.otpInput{padding:9px 3px;font-size:19px}.accountBox{align-items:stretch;flex-direction:column}.pushPrompt{align-items:stretch;flex-direction:column}.personalStudyRow,.studyClassRow,.savedScheduleRow{padding:10px}.scheduleGenerateBtn{width:100%;white-space:normal}.rpgHeader h1{font-size:32px}}
 @media(prefers-reduced-motion:reduce){*,*:before,*:after{scroll-behavior:auto!important;animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
+
+
+/* THANAWeya — NEW VISUAL SYSTEM: Field Notes / Study Lab
+   A structural redesign, not a recolor of the previous purple dashboard. */
+:root{
+ color-scheme:dark;
+ --bg:#0b0e0a;--surface:#121710;--surface2:#191f15;--surface3:#252d1e;
+ --border:#30382a;--border2:#48513e;--text:#f2f4e9;--muted:#a1aa94;
+ --accent:#c7f36b;--accent2:#ff925c;--good:#a6e36f;--warn:#f5c86b;
+ --danger:#ff796f;--input:#10140e;--shadow:0 18px 55px rgba(0,0,0,.26);--radius:12px;
+ background:var(--bg);color:var(--text)
+}
+html,body{background:var(--bg);color:var(--text)}
+body{
+ background-image:linear-gradient(rgba(199,243,107,.025) 1px,transparent 1px),linear-gradient(90deg,rgba(199,243,107,.025) 1px,transparent 1px);
+ background-size:32px 32px;
+}
+a{color:var(--accent)}
+button{border-radius:9px;transition:background .18s,border-color .18s,transform .18s}
+button:hover{transform:translateY(-1px)}
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline-color:var(--accent)}
+/* Desktop becomes a full-width command deck with a horizontal course navigator. */
+.app{display:flex;flex-direction:column;min-height:100vh;direction:rtl}
+.app>aside{
+ position:sticky;inset:0 0 auto;width:100%;height:auto;min-height:82px;z-index:25;
+ padding:12px clamp(16px,3vw,48px);display:flex;flex-direction:row;align-items:center;gap:20px;
+ background:rgba(11,14,10,.94);border:0;border-bottom:1px solid var(--border);
+ box-shadow:none;backdrop-filter:blur(18px)
+}
+.brand{flex:0 0 auto;gap:10px;margin:0;padding:0;border:0;min-width:180px}
+.brandLogo{width:42px;height:42px;flex-basis:42px;border-radius:10px;box-shadow:none}
+.brand b{font-size:17px;letter-spacing:-.5px}
+.brand small{font-size:10px;max-width:180px}
+.app nav{display:flex;flex:1;min-width:0;gap:5px;overflow-x:auto;overflow-y:hidden;padding:3px 0;scrollbar-width:thin}
+.app nav button{width:auto;min-width:max-content;justify-content:center;text-align:center;padding:10px 12px;min-height:39px;border-radius:8px;font-size:12px;color:#b1b8a7;gap:7px}
+.app nav button svg{color:#9ca78d;width:16px;height:16px}
+.app nav button.active{color:#10140c;background:var(--accent);border-color:var(--accent);box-shadow:none;font-weight:900}
+.app nav button.active svg{color:#10140c}
+.app nav button:hover{background:var(--surface2);border-color:var(--border2)}
+.app nav button.active:hover{background:#d4ff7d;border-color:#d4ff7d}
+.rescue{margin:0;flex:0 0 auto;background:transparent;border:1px solid var(--border2);color:var(--accent2);padding:9px 12px}
+.appMain{margin:0;width:100%;min-height:calc(100vh - 82px);padding:24px clamp(16px,4vw,64px) 35px;max-width:1600px;align-self:center}
+.appMain>header{min-height:54px;margin:0 0 30px;padding:0 0 15px;border:0;border-bottom:1px solid var(--border);border-radius:0;background:transparent;box-shadow:none;backdrop-filter:none}
+.search{max-width:560px;background:var(--surface);border-color:var(--border);border-radius:9px}
+.search:focus-within{border-color:var(--accent);box-shadow:0 0 0 2px rgba(199,243,107,.1)}
+.headActions button{background:var(--surface);border-color:var(--border);border-radius:9px}
+.headActions button:hover{border-color:var(--accent);color:var(--accent)}
+.accountChip{border-color:var(--border);color:var(--text)}
+.mobileMenu{display:none}
+/* Typography and surfaces use a more editorial, modular visual language. */
+.hero,.title{margin-bottom:28px;align-items:flex-end}
+.hero h1,.title h1{font-size:clamp(27px,3vw,42px);line-height:1.2;letter-spacing:-1.2px;font-weight:800}
+.hero p,.title p{max-width:720px;font-size:13px}
+.eyebrow{color:var(--accent);letter-spacing:.13em;font-size:10px}
+.primary{background:var(--accent);color:#11150d;border:1px solid var(--accent);box-shadow:none;font-weight:900}
+.primary:hover{background:#d8ff8b;filter:none;box-shadow:0 6px 22px rgba(199,243,107,.12)}
+.ghost,.quick button,.headActions button{background:var(--surface);border-color:var(--border2)}
+.link{color:var(--accent)}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:22px;box-shadow:none}
+.card h2{font-size:15px;letter-spacing:-.2px}
+.cardhead{padding-bottom:12px;border-bottom:1px solid var(--border);margin-bottom:15px}
+.statsgrid{gap:12px}
+.stat{border-radius:11px;padding:17px;background:var(--surface);border-color:var(--border);box-shadow:none}
+.stat:after{display:none}
+.stat .iconbox{background:rgba(199,243,107,.1);border:1px solid rgba(199,243,107,.18);color:var(--accent);border-radius:10px}
+.stat b{font-size:clamp(22px,2.2vw,31px);letter-spacing:-1px}
+.progress{background:#2a3223;border-radius:3px}
+.progress div{background:var(--accent);border-radius:3px}
+.iconbox{border-radius:10px}
+.grid2{gap:12px}
+.subjectGrid{gap:12px}
+.daycard,.statusitem,.mapitem,.unitTree,.personalStudyRow,.studyClassRow,.savedScheduleRow,.scheduleEvent{
+ background:var(--surface);border-color:var(--border);border-radius:10px
+}
+input,select,textarea{background:var(--input);border-color:var(--border2);border-radius:8px}
+input:focus,select:focus,textarea:focus{border-color:var(--accent);box-shadow:0 0 0 2px rgba(199,243,107,.1)}
+input[type=checkbox],input[type=radio]{accent-color:var(--accent)}
+.selected{background:rgba(199,243,107,.14)!important;border-color:var(--accent)!important;color:var(--text)!important}
+.actions button{border-color:var(--border2);background:var(--surface2)}
+.actions button:hover,.ghost:hover{border-color:var(--accent)}
+.empty{border-radius:10px;border-color:var(--border2)}
+.taskrow,.reviewrow,.listrow{border-color:var(--border)}
+.taskstatus{border-radius:6px;background:var(--surface2);border-color:var(--border2)}
+.calendar .calday{border-radius:8px}
+.calday.today{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent);background:rgba(199,243,107,.06)}
+.focusring{border-color:var(--accent);color:var(--accent);box-shadow:none;background:radial-gradient(circle,rgba(199,243,107,.08),transparent 70%)}
+.focuspage.runningFocus{background:#090c08 url('/study-focus.svg') center/cover no-repeat;border:1px solid var(--border);border-radius:12px}
+.focuspage.runningFocus h1{color:var(--accent);text-shadow:none}
+.focuspage.runningFocus .focuscontext{border-color:var(--border2);background:rgba(12,16,10,.86)}
+.focusCoreProgress{color:var(--accent)}
+.onboard{background:var(--bg)}
+.oncard,.authGateCard{background:var(--surface);border:1px solid var(--border);border-radius:14px;box-shadow:var(--shadow)}
+.modal{background:#141912;border-color:var(--border2);border-radius:12px}
+.overlay{backdrop-filter:blur(5px)}
+.toast{background:var(--surface2);border-color:var(--accent);border-radius:9px}
+.fab{background:var(--accent);color:#10140c;border-radius:11px;box-shadow:none}
+.aiHero,.challengeHero,.verificationHero,.siteAnnouncement{background:var(--surface);border-color:var(--border);border-radius:12px}
+.aiHistory,.aiChatCard{background:var(--surface);border-color:var(--border);border-radius:12px}
+.aiBubble.user{background:rgba(199,243,107,.1);border-color:rgba(199,243,107,.2)}
+.aiBubble.assistant{background:var(--surface2);border-color:var(--border)}
+.aiUsageBar i{background:var(--accent)}
+.aiQuick button{border-radius:8px;background:var(--surface2)}
+.verificationHeroIcon{background:rgba(199,243,107,.1);color:var(--accent)}
+.studentBadge{background:rgba(199,243,107,.08);border-color:rgba(199,243,107,.2)}
+.siteFooter{border-color:var(--border)}
+.footerContact a{border-radius:8px;border-color:var(--border2)}
+.footerContact a:hover{border-color:var(--accent)}
+/* Light mode stays coherent with the new olive / paper identity. */
+body.light{
+ color-scheme:light;--bg:#f3f3e9;--surface:#fffef7;--surface2:#f0f1e5;--surface3:#e4e7d7;
+ --border:#d9ddca;--border2:#bdc6aa;--text:#20261b;--muted:#68715c;--input:#fffef9;
+ --accent:#4c671e;--accent2:#c85e32;--good:#4e7a29;--warn:#9a6a16;--danger:#bd453d;
+ --shadow:0 14px 35px rgba(39,48,24,.08);background-color:var(--bg);color:var(--text);
+ background-image:linear-gradient(rgba(76,103,30,.035) 1px,transparent 1px),linear-gradient(90deg,rgba(76,103,30,.035) 1px,transparent 1px)
+}
+body.light .app>aside{background:rgba(243,243,233,.96);box-shadow:none}
+body.light .appMain>header{background:transparent;box-shadow:none}
+body.light .card,body.light .stat,body.light .daycard,body.light .modal,body.light .oncard,body.light .authGateCard,body.light .aiHistory,body.light .aiChatCard{background:var(--surface);border-color:var(--border);box-shadow:none}
+body.light .app nav button{color:var(--muted)}
+body.light .app nav button.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+body.light .app nav button.active svg{color:#fff}
+body.light .primary{background:var(--accent);border-color:var(--accent);color:#fff}
+body.light .headActions button,body.light .quick button,body.light .actions button,body.light .ghost{background:var(--surface2);color:var(--text);border-color:var(--border2)}
+body.light .bottomNav{background:var(--surface);border-color:var(--border)}
+body.light .bottomNav button.active{color:var(--accent);background:rgba(76,103,30,.08)}
+body.light .progress{background:var(--surface3)}
+body.light .progress div{background:var(--accent)}
+body.light .aiBubble.assistant{background:var(--surface2);border-color:var(--border)}
+body.light .aiBubble.user{background:rgba(76,103,30,.08);color:var(--text)}
+body.light .focuspage.runningFocus{color:#fff}
+body.light .siteFooter{border-color:var(--border)}
+body.light .footerContact a{color:var(--text);border-color:var(--border)}
+body.light .siteAnnouncement{background:var(--surface);border-color:var(--border)}
+/* Responsive navigation: tablet gets a compact horizontal course strip; phones keep the bottom dock. */
+@media(max-width:1120px){
+ .app>aside{width:100%;padding:10px 16px;gap:12px;min-height:74px}
+ .brand{min-width:150px}.brand small{display:none}
+ .app nav{gap:3px}
+ .app nav button{padding:9px 10px;font-size:11px}
+ .rescue{padding:9px}
+ .appMain{margin:0;width:100%;padding:22px clamp(14px,3vw,34px) 30px}
+ .statsgrid{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(max-width:820px){
+ .app>aside{min-height:68px;padding:9px 12px;gap:10px}
+ .brand{min-width:unset}.brandLogo{width:38px;height:38px;flex-basis:38px}.brand b{font-size:15px}
+ .app nav button{padding:8px 9px}
+ .appMain>header{gap:8px}
+ .sourceGrid,.memoryGrid,.rpgWorlds{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(max-width:560px){
+ .app>aside{display:none}
+ .appMain{margin:0 0 72px;width:100%;padding:12px 13px 20px}
+ .appMain>header{position:sticky;top:6px;z-index:10;min-height:51px;margin-bottom:22px;padding:7px 0 11px;background:rgba(11,14,10,.96);border-bottom:1px solid var(--border);backdrop-filter:blur(18px)}
+ body.light .appMain>header{background:rgba(243,243,233,.96)}
+ .mobileMenu{display:inline-flex;padding:8px;background:var(--surface);border:1px solid var(--border)}
+ .search{padding:0 8px;gap:6px}.search input{font-size:12px;padding:9px 0}
+ .headActions button{padding:8px;min-width:34px}
+ .bottomNav{position:fixed;display:flex;bottom:0;right:0;left:0;height:69px;padding:5px max(6px,env(safe-area-inset-right)) calc(5px + env(safe-area-inset-bottom));background:rgba(15,19,12,.97);backdrop-filter:blur(18px);border-top:1px solid var(--border);z-index:30;justify-content:space-around;gap:2px}
+ body.light .bottomNav{background:rgba(255,254,247,.97)}
+ .bottomNav button{display:grid;place-items:center;align-content:center;gap:3px;flex:1;min-width:0;padding:5px 2px;font-size:10px;color:var(--muted);border-radius:8px}
+ .bottomNav button.active{color:var(--accent);background:rgba(199,243,107,.09)}
+ .hero,.title{align-items:flex-start;flex-direction:column;gap:12px;margin-bottom:20px}
+ .hero h1,.title h1{font-size:27px}
+ .statsgrid{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+ .stat{grid-template-columns:32px minmax(0,1fr);padding:12px;gap:8px;border-radius:10px}
+ .stat .iconbox{width:32px;height:32px}
+ .stat span{font-size:10px}.stat b{font-size:18px}
+ .grid2,.subjectGrid,.timeline,.formgrid,.achievementGrid,.settingsgrid,.sourceGrid,.sourceStats,.memoryGrid,.rpgWorlds,.personalStudyClasses,.badgeGrid,.scheduleStats,.accountInfoGrid{grid-template-columns:1fr}
+ .card{padding:16px;border-radius:10px}
+ .cardhead{align-items:flex-start}
+ .actions{width:100%}.actions button{flex:1;justify-content:center}
+ .focuspage{padding:16px 9px;margin:12px auto}
+ .focuspage.runningFocus{min-height:calc(100vh - 90px);padding:20px 10px;border-radius:10px}
+ .focuspage.runningFocus h1{font-size:clamp(62px,17vw,100px)}
+ .calendar{grid-template-columns:repeat(7,minmax(36px,1fr));gap:4px;overflow-x:auto}
+ .calday{min-width:36px;min-height:62px;padding:5px;font-size:10px}
+ .filterrow>*{min-width:100%}
+ .quickmodal{grid-template-columns:1fr}
+ .lessonTreeRow{grid-template-columns:minmax(0,1fr) auto}
+ .lessonTreeRow .dangerlink{grid-column:2}.lessonTreeRow>div{grid-column:1/3}
+ .subjectTreeHead,.unitHead{align-items:flex-start;flex-wrap:wrap}
+ .sourceCard{gap:9px}.sourceIcon{width:35px;font-size:26px}
+ .missionHero,.scheduleHero,.challengeHero{flex-direction:column;align-items:flex-start}
+ .hourGrid{overflow:auto;grid-template-columns:repeat(24,27px);gap:4px}
+ .hourGrid>div{width:27px}
+ .aiChatCard{min-height:430px}.aiChat{padding:12px;max-height:48vh}
+ .aiBubble{max-width:95%;font-size:13px;padding:11px 12px}
+ .aiHistoryList{grid-template-columns:1fr}.aiChatHeader{padding:12px}
+ .aiQuick{padding:10px;gap:5px}.aiQuick button{font-size:11px;padding:8px}
+ .aiWorkspace{gap:10px}.scheduleEvent{gap:8px;padding:9px}
+ .scheduleEventTime{min-width:65px;padding-left:8px}
+ .siteFooter{margin:25px 0 10px;justify-content:center}.footerContact{width:100%}
+ .footerContact a{flex:1;justify-content:center;min-width:85px}
+ .twoCols{grid-template-columns:1fr}.modal{padding:18px}.oncard{padding:24px 18px}
+ .otpInputs{gap:5px}.otpInput{padding:9px 3px;font-size:19px}
+ .accountBox,.pushPrompt{align-items:stretch;flex-direction:column}
+ .personalStudyRow,.studyClassRow,.savedScheduleRow{padding:10px}
+ .scheduleGenerateBtn{width:100%;white-space:normal}.rpgHeader h1{font-size:32px}
+}
+@media(prefers-reduced-motion:reduce){*,*:before,*:after{scroll-behavior:auto!important;animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
