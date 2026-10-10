@@ -161,6 +161,9 @@ function AIPage({auth,s,go,notify}:{auth:import('./auth').AuthUser;s:Store;go:(p
           return[{id:rid,title:question.slice(0,70),created_at:now,updated_at:now},...prev]
         });
         setMessages(v=>[...v,{role:'assistant',text:answer}]);
+        // Reload the conversation and messages from D1 after every successful reply.
+        // This makes history reflect the persisted server record, not only local React state.
+        await loadChats(rid);
         if(rd?.action?.executed){
           notify('✅ تم تنفيذ طلبك داخل الموقع.');
           window.dispatchEvent(new CustomEvent('thanaweya-ai-data-updated'));
