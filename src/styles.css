@@ -211,3 +211,19 @@ body.light .siteAnnouncement{background:var(--surface);border-color:var(--border
  .scheduleGenerateBtn{width:100%;white-space:normal}.rpgHeader h1{font-size:32px}
 }
 @media(prefers-reduced-motion:reduce){*,*:before,*:after{scroll-behavior:auto!important;animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
+
+
+/* Focus repair + quiet geometric Study Lab accents */
+.focuspage{position:relative;isolation:isolate;overflow:hidden}
+.focuspage:before,.focuspage:after{content:"";position:absolute;z-index:-1;pointer-events:none;opacity:.42}
+.focuspage:before{width:180px;height:180px;top:68px;inset-inline-end:-78px;border:1px solid var(--accent,#c9f36a);border-radius:38% 62% 55% 45%;transform:rotate(28deg);box-shadow:inset 0 0 0 14px transparent,inset 0 0 0 15px color-mix(in srgb,var(--accent,#c9f36a) 22%,transparent)}
+.focuspage:after{width:90px;height:90px;bottom:105px;inset-inline-start:-42px;border:1px dashed var(--accent,#c9f36a);border-radius:50%;box-shadow:0 0 0 12px color-mix(in srgb,var(--accent,#c9f36a) 5%,transparent),0 0 0 24px color-mix(in srgb,var(--accent,#c9f36a) 3%,transparent)}
+.focusTopbar{position:relative}
+.focusTopbar:after{content:"";display:inline-block;width:9px;height:9px;margin-inline-start:9px;background:#ff9f43;border-radius:2px;transform:rotate(45deg);box-shadow:0 0 0 5px color-mix(in srgb,#ff9f43 13%,transparent)}
+.focusCore{position:relative}
+.focusCoreRing{filter:drop-shadow(0 12px 34px color-mix(in srgb,var(--accent,#c9f36a) 12%,transparent))}
+.focusCoreProgress{font-variant-numeric:tabular-nums}
+.focusCoreProgress>span{display:inline-block;min-width:6.5em;text-align:center;padding:5px 10px;border:1px solid color-mix(in srgb,var(--accent,#c9f36a) 24%,transparent);border-radius:999px;background:color-mix(in srgb,var(--accent,#c9f36a) 7%,transparent)}
+.focuscontext{position:relative}
+.focuscontext:before{content:"";position:absolute;top:-5px;inset-inline-start:24px;width:34px;height:5px;border-radius:4px;background:#ff9f43}
+@media(max-width:640px){.focuspage:before{width:125px;height:125px;top:80px;inset-inline-end:-66px}.focuspage:after{width:62px;height:62px;bottom:90px;inset-inline-start:-35px}}
