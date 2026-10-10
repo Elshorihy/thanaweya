@@ -701,43 +701,84 @@ input:invalid,textarea:invalid,select:invalid{border-color:#ef4444}
 }
 
 
-/* Correct full-width layout: remove the app grid's reserved sidebar column */
+/* Landscape AI layout: keep the site's navigation visible and collapse only an empty chat-history panel. */
+.aiWorkspace:not(:has(.aiHistoryItem)) { grid-template-columns:minmax(0,1fr) !important; }
+.aiWorkspace:not(:has(.aiHistoryItem)) > .aiHistory { display:none !important; }
 @media (orientation:landscape) and (max-height:800px) {
-  .app:has(.aiPage) {
-    grid-template-columns:minmax(0,1fr) !important;
-    width:100% !important;
-  }
-  .app:has(.aiPage) > aside { display:none !important; }
+  .app:has(.aiPage) > aside { display:flex !important; }
   .app:has(.aiPage) > .appMain {
-    grid-column:1 / -1 !important;
+    min-width:0 !important;
+    max-width:none !important;
+    padding:10px 12px !important;
+  }
+  .app:has(.aiPage) .bottomNav { display:none !important; }
+  .app:has(.aiPage) .aiPage {
+    width:100% !important;
+    max-width:none !important;
+    min-width:0 !important;
+    gap:8px !important;
+  }
+  .app:has(.aiPage) .aiWorkspace {
+    display:grid !important;
+    width:100% !important;
+    min-width:0 !important;
+    gap:8px !important;
+    grid-template-columns:minmax(0,1fr) !important;
+  }
+  .app:has(.aiPage) .aiWorkspace:has(.aiHistoryItem) {
+    grid-template-columns:minmax(150px,21vw) minmax(0,1fr) !important;
+  }
+  .app:has(.aiPage) .aiHistory {
+    min-width:0 !important;
+    min-height:0 !important;
+    max-height:calc(100dvh - 100px) !important;
+  }
+  .app:has(.aiPage) .aiChatCard {
     width:100% !important;
     min-width:0 !important;
     max-width:none !important;
-    margin:0 !important;
-    padding:10px 14px !important;
+    height:calc(100dvh - 100px) !important;
+    min-height:0 !important;
+    max-height:none !important;
   }
-  .app:has(.aiPage) .aiPage,
-  .app:has(.aiPage) .aiWorkspace,
-  .app:has(.aiPage) .aiChatCard,
   .app:has(.aiPage) .aiChat {
     width:100% !important;
     min-width:0 !important;
     max-width:none !important;
-    box-sizing:border-box !important;
-  }
-  .app:has(.aiPage) .aiWorkspace {
-    grid-template-columns:minmax(0,1fr) !important;
-    gap:0 !important;
-  }
-  .app:has(.aiPage) .aiHistory { display:none !important; }
-  .app:has(.aiPage) .aiChatCard {
-    height:calc(100dvh - 74px) !important;
     min-height:0 !important;
-    max-height:none !important;
+  }
+}
+@media (orientation:landscape) and (max-height:800px) and (min-width:951px) {
+  .app:has(.aiPage) > .appMain {
+    margin-right:255px !important;
+    width:calc(100% - 255px) !important;
+  }
+}
+@media (orientation:landscape) and (max-height:800px) and (min-width:621px) and (max-width:950px) {
+  .app:has(.aiPage) > aside { width:76px !important; }
+  .app:has(.aiPage) > .appMain {
+    margin-right:76px !important;
+    width:calc(100% - 76px) !important;
+  }
+}
+@media (orientation:landscape) and (max-height:800px) and (max-width:620px) {
+  .app:has(.aiPage) > aside { display:none !important; }
+  .app:has(.aiPage) > .appMain {
+    margin:0 0 68px !important;
+    width:100% !important;
+    padding:6px 8px !important;
+  }
+  .app:has(.aiPage) .bottomNav {
+    display:flex !important;
+    right:0 !important;
+    left:0 !important;
+  }
+  .app:has(.aiPage) .aiWorkspace:has(.aiHistoryItem) {
+    grid-template-columns:minmax(125px,30vw) minmax(0,1fr) !important;
   }
 }
 @media (orientation:landscape) and (max-height:430px) {
-  .app:has(.aiPage) > .appMain { padding:5px 8px !important; }
+  .app:has(.aiPage) > .appMain { padding-top:5px !important; padding-bottom:5px !important; }
   .app:has(.aiPage) .aiPage>.title { margin-bottom:5px !important; }
-  .app:has(.aiPage) .aiChatCard { height:calc(100dvh - 48px) !important; }
+  .app:has(.aiPage) .aiChatCard { height:calc(100dvh - 70px) !important; }
 }
