@@ -104,7 +104,9 @@ async function verifyPassword(password:string,salt:string,hash:string) {
   return (await hashPassword(password,salt))===hash;
 }
 function generateOtpCode(){
-  return String(Math.floor(100000+Math.random()*900000));
+  const value=new Uint32Array(1);
+  crypto.getRandomValues(value);
+  return String(100000+(value[0]%900000));
 }
 async function otpHash(email:string,type:string,code:string){
   return sha256(email+":"+type+":"+code);
@@ -1739,6 +1741,9 @@ export default {
           return json({ok:true});
         }
         if(url.pathname==="/api/telegram/webhook" && request.method==="POST") {
+          const expectedSecret=await sha256(String(env.TELEGRAM_BOT_TOKEN||""));
+          const suppliedSecret=request.headers.get("X-Telegram-Bot-Api-Secret-Token")||"";
+          if(!env.TELEGRAM_BOT_TOKEN || !suppliedSecret || suppliedSecret!==expectedSecret) return json({ok:false,error:"Unauthorized"},401);
           const update=await body(request);
           try {
             // Process Telegram updates before acknowledging the webhook.
@@ -1892,6 +1897,12 @@ export default {
           },required:["answer","operations"]};
 
           const contents=[...history,{role:"user",parts:[{text:question}]}];
+          let usageReserved=false;
+          let reservedCount=0;
+          const reservation=await env.DB.prepare("INSERT INTO ai_usage(user_id,day,count) VALUES(?,?,1) ON CONFLICT(user_id,day) DO UPDATE SET count=count+1 WHERE count < ? RETURNING count").bind(u.id,day,limit).first<any>();
+          if(!reservation)return json({error:"وصلت للحد اليومي للمساعد الذكي (40 رسالة). جرّب بكرة.",used:limit,remaining:0,limit},429);
+          reservedCount=Number(reservation.count||used+1);
+          usageReserved=true;
           try{
             const raw=await callGemini(env,contents,systemInstruction,{responseMimeType:"application/json",responseSchema});
             let result:any;try{result=JSON.parse(raw)}catch{throw new Error("AI_BAD_JSON")}
@@ -2006,9 +2017,12 @@ export default {
             await env.DB.prepare("INSERT INTO ai_messages(id,chat_id,role,text,created_at) VALUES(?,?,?,?,?)").bind(randomHex(12),chatId,"user",question,now).run();
             await env.DB.prepare("INSERT INTO ai_messages(id,chat_id,role,text,created_at) VALUES(?,?,?,?,?)").bind(randomHex(12),chatId,"assistant",answer,now+1).run();
             await env.DB.prepare("UPDATE ai_chats SET updated_at=? WHERE id=? AND user_id=?").bind(now+1,chatId,u.id).run();
-            await env.DB.prepare("INSERT INTO ai_usage(user_id,day,count) VALUES(?,?,1) ON CONFLICT(user_id,day) DO UPDATE SET count=count+1").bind(u.id,day).run();
-            return json({ok:true,answer,conversationId:chatId,action:{executed:executed>0,count:executed},used:used+1,remaining:Math.max(0,limit-used-1),limit,model:String(env.GEMINI_MODEL||"gemini-2.5-flash")});
-          }catch(e){console.error("AI request failed",e);return json({ok:false,retry:true,error:"تعذر تنفيذ الطلب حاليًا. جرّب تاني."},503)}
+            usageReserved=false;
+            return json({ok:true,answer,conversationId:chatId,action:{executed:executed>0,count:executed},used:reservedCount,remaining:Math.max(0,limit-reservedCount),limit,model:String(env.GEMINI_MODEL||"gemini-2.5-flash")});
+          }catch(e){
+            if(usageReserved){try{await env.DB.prepare("UPDATE ai_usage SET count=MAX(0,count-1) WHERE user_id=? AND day=?").bind(u.id,day).run();}catch(rollbackError){console.error("AI quota rollback failed",rollbackError);}}
+            console.error("AI request failed",e);return json({ok:false,retry:true,error:"تعذر تنفيذ الطلب حاليًا. جرّب تاني."},503)
+          }
         }
         if(url.pathname==="/api/auth/register/start" && request.method==="POST") {
           const b=await body(request), email=cleanEmail(b?.email), name=cleanName(b?.name), password=String(b?.password||""), phone=cleanPhone(b?.phone);
@@ -2057,27 +2071,15 @@ export default {
           if(password.length<8)return json({error:"كلمة السر لازم تكون 8 أحرف على الأقل"},400);
           const row=await env.DB.prepare("SELECT * FROM auth_codes WHERE email=? AND type='reset' ORDER BY created_at DESC LIMIT 1").bind(email).first<any>();
           if(!row||Number(row.expires_at)<Date.now())return json({error:"الكود انتهت صلاحيته. اطلب كود جديد."},400);
+          if(Number(row.attempts)>=5)return json({error:"تم تجاوز عدد المحاولات. اطلب كود جديد."},429);
           if(!/^\d{4,10}$/.test(code))return json({error:"اكتب كود التأكيد بشكل صحيح"},400);
           if((await otpHash(email,"reset",code))!==row.code_hash){await env.DB.prepare("UPDATE auth_codes SET attempts=attempts+1 WHERE id=?").bind(row.id).run();return json({error:"كود التأكيد غير صحيح"},400);}
           const u=await env.DB.prepare("SELECT id FROM users WHERE email=?").bind(email).first<any>(); if(!u)return json({error:"لا يوجد حساب بهذا الإيميل"},404);
-          const salt=randomHex(16), pass=await hashPassword(password,salt),now=Date.now(); await env.DB.batch([env.DB.prepare("UPDATE users SET password_hash=?,password_salt=?,updated_at=? WHERE id=?").bind(pass,salt,now,u.id),env.DB.prepare("DELETE FROM auth_codes WHERE id=?").bind(row.id)]);
+          const salt=randomHex(16), pass=await hashPassword(password,salt),now=Date.now(); await env.DB.batch([env.DB.prepare("UPDATE users SET password_hash=?,password_salt=?,updated_at=? WHERE id=?").bind(pass,salt,now,u.id),env.DB.prepare("DELETE FROM auth_codes WHERE id=?").bind(row.id),env.DB.prepare("DELETE FROM sessions WHERE user_id=?").bind(u.id)]);
           return json({ok:true});
         }
         if(url.pathname==="/api/auth/register" && request.method==="POST") {
-          const b=await body(request), email=cleanEmail(b?.email), name=cleanName(b?.name), password=String(b?.password||""), phone=cleanPhone(b?.phone);
-          if(!name||!email||password.length<8||!phone) return json({error:"الاسم والإيميل وكلمة السر (8 أحرف على الأقل) ورقم واتساب مطلوبة"},400);
-          const exists=await env.DB.prepare("SELECT id FROM users WHERE email=?").bind(email).first();
-          if(exists) return json({error:"الإيميل مستخدم بالفعل"},409);
-          if(phone && !validPhone(phone)) return json({error:"رقم واتساب غير صالح"},400);
-          if(phone){const phoneExists=await env.DB.prepare("SELECT user_id FROM user_phones WHERE phone=?").bind(phone).first();if(phoneExists)return json({error:"رقم واتساب مستخدم بالفعل"},409);}
-          const id=randomHex(16), salt=randomHex(16), pass=await hashPassword(password,salt);
-          await env.DB.batch([
-            env.DB.prepare("INSERT INTO users(id,email,name,password_hash,password_salt,created_at,updated_at) VALUES(?,?,?,?,?,?,?)").bind(id,email,name,pass,salt,Date.now(),Date.now()),
-            env.DB.prepare("INSERT INTO user_data(user_id,data_json,updated_at) VALUES(?,?,?)").bind(id,"",Date.now()),
-            ...(phone ? [env.DB.prepare("INSERT INTO user_phones(user_id,phone,updated_at) VALUES(?,?,?)").bind(id,phone,Date.now())] : [])
-          ]);
-          const token=await createSession(id,env);
-          return json({user:{id,email,name,phone:phone||null}},200,{"set-cookie":sessionCookie(token)});
+          return json({error:"استخدم التسجيل بكود التأكيد عبر البريد الإلكتروني."},410);
         }
         if(url.pathname==="/api/auth/login" && request.method==="POST") {
           const loginBody=await body(request), loginEmail=cleanEmail(loginBody?.email), loginPassword=String(loginBody?.password||"");
