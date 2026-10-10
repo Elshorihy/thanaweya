@@ -129,6 +129,7 @@ async function createSession(userId:string,env:Env) {
   await env.DB.prepare("INSERT INTO sessions(id,user_id,token_hash,expires_at,created_at) VALUES(?,?,?,?,?)").bind(randomHex(16),userId,hash,expires,Date.now()).run();
   return token;
 }
+function egyptDay(){const p=new Intl.DateTimeFormat("en",{timeZone:"Africa/Cairo",year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(new Date());const v=Object.fromEntries(p.filter(x=>x.type!=="literal").map(x=>[x.type,x.value]));return `${v.year}-${v.month}-${v.day}`;}
 async function body(request:Request){try{return await request.json() as any}catch{return null}}
 
 async function callGemini(env:Env, contents:any[], systemInstruction:string, generationConfigExtra:any={}) {
@@ -166,7 +167,7 @@ async function callGemini(env:Env, contents:any[], systemInstruction:string, gen
   throw new Error("AI_UNAVAILABLE:"+lastError);
 }
 async function getPageViewStats(env:Env){
-  const today=new Date().toISOString().slice(0,10);
+  const today=egyptDay();
   let totalUsers=0,totalVisits=0,todayVisits=0,last7DaysVisits=0;
   try{
     const row=await env.DB.prepare("SELECT COUNT(*) AS n FROM users").first<any>();
@@ -706,7 +707,7 @@ async function deleteUser(env:Env,chatId:string,userId:string){
 }
 async function sendTelegramTrafficDetailed(env:Env,chatId:string){
   await ensurePageViews(env);
-  const today=new Date().toISOString().slice(0,10);
+  const today=egyptDay();
   const rows=await env.DB.prepare("SELECT day,COUNT(*) AS n FROM site_page_views WHERE day>=date(?, '-29 day') GROUP BY day ORDER BY day DESC").bind(today).all<any>();
   const items=rows.results||[];
   const total=items.reduce((a:any,x:any)=>a+Number(x.n||0),0);
@@ -1244,7 +1245,7 @@ async function sendTelegramUserSearch(env:Env,chatId:string,query:string){
 
 async function sendTelegramTraffic(env:Env,chatId:string){
   await ensurePageViews(env);
-  const rows=await env.DB.prepare("SELECT day,COUNT(*) AS n FROM site_page_views WHERE day>=date(?, '-6 day') GROUP BY day ORDER BY day DESC").bind(new Date().toISOString().slice(0,10)).all<any>();
+  const rows=await env.DB.prepare("SELECT day,COUNT(*) AS n FROM site_page_views WHERE day>=date(?, '-6 day') GROUP BY day ORDER BY day DESC").bind(egyptDay()).all<any>();
   const items=rows.results||[];
   const total=items.reduce((a:any,x:any)=>a+Number(x.n||0),0);
   const lines=items.map((x:any)=>"📅 "+String(x.day)+" — "+Number(x.n||0).toLocaleString("ar-EG")+" زيارة");
@@ -1735,7 +1736,7 @@ export default {
         if(url.pathname==="/api/pageview" && request.method==="POST") {
           try {
             await ensurePageViews(env);
-            const day=new Date().toISOString().slice(0,10);
+            const day=egyptDay();
             await env.DB.prepare("INSERT INTO site_page_views(day,created_at) VALUES(?,?)").bind(day,Date.now()).run();
           } catch(e) { console.error("Page view counter failed",e); }
           return json({ok:true});
@@ -1789,7 +1790,7 @@ export default {
         if(url.pathname==="/api/ai/usage" && request.method==="GET") {
           const u=await userFrom(request,env); if(!u)return json({error:"يجب تسجيل الدخول"},401);
           if(String(u.role||"")!=="owner" && !(await hasActiveSubscription(env,u.id)))return json({error:"ثانوية AI متاحة للاشتراكات المفعّلة فقط."},403);
-          const day=new Date().toISOString().slice(0,10),limit=40;
+          const day=egyptDay(),limit=40;
           const row=await env.DB.prepare("SELECT count FROM ai_usage WHERE user_id=? AND day=?").bind(u.id,day).first<any>();
           const used=Math.min(Number(row?.count||0),limit);
           return json({ok:true,used,remaining:Math.max(0,limit-used),limit});
@@ -1823,7 +1824,7 @@ export default {
           if(String(u.role||"")!=="owner" && !(await hasActiveSubscription(env,u.id)))return json({error:"ثانوية AI متاحة بالتوثيق فقط."},403);
           const b=await body(request),question=String(b?.question||"").trim().slice(0,4000);
           if(!question)return json({error:"اكتب سؤالك أولًا."},400);
-          const day=new Date().toISOString().slice(0,10),limit=40;
+          const day=egyptDay(),limit=40;
           const usage=await env.DB.prepare("SELECT count FROM ai_usage WHERE user_id=? AND day=?").bind(u.id,day).first<any>();
           const used=Number(usage?.count||0);
           if(used>=limit)return json({error:"وصلت للحد اليومي للمساعد الذكي (40 رسالة). جرّب بكرة.",used,remaining:0,limit},429);
