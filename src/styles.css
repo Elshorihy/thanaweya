@@ -699,3 +699,45 @@ input:invalid,textarea:invalid,select:invalid{border-color:#ef4444}
   .aiPage>.title { margin-bottom:5px !important; }
   .aiChatCard { height:calc(100dvh - 48px) !important; }
 }
+
+
+/* Correct full-width layout: remove the app grid's reserved sidebar column */
+@media (orientation:landscape) and (max-height:800px) {
+  .app:has(.aiPage) {
+    grid-template-columns:minmax(0,1fr) !important;
+    width:100% !important;
+  }
+  .app:has(.aiPage) > aside { display:none !important; }
+  .app:has(.aiPage) > .appMain {
+    grid-column:1 / -1 !important;
+    width:100% !important;
+    min-width:0 !important;
+    max-width:none !important;
+    margin:0 !important;
+    padding:10px 14px !important;
+  }
+  .app:has(.aiPage) .aiPage,
+  .app:has(.aiPage) .aiWorkspace,
+  .app:has(.aiPage) .aiChatCard,
+  .app:has(.aiPage) .aiChat {
+    width:100% !important;
+    min-width:0 !important;
+    max-width:none !important;
+    box-sizing:border-box !important;
+  }
+  .app:has(.aiPage) .aiWorkspace {
+    grid-template-columns:minmax(0,1fr) !important;
+    gap:0 !important;
+  }
+  .app:has(.aiPage) .aiHistory { display:none !important; }
+  .app:has(.aiPage) .aiChatCard {
+    height:calc(100dvh - 74px) !important;
+    min-height:0 !important;
+    max-height:none !important;
+  }
+}
+@media (orientation:landscape) and (max-height:430px) {
+  .app:has(.aiPage) > .appMain { padding:5px 8px !important; }
+  .app:has(.aiPage) .aiPage>.title { margin-bottom:5px !important; }
+  .app:has(.aiPage) .aiChatCard { height:calc(100dvh - 48px) !important; }
+}
