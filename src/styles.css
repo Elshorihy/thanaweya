@@ -320,9 +320,9 @@ body.light .focusLab.runningFocus .focusLabTimerPanel{background:radial-gradient
 }
 
 
-/* Signature verification seal — Thanaweya */
-.verifiedBadge{display:inline-grid;place-items:center;flex:0 0 19px;width:19px;height:19px;vertical-align:middle;margin-inline:3px;clip-path:polygon(50% 0%,61% 7%,75% 4%,82% 16%,95% 23%,92% 37%,100% 50%,92% 62%,95% 76%,82% 83%,75% 96%,61% 93%,50% 100%,38% 93%,24% 96%,17% 83%,4% 76%,7% 62%,0% 50%,7% 37%,4% 23%,17% 16%,24% 4%,38% 7%);border-radius:0;background:linear-gradient(145deg,#55c7ff 0%,#2878ff 55%,#635bff 100%);color:#fff;box-shadow:none;filter:drop-shadow(0 1px 2px rgba(42,125,255,.22));}
-.verifiedBadge svg{display:block;width:13px;height:13px;}
+/* Original Thanaweya verification mark: graduation cap + verified check */
+.verifiedBadge{display:inline-grid;place-items:center;flex:0 0 21px;width:21px;height:21px;vertical-align:middle;margin-inline:3px;border:1px solid rgba(255,255,255,.7);border-radius:7px 7px 7px 3px;background:linear-gradient(145deg,#2fb8ff 0%,#2673ed 62%,#4f46e5 100%);color:#fff;box-shadow:0 1px 4px rgba(37,112,237,.25);transform:rotate(0deg)}
+.verifiedBadge svg{display:block;width:15px;height:15px}
 .accountChip .verifiedBadge{margin-inline-start:5px}
-.aiHero .verifiedBadge{width:21px;height:21px;flex-basis:21px;}
-.aiHero .verifiedBadge svg{width:15px;height:15px}
+.aiHero .verifiedBadge{width:22px;height:22px;flex-basis:22px}
+.aiHero .verifiedBadge svg{width:16px;height:16px}
