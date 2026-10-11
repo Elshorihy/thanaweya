@@ -640,7 +640,12 @@ async function exportData(){try{const files:any[]=[];for(const v of [...s.lectur
    {id:'glow',icon:'✨',name:'وهج نيون',desc:'إضاءات ناعمة حول العناصر المهمة'},
    {id:'compact',icon:'📐',name:'وضع مضغوط',desc:'مساحات أقل ومحتوى أكتر على الشاشة'},
    {id:'rounded',icon:'🫧',name:'حواف ناعمة',desc:'بطاقات وعناصر أكثر انسيابية'},
-   {id:'calm',icon:'🌌',name:'خلفية هادئة',desc:'وهج خلفية خفيف بدون صور أو تحميلات'}
+   {id:'calm',icon:'🌌',name:'خلفية هادئة',desc:'وهج خلفية خفيف بدون صور أو تحميلات'},
+   {id:'gaming',icon:'🎮',name:'Gaming Mode',desc:'لمسات ألعاب وحركة خفيفة للعناصر بدون التأثير على بياناتك'},
+   {id:'ultrafocus',icon:'🎯',name:'Ultra Focus',desc:'يهدّي الواجهة ويقلل الحركة والمؤثرات أثناء المذاكرة'},
+   {id:'livebg',icon:'🌠',name:'Live Backgrounds',desc:'خلفية متدرجة متحركة بخفة، بدون صور أو تحميلات'},
+   {id:'customizer',icon:'🧩',name:'UI Customizer',desc:'مساحات وحواف أوسع وواجهة أريح للقراءة'},
+   {id:'gamify',icon:'🏆',name:'Gamification',desc:'إبراز نقاط الخبرة والإحصائيات والإنجازات بشكل تحفيزي'}
   ];
   const features=Array.isArray(s.settings.modsFeatures)?s.settings.modsFeatures:[];
   const presets=Array.isArray(s.settings.modsPresets)?s.settings.modsPresets:[];
