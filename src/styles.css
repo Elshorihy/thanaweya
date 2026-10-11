@@ -402,3 +402,63 @@ body[data-mod-features~="rounded"] .card,body[data-mod-features~="rounded"] .sta
 body[data-mod-features~="calm"]{background-image:radial-gradient(ellipse at 8% 0%,color-mix(in srgb,var(--accent) 11%,transparent),transparent 38%),radial-gradient(ellipse at 92% 20%,color-mix(in srgb,var(--accent2) 7%,transparent),transparent 35%)}
 @media(max-width:900px){.modsPresetsGrid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:560px){.modsFeaturesGrid,.modsPresetsGrid{grid-template-columns:1fr}.modsFeature{align-items:flex-start;flex-wrap:wrap}.modsFeatureCopy{min-width:calc(100% - 60px)}.modsFeature>button{width:100%}.modsPresetCreate{align-items:stretch;flex-direction:column}.modsPresetCreate button{width:100%}}
+
+
+/* Expanded Mods Center: lightweight, composable effects */
+body[data-mod-features~="gaming"] .card,
+body[data-mod-features~="gaming"] .stat,
+body[data-mod-features~="gaming"] .modsFeature.enabled{
+  transition:transform .2s ease,border-color .2s ease,box-shadow .2s ease;
+}
+body[data-mod-features~="gaming"] .card:hover,
+body[data-mod-features~="gaming"] .stat:hover{
+  transform:translateY(-2px);
+  border-color:var(--accent);
+}
+body[data-mod-features~="ultrafocus"] *,
+body[data-mod-features~="ultrafocus"] *::before,
+body[data-mod-features~="ultrafocus"] *::after{
+  animation-duration:.01ms!important;
+  animation-iteration-count:1!important;
+  scroll-behavior:auto!important;
+}
+body[data-mod-features~="ultrafocus"] .card,
+body[data-mod-features~="ultrafocus"] .stat{
+  box-shadow:none!important;
+  transition:none!important;
+}
+body[data-mod-features~="livebg"]{
+  background-size:180% 180%;
+  animation:thanaweyaLiveBg 24s ease-in-out infinite alternate;
+}
+@keyframes thanaweyaLiveBg{
+  from{background-position:0% 0%}
+  to{background-position:100% 100%}
+}
+body[data-mod-features~="customizer"] .card,
+body[data-mod-features~="customizer"] .stat,
+body[data-mod-features~="customizer"] .daycard,
+body[data-mod-features~="customizer"] .subjectTree{
+  border-radius:20px;
+}
+body[data-mod-features~="customizer"] .card{padding:clamp(17px,2.2vw,24px)}
+body[data-mod-features~="customizer"] p,
+body[data-mod-features~="customizer"] .muted{
+  line-height:1.9;
+}
+body[data-mod-features~="gamify"] .stat,
+body[data-mod-features~="gamify"] .achievement,
+body[data-mod-features~="gamify"] .modsPreset{
+  border-color:color-mix(in srgb,var(--accent) 48%,var(--border));
+  box-shadow:0 8px 24px color-mix(in srgb,var(--accent) 9%,transparent);
+}
+body[data-mod-features~="gamify"] .stat strong,
+body[data-mod-features~="gamify"] .stat b{
+  color:var(--accent);
+}
+@media(prefers-reduced-motion:reduce){
+  body[data-mod-features~="livebg"]{animation:none!important;background-size:auto}
+  body[data-mod-features~="gaming"] *,
+  body[data-mod-features~="gaming"] *::before,
+  body[data-mod-features~="gaming"] *::after{transition:none!important}
+}
