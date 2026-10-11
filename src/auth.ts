@@ -7,7 +7,9 @@ async function req(path:string,options:RequestInit={}) {
   let lastError:unknown=null;
   for(let attempt=0;attempt<2;attempt++){
     const controller=new AbortController();
-    const timeout=window.setTimeout(()=>controller.abort(),10000);
+    // Email OTP delivery can take several provider retries; don't abort it after 10 seconds.
+    const timeoutMs=(path==='/api/auth/register/start'||path.startsWith('/api/auth/forgot/start'))?50000:20000;
+    const timeout=window.setTimeout(()=>controller.abort(),timeoutMs);
     try{
       const r=await fetch(path,{...init,signal:controller.signal});
       const data=await r.json().catch(()=>({}));
