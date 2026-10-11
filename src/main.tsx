@@ -823,7 +823,7 @@ function Dashboard(){const due=s.lessons.filter(l=>l.nextReviewAt&&l.nextReviewA
       <div className="focusCoreProgress"><span>{completedPercent}% من الجلسة</span><i><b/></i></div>
      </div>
      <div className="focusLabControls">
-      <button className="primary focusStartButton" onClick={startFocus}>{running?<Pause size={19}/>:<Play size={19}/ >}{running?'إيقاف مؤقت':'ابدأ التركيز'}</button>
+      <button className="primary focusStartButton" onClick={startFocus}>{running?<Pause size={19}/>:<Play size={19}/>}{running?'إيقاف مؤقت':'ابدأ التركيز'}</button>
       <button className="focusResetButton" onClick={reset}><RotateCcw size={17}/> إعادة ضبط</button>
      </div>
      <div className="focusLabHint"><span>✦</span><p>{running?'خليك مع المهمة الحالية؛ تقدر توقف المؤقت مؤقتًا في أي وقت.':'اختار مدة واقعية وابدأ، مش لازم تستنى لحد ما يبقى عندك وقت طويل.'}</p></div>
