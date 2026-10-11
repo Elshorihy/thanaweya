@@ -136,21 +136,19 @@ function AIPage({auth,s,go,notify}:{auth:import('./auth').AuthUser;s:Store;go:(p
     setBusy(true);
     try{
       let answer='',rd:any=null;
-      for(let attempt=0;attempt<2&&!answer;attempt++){
-        try{
-          const r=await fetch('/api/ai/advice',{
-            method:'POST',
-            credentials:'include',
-            headers:{'content-type':'application/json'},
-            body:JSON.stringify({question,conversationId:chatId||undefined})
-          });
-          const d=await r.json().catch(()=>({}));
-          if(r.ok&&String(d?.answer||'').trim()){answer=String(d.answer).trim();rd=d}
-          else if(r.status===429){setUsed(Number(d?.used||limit));setLimit(Number(d?.limit||limit));notify(String(d?.error||'وصلت للحد اليومي.'));break}
-          else if(r.status===401||r.status===403){notify(String(d?.error||'غير مسموح.'));break}
-        }catch{}
-        if(!answer&&attempt===0)await new Promise(resolve=>setTimeout(resolve,250));
-      }
+      try{
+        const r=await fetch('/api/ai/advice',{
+          method:'POST',
+          credentials:'include',
+          headers:{'content-type':'application/json'},
+          body:JSON.stringify({question,conversationId:chatId||undefined})
+        });
+        const d=await r.json().catch(()=>({}));
+        if(r.ok&&String(d?.answer||'').trim()){answer=String(d.answer).trim();rd=d}
+        else if(r.status===429){setUsed(Number(d?.used||limit));setLimit(Number(d?.limit||limit));notify(String(d?.error||'وصلت للحد اليومي.'))}
+        else if(r.status===401||r.status===403){notify(String(d?.error||'غير مسموح.'))}
+        else if(r.status===503){notify(String(d?.error||'خدمة الذكاء الاصطناعي مشغولة مؤقتًا. جرّب الإرسال مرة تانية بعد شوية.'))}
+      }catch{}
       if(answer){
         setUsed(Number(rd?.used||used+1));
         setLimit(Number(rd?.limit||limit));
