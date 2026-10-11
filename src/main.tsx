@@ -801,31 +801,44 @@ function Dashboard(){const due=s.lessons.filter(l=>l.nextReviewAt&&l.nextReviewA
   const reset=()=>{setRunning(false);setFocusEnd(null);try{localStorage.removeItem('thanaweya_focus_end')}catch{};setFocusLeft(focusMinutes*60);setFocusTotalSeconds(focusMinutes*60)};
   const quickDurations=[25,50,60,90,120];
   const mm=String(Math.floor(focusLeft/60)).padStart(2,'0'),ss=String(focusLeft%60).padStart(2,'0');
-  return <section className={'focuspage '+(running?'runningFocus ':'')}>
-   {running&&<div className="focusBackgroundOverlay" aria-hidden="true"/>}
-   {running&&<div className="focusBlessing">صل على النبي ﷺ</div>}
-   <div className="focusTopbar"><span className="eyebrow">FOCUS MODE</span><span className="focusStatusDot">{running?'جلسة شغالة':'جاهز للتركيز'}</span></div>
-   <div className="focuscontext card">
-    <label>المادة <select value={focusSubjectId} disabled={running} onChange={e=>{setFocusSubjectId(e.target.value);setFocusLessonId('')}}>
-      <option value="">بدون مادة (اختياري)</option>{s.subjects.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}
-    </select></label>
-    <label>الدرس (اختياري) <select value={focusLessonId} disabled={running||!focusSubjectId} onChange={e=>setFocusLessonId(e.target.value)}>
-      <option value="">بدون درس محدد</option>{focusLessons.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}
-    </select></label>
-    <label>مدة الجلسة: {focusMinutes} دقيقة
-      <div className="quickDurations" aria-label="اختيارات مدة سريعة">
-        {quickDurations.map(m=><button type="button" key={m} className={focusMinutes===m?'selected':''} disabled={running} onClick={()=>setDuration(m)}>{m} دقيقة</button>)}
-      </div>
-      <input type="number" min="1" max="180" step="1" value={focusMinutes} disabled={running} onChange={e=>setDuration(+e.target.value)} />
-      <small className="muted">اختار مدة جاهزة بضغطة واحدة، أو اكتب مدة مخصصة لو محتاج.</small>
-    </label>
+  const todayFocusMinutes=s.sessions.filter(x=>x.date===today()).reduce((sum,x)=>sum+x.duration,0);
+  const todayFocusSessions=s.sessions.filter(x=>x.date===today()).length;
+  const completedPercent=Math.round(Math.max(0,Math.min(1,1-Math.max(0,focusLeft)/Math.max(1,focusTotalSeconds)))*100);
+  return <section className={'focuspage focusLab '+(running?'runningFocus ':'')}>
+   <div className="focusLabHeader">
+    <div><span className="eyebrow">STUDY LAB / 01</span><h1>مساحة التركيز</h1><p>اقفل المشتتات، اختار هدفك، وابدأ جلسة على قد وقتك.</p></div>
+    <div className={'focusLabStatus '+(running?'isLive':'')}><i/>{running?'جلسة شغالة الآن':'جاهز لجلسة جديدة'}</div>
    </div>
-   <p>{selectedSubject?selectedSubject:(s.subjects.length?'اختار المادة لربط الجلسة بتقدمك':'جلسة حرة — أضف مادة من قسم المنهج')}{selectedLesson?' • '+selectedLesson:''}</p><div className={'focusCore '+(running?'isRunning':'')} style={{'--focus-progress':Math.max(0,Math.min(1,1-focusLeft/Math.max(1,focusTotalSeconds)))} as React.CSSProperties}><div className="focusCoreGlow"/><div className="focusCoreRing"><div className="focusCoreTicks" aria-hidden="true">{Array.from({length:36},(_,i)=><i key={i} style={{'--i':i} as React.CSSProperties}/>)}</div><div className="focusCoreInner"><span className="focusCoreLabel">FOCUS</span><strong>{mm}:{ss}</strong><span className="focusCoreSubject">{selectedSubject||'جلسة تركيز'}</span></div></div><div className="focusCoreProgress"><span>{Math.round(Math.max(0,Math.min(1,1-Math.max(0,focusLeft)/Math.max(1,focusTotalSeconds)))*100)}% مكتمل</span><i><b/></i></div></div>
-   <div className="focuscontrols">
-    <button className="primary" onClick={startFocus} disabled={false}>{running?<Pause/>:<Play/>}{running?'إيقاف':'ابدأ'}</button>
-    <button onClick={reset}><RotateCcw/> إعادة</button>
+   <div className="focusLabStats">
+    <div><span>مذاكرتك النهارده</span><strong>{Math.floor(todayFocusMinutes/60)}<small>س</small> {todayFocusMinutes%60}<small>د</small></strong></div>
+    <div><span>جلسات النهارده</span><strong>{todayFocusSessions}<small> جلسة</small></strong></div>
+    <div><span>مدة الراحة</span><strong>{s.settings.break}<small> دقيقة</small></strong></div>
    </div>
-   <p className="muted">عند إنهاء الجلسة، الوقت هيتسجل للجلسة تلقائيًا، ولو اخترت مادة هيتحسب وقتها عليها. مدة الراحة: {s.settings.break} دقيقة</p>
+   <div className="focusLabLayout">
+    <div className="focusLabTimerPanel">
+     {running&&<div className="focusBlessing">صل على النبي ﷺ</div>}
+     <div className="focusLabTimerMeta"><span>{running?'DEEP WORK IN PROGRESS':'YOUR NEXT SESSION'}</span><span>{completedPercent}%</span></div>
+     <div className={'focusCore '+(running?'isRunning':'')} style={{'--focus-progress':Math.max(0,Math.min(1,1-focusLeft/Math.max(1,focusTotalSeconds)))} as React.CSSProperties}>
+      <div className="focusCoreGlow"/><div className="focusCoreRing"><div className="focusCoreTicks" aria-hidden="true">{Array.from({length:36},(_,i)=><i key={i} style={{'--i':i} as React.CSSProperties}/>)}</div><div className="focusCoreInner"><span className="focusCoreLabel">FOCUS TIME</span><strong>{mm}:{ss}</strong><span className="focusCoreSubject">{selectedSubject||'جلسة حرة'}</span></div></div>
+      <div className="focusCoreProgress"><span>{completedPercent}% من الجلسة</span><i><b/></i></div>
+     </div>
+     <div className="focusLabControls">
+      <button className="primary focusStartButton" onClick={startFocus}>{running?<Pause size={19}/>:<Play size={19}/ >}{running?'إيقاف مؤقت':'ابدأ التركيز'}</button>
+      <button className="focusResetButton" onClick={reset}><RotateCcw size={17}/> إعادة ضبط</button>
+     </div>
+     <div className="focusLabHint"><span>✦</span><p>{running?'خليك مع المهمة الحالية؛ تقدر توقف المؤقت مؤقتًا في أي وقت.':'اختار مدة واقعية وابدأ، مش لازم تستنى لحد ما يبقى عندك وقت طويل.'}</p></div>
+    </div>
+    <div className="focusLabSetup">
+     <div className="focusLabSectionTitle"><span>01</span><div><h2>جهّز جلستك</h2><p>اربط وقتك بالمنهج عشان يتسجل تقدمك صح.</p></div></div>
+     <label className="focusLabField"><span>هتذاكر مادة إيه؟</span><select value={focusSubjectId} disabled={running} onChange={e=>{setFocusSubjectId(e.target.value);setFocusLessonId('')}}><option value="">جلسة حرة — بدون مادة</option>{s.subjects.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select></label>
+     <label className="focusLabField"><span>الدرس <small>اختياري</small></span><select value={focusLessonId} disabled={running||!focusSubjectId} onChange={e=>setFocusLessonId(e.target.value)}><option value="">مش محدد</option>{focusLessons.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select></label>
+     <div className="focusLabSectionTitle focusDurationTitle"><span>02</span><div><h2>اختار وقتك</h2><p>جلسات قصيرة أو طويلة حسب يومك.</p></div></div>
+     <div className="focusLabDurations">{quickDurations.map(m=><button type="button" key={m} className={focusMinutes===m?'selected':''} disabled={running} onClick={()=>setDuration(m)}><strong>{m}</strong><small>دقيقة</small></button>)}</div>
+     <label className="focusLabField focusCustomDuration"><span>مدة مخصصة <small>من 1 إلى 180 دقيقة</small></span><div className="focusDurationInput"><input type="number" min="1" max="180" step="1" value={focusMinutes} disabled={running} onChange={e=>setDuration(+e.target.value)}/><span>دقيقة</span></div></label>
+     <div className="focusLabSelected"><span className="focusSelectedIcon"><BookOpen size={18}/></span><div><small>هدف الجلسة</small><strong>{selectedLesson||selectedSubject||'جلسة تركيز عامة'}</strong><p>{selectedLesson&&selectedSubject?selectedSubject+' • درس محدد':selectedSubject?'الوقت هيتحسب ضمن المادة دي':'الوقت هيتسجل ضمن إجمالي المذاكرة'}</p></div></div>
+    </div>
+   </div>
+   <p className="focusLabFooter"><Timer size={15}/> عند انتهاء الجلسة، وقت المذاكرة بيتسجل تلقائيًا، ولو اخترت مادة هيتحسب تقدمك عليها.</p>
   </section>
  } function Stats(){const bySub=s.subjects.map(x=>({name:x.name,min:s.sessions.filter(a=>a.subjectId===x.id).reduce((z,a)=>z+a.duration,0)}));const byDay=Array.from({length:7},(_,i)=>{const ds=addDays(today(),-6+i);return {ds,min:s.sessions.filter(a=>a.date===ds).reduce((z,a)=>z+a.duration,0)}});return <section><Title title="الإحصائيات" sub="كل الأرقام مبنية على بياناتك الفعلية."/><div className="statsgrid"><Stat title="إجمالي الوقت" value={totalMin+' دقيقة'} icon={<Timer/>}/><Stat title="الدروس المكتملة" value={s.lessons.filter(x=>x.status==='completed').length} icon={<BookOpen/>}/><Stat title="المهام المكتملة" value={s.tasks.filter(x=>x.status==='completed').length} icon={<CheckSquare/>}/><Stat title="الأسئلة" value={s.questions.length} icon={<FileQuestion/>}/><Stat title="Current Streak" value={streak} icon={<Trophy/>}/><Stat title="Longest Streak" value={longestStreak(s)} icon={<Trophy/>}/><Stat title="Overall Progress" value={progress+'%'} icon={<BarChart3/>}/></div><Card title="وقت المذاكرة حسب المادة">{bySub.map(x=><div className="barrow" key={x.name}><span>{x.name}</span><div><i style={{width:(totalMin?x.min/totalMin*100:0)+'%'}}/></div><b>{x.min}د</b></div>)}</Card><Card title="وقت المذاكرة آخر 7 أيام"><div className="weeklybars">{byDay.map(x=><div key={x.ds}><div className="vbar"><i style={{height:Math.min(100,x.min/Math.max(1,...byDay.map(y=>y.min))*100)+'%'}}/></div><small>{x.min}د</small></div>)}</div></Card></section>}
  function Achievements(){
