@@ -136,10 +136,12 @@ async function callGemini(env:Env, contents:any[], systemInstruction:string, gen
   const apiKey=String(env.GEMINI_API_KEY||"").trim();
   if(!apiKey) throw new Error("NO_AI");
   const configured=String(env.GEMINI_MODEL||"").trim();
-  const models=[...new Set([configured,"gemini-2.5-flash","gemini-2.5-flash-lite","gemini-2.0-flash"].filter(Boolean))];
+  const models=[...new Set([configured,"gemini-2.5-flash-lite","gemini-2.0-flash"].filter(Boolean))].slice(0,3);
   let lastError="";
   for(const model of models){
     const endpoint="https://generativelanguage.googleapis.com/v1beta/models/"+encodeURIComponent(model)+":generateContent";
+    const controller=new AbortController();
+    const timeout=setTimeout(()=>controller.abort(),8000);
     try{
       const response=await fetch(endpoint,{
         method:"POST",
@@ -148,7 +150,8 @@ async function callGemini(env:Env, contents:any[], systemInstruction:string, gen
           systemInstruction:{parts:[{text:systemInstruction}]},
           contents,
           generationConfig:{maxOutputTokens:1200,temperature:0.45,...(generationConfigExtra||{})}
-        })
+        }),
+        signal:controller.signal
       });
       const raw=await response.text();
       let data:any=null; try{data=JSON.parse(raw)}catch{}
@@ -162,7 +165,8 @@ async function callGemini(env:Env, contents:any[], systemInstruction:string, gen
       if(response.status===404)continue;
       if(response.status===429||response.status===500||response.status===502||response.status===503)continue;
       break;
-    }catch(e){lastError=e instanceof Error?e.message:"NETWORK";continue}
+    }catch(e){lastError=e instanceof Error?(e.name==="AbortError"?"TIMEOUT":e.message):"NETWORK";continue}
+    finally{clearTimeout(timeout)}
   }
   throw new Error("AI_UNAVAILABLE:"+lastError);
 }
