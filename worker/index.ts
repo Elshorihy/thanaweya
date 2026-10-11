@@ -398,14 +398,17 @@ async function sendEmailOtp(env:Env,email:string,code:string,type:"register"|"re
       let data:any=null;
       try{ data=JSON.parse(cleaned); }catch{}
 
-      if(data?.ok===true && (
+      const deliveryMessage=String(data?.message||data?.detail||data?.result||"");
+      const deliveryConfirmed=(
         data?.sent===true ||
+        data?.accepted===true ||
         data?.status==="sent" ||
         data?.status==="ok" ||
+        data?.status==="success" ||
         data?.result==="sent" ||
-        data?.accepted===true ||
-        /otp email sent successfully|email sent successfully|تم إرسال.*كود|تم إرسال.*email/i.test(String(data?.message||""))
-      )) return;
+        /otp email sent successfully|email sent successfully|email sent|otp sent|message sent|تم إرسال.*كود|تم إرسال.*email|تم الإرسال بنجاح/i.test(deliveryMessage)
+      );
+      if((data?.ok===true || data?.success===true) && deliveryConfirmed) return;
 
       if(data?.ok===false || data?.success===false || data?.status==="error"){
         throw new Error(String(data?.error||data?.message||"Google Apps Script فشل في إرسال كود Gmail").slice(0,400));
@@ -451,11 +454,14 @@ async function sendEmailOtp(env:Env,email:string,code:string,type:"register"|"re
         const cleaned=raw.replace(/^\\uFEFF/,"").trim();
         let data:any=null;
         try{data=JSON.parse(cleaned)}catch{}
-        if(data?.ok===true && (
-          data?.sent===true || data?.status==="sent" || data?.status==="ok" ||
-          data?.result==="sent" || data?.accepted===true ||
-          /otp email sent successfully|email sent successfully|تم إرسال.*كود|تم إرسال.*email/i.test(String(data?.message||""))
-        )) return;
+        const deliveryMessage=String(data?.message||data?.detail||data?.result||"");
+        const deliveryConfirmed=(
+          data?.sent===true || data?.accepted===true ||
+          data?.status==="sent" || data?.status==="ok" || data?.status==="success" ||
+          data?.result==="sent" ||
+          /otp email sent successfully|email sent successfully|email sent|otp sent|message sent|تم إرسال.*كود|تم إرسال.*email|تم الإرسال بنجاح/i.test(deliveryMessage)
+        );
+        if((data?.ok===true || data?.success===true) && deliveryConfirmed) return;
         if(data?.ok===false || data?.success===false || data?.status==="error"){
           throw new Error(String(data?.error||data?.message||"Google Apps Script رفض إرسال كود الاستعادة").slice(0,400));
         }
