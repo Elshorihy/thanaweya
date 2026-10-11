@@ -227,3 +227,94 @@ body.light .siteAnnouncement{background:var(--surface);border-color:var(--border
 .focuscontext{position:relative}
 .focuscontext:before{content:"";position:absolute;top:-5px;inset-inline-start:24px;width:34px;height:5px;border-radius:4px;background:#ff9f43}
 @media(max-width:640px){.focuspage:before{width:125px;height:125px;top:80px;inset-inline-end:-66px}.focuspage:after{width:62px;height:62px;bottom:90px;inset-inline-start:-35px}}
+
+
+/* Focus Study Lab — a genuinely new layout for the focus workspace */
+.focusLab{width:min(1240px,100%);max-width:1240px;margin:8px auto 28px;padding:clamp(18px,3vw,38px);background:linear-gradient(145deg,rgba(199,243,107,.055),transparent 35%),var(--surface);border:1px solid var(--border);border-radius:20px;box-shadow:0 22px 65px rgba(0,0,0,.16);overflow:hidden}
+.focusLab:before,.focusLab:after{display:none}
+.focusLabHeader{display:flex;align-items:center;justify-content:space-between;gap:18px;padding-bottom:25px;border-bottom:1px solid var(--border)}
+.focusLabHeader h1{margin:8px 0 7px;font-size:clamp(28px,4vw,44px);letter-spacing:-1.4px;line-height:1.15}
+.focusLabHeader p{margin:0;color:var(--muted);font-size:13px}
+.focusLabStatus{display:flex;align-items:center;gap:9px;flex:0 0 auto;padding:11px 14px;border:1px solid var(--border2);border-radius:999px;background:var(--surface2);font-size:12px;font-weight:800}
+.focusLabStatus i{width:8px;height:8px;border-radius:50%;background:var(--muted);box-shadow:0 0 0 4px color-mix(in srgb,var(--muted) 12%,transparent)}
+.focusLabStatus.isLive i{background:var(--good);box-shadow:0 0 0 4px color-mix(in srgb,var(--good) 16%,transparent);animation:focusLivePulse 1.7s infinite}
+@keyframes focusLivePulse{50%{box-shadow:0 0 0 8px color-mix(in srgb,var(--good) 0%,transparent)}}
+.focusLabStats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:18px 0 22px}
+.focusLabStats>div{display:flex;flex-direction:column;gap:8px;padding:15px 17px;background:var(--surface2);border:1px solid var(--border);border-radius:12px}
+.focusLabStats span{font-size:11px;color:var(--muted)}
+.focusLabStats strong{font-size:24px;line-height:1.1;font-variant-numeric:tabular-nums}
+.focusLabStats strong small{font-size:11px;font-weight:600;color:var(--muted)}
+.focusLabLayout{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(300px,.9fr);gap:16px;align-items:stretch}
+.focusLabTimerPanel{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;min-width:0;padding:clamp(18px,3vw,32px);border:1px solid var(--border);border-radius:16px;background:radial-gradient(ellipse at 50% 30%,color-mix(in srgb,var(--accent) 10%,transparent),transparent 58%),var(--bg)}
+.focusLabTimerMeta{width:100%;display:flex;justify-content:space-between;gap:10px;color:var(--muted);font-size:10px;font-weight:900;letter-spacing:.1em}
+.focusLabTimerMeta span:last-child{color:var(--accent)}
+.focusLab .focusCore{width:100%;display:flex;flex-direction:column;align-items:center;margin:20px 0 14px}
+.focusLab .focusCoreRing{width:min(310px,70vw);height:min(310px,70vw);max-width:310px;max-height:310px}
+.focusLab .focusCoreInner strong{font-size:clamp(42px,6vw,64px);font-variant-numeric:tabular-nums;letter-spacing:-2px}
+.focusLab .focusCoreLabel{font-size:10px;letter-spacing:.2em}
+.focusLab .focusCoreSubject{max-width:190px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.focusLab .focusCoreProgress{width:min(330px,100%);margin-top:18px}
+.focusLabControls{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:9px;width:min(390px,100%)}
+.focusLabControls button{min-height:47px;display:flex;align-items:center;justify-content:center;gap:9px;font-weight:900;border-radius:10px}
+.focusLabControls .focusStartButton{font-size:14px}
+.focusLabControls .focusResetButton{padding:0 15px;background:var(--surface2);border:1px solid var(--border2);color:var(--text)}
+.focusLabHint{display:flex;align-items:flex-start;gap:9px;width:min(390px,100%);margin-top:19px;padding-top:15px;border-top:1px solid var(--border);color:var(--muted)}
+.focusLabHint>span{color:var(--accent);font-size:17px}
+.focusLabHint p{margin:0;font-size:12px;line-height:1.7}
+.focusLabSetup{min-width:0;padding:clamp(16px,2.4vw,26px);border:1px solid var(--border);border-radius:16px;background:var(--surface2)}
+.focusLabSectionTitle{display:flex;align-items:flex-start;gap:12px;margin-bottom:18px}
+.focusLabSectionTitle>span{display:grid;place-items:center;flex:0 0 34px;height:34px;border:1px solid color-mix(in srgb,var(--accent) 35%,var(--border));border-radius:9px;color:var(--accent);font-size:11px;font-weight:900}
+.focusLabSectionTitle h2{margin:0 0 5px;font-size:16px}
+.focusLabSectionTitle p{margin:0;color:var(--muted);font-size:11px;line-height:1.6}
+.focusLabField{display:flex;flex-direction:column;gap:8px;margin:0 0 14px}
+.focusLabField>span{font-size:12px;font-weight:800}
+.focusLabField>span small{font-size:10px;font-weight:500;color:var(--muted);margin-inline-start:5px}
+.focusLabField select,.focusLabField input{width:100%;min-height:44px;padding:10px 12px;border:1px solid var(--border2);border-radius:9px;background:var(--input);color:var(--text)}
+.focusDurationTitle{margin:23px 0 14px}
+.focusLabDurations{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:7px;margin-bottom:16px}
+.focusLabDurations button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;min-width:0;padding:11px 3px;border:1px solid var(--border2);border-radius:9px;background:var(--surface);color:var(--text)}
+.focusLabDurations button strong{font-size:16px;font-variant-numeric:tabular-nums}
+.focusLabDurations button small{font-size:9px;color:var(--muted)}
+.focusLabDurations button.selected{background:color-mix(in srgb,var(--accent) 13%,var(--surface));border-color:var(--accent);color:var(--accent)}
+.focusLabDurations button:disabled{opacity:.65}
+.focusCustomDuration{margin-bottom:18px}
+.focusDurationInput{position:relative}
+.focusDurationInput input{padding-inline-end:66px}
+.focusDurationInput>span{position:absolute;inset-inline-end:12px;top:50%;transform:translateY(-50%);font-size:11px;color:var(--muted);pointer-events:none}
+.focusLabSelected{display:flex;align-items:center;gap:12px;padding:14px;border:1px solid color-mix(in srgb,var(--accent) 25%,var(--border));border-radius:11px;background:color-mix(in srgb,var(--accent) 5%,var(--surface))}
+.focusSelectedIcon{display:grid;place-items:center;flex:0 0 40px;height:40px;border-radius:10px;background:color-mix(in srgb,var(--accent) 12%,transparent);color:var(--accent)}
+.focusLabSelected>div{min-width:0}
+.focusLabSelected small,.focusLabSelected p{display:block;margin:0 0 4px;color:var(--muted);font-size:10px}
+.focusLabSelected strong{display:block;overflow-wrap:anywhere;font-size:13px}
+.focusLabSelected p{margin:5px 0 0;line-height:1.5}
+.focusLabFooter{display:flex;align-items:center;gap:8px;margin:17px 0 0;color:var(--muted);font-size:11px;line-height:1.7}
+.focusLabFooter svg{flex:0 0 auto;color:var(--accent)}
+.focusLab.runningFocus .focusLabTimerPanel{border-color:color-mix(in srgb,var(--accent) 40%,var(--border));background:radial-gradient(ellipse at 50% 30%,color-mix(in srgb,var(--accent) 13%,transparent),transparent 58%),var(--bg)}
+body.light .focusLab{background:linear-gradient(145deg,rgba(76,103,30,.045),transparent 35%),var(--surface)}
+body.light .focusLabTimerPanel{background:radial-gradient(ellipse at 50% 30%,rgba(76,103,30,.07),transparent 58%),var(--surface)}
+body.light .focusLab.runningFocus .focusLabTimerPanel{background:radial-gradient(ellipse at 50% 30%,rgba(76,103,30,.1),transparent 58%),var(--surface)}
+@media(max-width:850px){.focusLabLayout{grid-template-columns:minmax(0,1fr)}.focusLabTimerPanel{order:0}.focusLabSetup{order:1}.focusLab .focusCoreRing{width:min(290px,65vw);height:min(290px,65vw)}}
+@media(max-width:560px){
+ .focusLab{margin:0 auto 18px;padding:15px 12px;border-radius:14px}
+ .focusLabHeader{align-items:flex-start;flex-direction:column;padding-bottom:18px;gap:12px}
+ .focusLabHeader h1{font-size:29px}
+ .focusLabStatus{padding:8px 11px;font-size:11px}
+ .focusLabStats{gap:6px;margin:13px 0}
+ .focusLabStats>div{padding:11px 9px;gap:7px}
+ .focusLabStats span{font-size:9px;line-height:1.5}
+ .focusLabStats strong{font-size:19px}
+ .focusLabStats strong small{font-size:9px}
+ .focusLabTimerPanel{padding:17px 12px}
+ .focusLabTimerMeta{font-size:8px}
+ .focusLab .focusCoreRing{width:min(255px,72vw);height:min(255px,72vw)}
+ .focusLab .focusCoreInner strong{font-size:clamp(43px,13vw,58px)}
+ .focusLabControls{grid-template-columns:minmax(0,1fr) auto;gap:7px}
+ .focusLabControls button{min-height:44px;font-size:12px}
+ .focusLabControls .focusResetButton{padding:0 10px}
+ .focusLabSetup{padding:15px 12px}
+ .focusLabDurations{gap:5px}
+ .focusLabDurations button{padding:10px 1px}
+ .focusLabDurations button strong{font-size:14px}
+ .focusLabDurations button small{font-size:8px}
+ .focusLabFooter{align-items:flex-start;font-size:10px}
+}
