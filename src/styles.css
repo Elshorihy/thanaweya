@@ -473,3 +473,35 @@ body[data-mod-features~="gamify"] .stat b{
   body[data-mod-features~="gaming"] *::before,
   body[data-mod-features~="gaming"] *::after{transition:none!important}
 }
+
+
+/* Live Backgrounds v2 — final override for mobile browsers and reduced-motion settings. */
+html:has(body[data-mod-features~="livebg"]){background:var(--bg)!important}
+body[data-mod-features~="livebg"]{
+  position:relative!important;
+  isolation:isolate!important;
+  background:transparent!important;
+}
+body[data-mod-features~="livebg"]::before{
+  content:""!important;
+  display:block!important;
+  position:fixed!important;
+  inset:-30vmax!important;
+  z-index:-1!important;
+  pointer-events:none!important;
+  opacity:1!important;
+  background:
+    radial-gradient(circle at 20% 25%,color-mix(in srgb,var(--accent) 34%,transparent) 0,transparent 34%),
+    radial-gradient(circle at 80% 25%,color-mix(in srgb,var(--accent2) 28%,transparent) 0,transparent 32%),
+    radial-gradient(circle at 55% 80%,rgba(56,189,248,.18) 0,transparent 38%)!important;
+  background-size:140% 140%!important;
+  animation:thanaweyaLiveBgFinal 9s ease-in-out infinite alternate!important;
+  will-change:transform!important;
+}
+body[data-mod-features~="livebg"] .app,
+body[data-mod-features~="livebg"] .authGate,
+body[data-mod-features~="livebg"] .onboard{position:relative;z-index:1;background:transparent}
+@keyframes thanaweyaLiveBgFinal{
+  from{transform:translate3d(-5%, -3%, 0) scale(.94);filter:hue-rotate(0deg)}
+  to{transform:translate3d(5%, 3%, 0) scale(1.08);filter:hue-rotate(35deg)}
+}
