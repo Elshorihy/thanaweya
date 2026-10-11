@@ -378,3 +378,27 @@ body[data-mod-theme="midnight"] .bottomNav,body[data-mod-theme="forest"] .bottom
 .modsFootnote svg{margin-top:3px;color:var(--accent)}.modsFootnote p{margin:0}
 @media(max-width:900px){.modsGrid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:560px){.modsHero{padding:19px}.modsHeroIcon{width:60px;height:60px;flex-basis:60px;border-radius:18px}.modsToolbar{align-items:flex-start}.modsSectionHead{align-items:flex-start;flex-direction:column}.modsGrid{grid-template-columns:1fr}.modsCardBody>p{min-height:0}}
+
+
+/* Composable Mods features */
+.modsFeaturesGrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.modsFeature{display:flex;align-items:center;gap:12px;min-width:0;padding:15px;border:1px solid var(--border);border-radius:16px;background:var(--surface);transition:border-color .18s,box-shadow .18s,transform .18s}
+.modsFeature.enabled{border-color:var(--accent);box-shadow:0 0 0 1px color-mix(in srgb,var(--accent) 28%,transparent) inset}
+.modsFeatureIcon{width:42px;height:42px;flex:0 0 42px;display:grid;place-items:center;border-radius:13px;background:var(--surface2);font-size:20px}
+.modsFeatureCopy{flex:1;min-width:0}.modsFeatureCopy b{display:block;font-size:14px}.modsFeatureCopy p{margin:4px 0 0;color:var(--muted);font-size:12px;line-height:1.65}
+.modsFeature>button{white-space:nowrap;font-size:12px;padding:9px 12px}
+.modsPresetCreate{display:flex;gap:10px;align-items:center}.modsPresetCreate input{flex:1;min-width:0}.modsPresetCreate button{white-space:nowrap}
+.modsPresetsGrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.modsPreset{display:grid;grid-template-columns:44px minmax(0,1fr);gap:12px;align-items:center;padding:14px;border:1px solid var(--border);border-radius:16px;background:var(--surface)}
+.modsPresetSwatches{width:44px;height:44px;border-radius:13px;background:var(--surface2);display:flex;align-items:center;justify-content:center;gap:3px}
+.modsPresetSwatches i{display:block;width:8px;height:23px;border-radius:99px;background:var(--accent)}.modsPresetSwatches i:nth-child(2){height:16px;background:var(--accent2)}.modsPresetSwatches i:nth-child(3){height:11px;background:var(--good)}
+.modsPresetInfo{min-width:0}.modsPresetInfo b{display:block;overflow-wrap:anywhere}.modsPresetInfo span{display:block;color:var(--muted);font-size:11px;margin-top:4px;line-height:1.6}
+.modsPresetActions{grid-column:1/-1;display:flex;gap:8px}.modsPresetActions button:first-child{flex:1}
+body[data-mod-features~="glow"] .card,body[data-mod-features~="glow"] .modsFeature.enabled,body[data-mod-features~="glow"] .stat{box-shadow:0 0 0 1px color-mix(in srgb,var(--accent) 12%,transparent),0 12px 35px color-mix(in srgb,var(--accent) 10%,transparent)}
+body[data-mod-features~="compact"] .card{padding:15px}
+body[data-mod-features~="compact"] .statsgrid,body[data-mod-features~="compact"] .grid2,body[data-mod-features~="compact"] .subjectGrid{gap:9px}
+body[data-mod-features~="compact"] .taskrow,body[data-mod-features~="compact"] .reviewrow,body[data-mod-features~="compact"] .listrow{padding:8px 0}
+body[data-mod-features~="rounded"] .card,body[data-mod-features~="rounded"] .stat,body[data-mod-features~="rounded"] .daycard,body[data-mod-features~="rounded"] .subjectTree,body[data-mod-features~="rounded"] .modsCard{border-radius:25px}
+body[data-mod-features~="calm"]{background-image:radial-gradient(ellipse at 8% 0%,color-mix(in srgb,var(--accent) 11%,transparent),transparent 38%),radial-gradient(ellipse at 92% 20%,color-mix(in srgb,var(--accent2) 7%,transparent),transparent 35%)}
+@media(max-width:900px){.modsPresetsGrid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:560px){.modsFeaturesGrid,.modsPresetsGrid{grid-template-columns:1fr}.modsFeature{align-items:flex-start;flex-wrap:wrap}.modsFeatureCopy{min-width:calc(100% - 60px)}.modsFeature>button{width:100%}.modsPresetCreate{align-items:stretch;flex-direction:column}.modsPresetCreate button{width:100%}}
