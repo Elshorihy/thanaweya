@@ -427,13 +427,32 @@ body[data-mod-features~="ultrafocus"] .stat{
   box-shadow:none!important;
   transition:none!important;
 }
-body[data-mod-features~="livebg"]{
-  background-size:180% 180%;
-  animation:thanaweyaLiveBg 24s ease-in-out infinite alternate;
+/* Use a fixed animated overlay: body background-position alone is barely visible on long pages. */
+body[data-mod-features~="livebg"]::before{
+  content:"";
+  position:fixed;
+  inset:-18%;
+  z-index:0;
+  pointer-events:none;
+  opacity:.88;
+  background:
+    radial-gradient(ellipse at 18% 28%,color-mix(in srgb,var(--accent) 22%,transparent),transparent 38%),
+    radial-gradient(ellipse at 78% 32%,color-mix(in srgb,var(--accent2) 18%,transparent),transparent 34%),
+    radial-gradient(ellipse at 58% 82%,rgba(56,189,248,.09),transparent 38%);
+  background-size:130% 130%;
+  animation:thanaweyaLiveBg 12s ease-in-out infinite alternate;
+  will-change:transform,background-position;
+}
+body[data-mod-features~="livebg"] .app,
+body[data-mod-features~="livebg"] .onboard,
+body[data-mod-features~="livebg"] .authGate{
+  position:relative;
+  z-index:1;
 }
 @keyframes thanaweyaLiveBg{
-  from{background-position:0% 0%}
-  to{background-position:100% 100%}
+  0%{transform:translate3d(-2.5%, -1.5%, 0) scale(1);background-position:0% 0%}
+  50%{transform:translate3d(1.5%, 2%, 0) scale(1.04);background-position:50% 65%}
+  100%{transform:translate3d(2.5%, -1%, 0) scale(1.02);background-position:100% 100%}
 }
 body[data-mod-features~="customizer"] .card,
 body[data-mod-features~="customizer"] .stat,
