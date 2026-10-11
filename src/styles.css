@@ -487,7 +487,7 @@ body[data-mod-features~="livebg"]::before{
   display:block!important;
   position:fixed!important;
   inset:-30vmax!important;
-  z-index:-1!important;
+  z-index:0!important;
   pointer-events:none!important;
   opacity:1!important;
   background:
@@ -500,7 +500,7 @@ body[data-mod-features~="livebg"]::before{
 }
 body[data-mod-features~="livebg"] .app,
 body[data-mod-features~="livebg"] .authGate,
-body[data-mod-features~="livebg"] .onboard{position:relative;z-index:1;background:transparent}
+body[data-mod-features~="livebg"] .onboard{position:relative!important;z-index:1!important;background:transparent!important}
 @keyframes thanaweyaLiveBgFinal{
   from{transform:translate3d(-5%, -3%, 0) scale(.94);filter:hue-rotate(0deg)}
   to{transform:translate3d(5%, 3%, 0) scale(1.08);filter:hue-rotate(35deg)}
