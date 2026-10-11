@@ -237,7 +237,7 @@ function App(){
 
 
  useEffect(()=>{fetch('/api/global-lectures',{cache:'no-store'}).then(r=>r.ok?r.json():{lectures:[]}).then(d=>setGlobalLectures(Array.isArray(d?.lectures)?d.lectures:[])).catch(()=>{})},[]);
-  useEffect(()=>{authMe().then(({user})=>{if(user){setAuth(user);setAuthName(user.name);setAuthPhone(user.phone||'')}}).catch(()=>{}).finally(()=>setAuthChecked(true))},[]);
+  useEffect(()=>{let cancelled=false;const restoreSession=async()=>{for(let attempt=0;attempt<2;attempt++){try{const {user}=await authMe();if(cancelled)return;if(user){setAuth(user);setAuthName(user.name);setAuthPhone(user.phone||'')}setAuthChecked(true);return}catch(error){console.warn('Session restore attempt failed',attempt+1,error);if(attempt===0)await new Promise(resolve=>setTimeout(resolve,1500))}}if(!cancelled)setAuthChecked(true)};restoreSession();return()=>{cancelled=true}},[]);
  useEffect(()=>{if(!auth?.id)return;const t=window.setInterval(()=>{authMe().then(({user})=>{if(user){setAuth(user);setAuthName(user.name);setAuthPhone(user.phone||'')}}).catch(()=>{})},30000);return()=>window.clearInterval(t)},[auth?.id]);
  useEffect(()=>{if(authResendLeft<=0)return;const t=window.setInterval(()=>setAuthResendLeft(v=>v<=1?0:v-1),1000);return()=>window.clearInterval(t)},[authResendLeft]);
  useEffect(()=>{
