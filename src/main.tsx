@@ -876,7 +876,7 @@ function Dashboard(){const due=s.lessons.filter(l=>l.nextReviewAt&&l.nextReviewA
     <div><span>مدة الراحة</span><strong>{s.settings.break}<small> دقيقة</small></strong></div>
    </div>
    <div className="focusLabLayout">
-    <div className="focusLabTimerPanel">
+    <div className="focusLabTimerPanel" style={running?{backgroundImage:'linear-gradient(180deg,rgba(7,10,18,.76),rgba(7,10,18,.9)),url("https://images.pexels.com/photos/9572709/pexels-photo-9572709.jpeg?auto=compress&cs=tinysrgb&w=1600")',backgroundSize:'cover',backgroundPosition:'center'}:undefined}>
      {running&&<div className="focusBlessing">صل على النبي ﷺ</div>}
      <div className="focusLabTimerMeta"><span>{running?'DEEP WORK IN PROGRESS':'YOUR NEXT SESSION'}</span><span>{completedPercent}%</span></div>
      <div className={'focusCore '+(running?'isRunning':'')} style={{'--focus-progress':Math.max(0,Math.min(1,1-focusLeft/Math.max(1,focusTotalSeconds)))} as React.CSSProperties}>
