@@ -2058,32 +2058,19 @@ export default {
           const authCodeId=randomHex(16);
           await env.DB.prepare("INSERT INTO auth_codes(id,email,type,code_hash,payload_json,expires_at,attempts,created_at) VALUES(?,?,?,?,?,?,?,?)").bind(authCodeId,email,"register",await otpHash(email,"register",code),payload,expires,0,now).run();
 
-          // Attempt both channels: some Apps Script deployments report success
-          // even when the recipient never receives the message. WhatsApp provides
-          // a second path for the same OTP, without changing verification storage.
-          let emailError="", whatsappError="", emailOk=false, whatsappOk=false;
+          // Registration verification codes must be delivered by email only.
+          // Never report success because a fallback channel delivered the code.
+          let emailError="";
           try {
             await sendEmailOtp(env,email,code,"register");
-            emailOk=true;
+            return json({ok:true,email,delivery:"email"});
           } catch(e) {
-            emailError=(e instanceof Error?e.message:String(e)).slice(0,300);
+            emailError=(e instanceof Error?e.message:String(e)).slice(0,500);
             console.error("Registration OTP email delivery failed",{email,reason:emailError});
           }
-          try {
-            await greenApiCall(env,phone,"🔐 كود تأكيد حساب ثانوية: "+code+"\\nالكود صالح لمدة 10 دقائق. لا تشاركه مع أي شخص.");
-            whatsappOk=true;
-          } catch(e) {
-            whatsappError=(e instanceof Error?e.message:String(e)).slice(0,220);
-            console.error("Registration OTP WhatsApp delivery failed",{email,reason:whatsappError});
-          }
-          if(emailOk || whatsappOk) {
-            if(!emailOk) ctx.waitUntil(sendAdminAlert(env,"⚠️ تعذر إرسال كود التسجيل على Gmail","✉️ "+email+"\\nتم إرسال الكود عبر واتساب.\\n⚠️ "+emailError,"register_email_fallback_failure",60*1000));
-            return json({ok:true,email,delivery:emailOk&&whatsappOk?"both":whatsappOk?"whatsapp":"email"});
-          }
-          console.error("Registration OTP delivery failed",{email,emailError,whatsappError});
           await env.DB.prepare("DELETE FROM auth_codes WHERE id=?").bind(authCodeId).run();
-          ctx.waitUntil(sendAdminAlert(env,"❌ فشل إرسال كود إنشاء الحساب","✉️ "+email+"\\nالبريد: "+emailError+"\\nواتساب: "+whatsappError,"register_otp_failure",60*1000));
-          return json({error:"فشل إرسال الكود على البريد وواتساب. جرّب مرة أخرى لاحقًا.",detail:"البريد: "+emailError+" | واتساب: "+whatsappError,retry:true},502);
+          ctx.waitUntil(sendAdminAlert(env,"❌ فشل إرسال كود إنشاء الحساب عبر Gmail","✉️ "+email+"\\nالسبب: "+emailError,"register_otp_failure",60*1000));
+          return json({error:"لم نتمكن من إرسال كود التأكيد إلى بريدك الإلكتروني. جرّب مرة أخرى بعد قليل.",detail:emailError,retry:true},502);
         }
         if(url.pathname==="/api/auth/register/verify" && request.method==="POST") {
           const b=await body(request), email=cleanEmail(b?.email), code=String(b?.code||"").replace(/\D/g,"").slice(0,6);
