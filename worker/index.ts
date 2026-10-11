@@ -2039,8 +2039,18 @@ export default {
           const recentRegister=await env.DB.prepare("SELECT created_at FROM auth_codes WHERE email=? AND type='register' ORDER BY created_at DESC LIMIT 1").bind(email).first<any>();
           if(recentRegister&&Date.now()-Number(recentRegister.created_at)<60000) return json({error:"استنى 60 ثانية قبل طلب كود جديد."},429);
           await env.DB.prepare("DELETE FROM auth_codes WHERE email=? AND type='register'").bind(email).run();
-          await env.DB.prepare("INSERT INTO auth_codes(id,email,type,code_hash,payload_json,expires_at,attempts,created_at) VALUES(?,?,?,?,?,?,?,?)").bind(randomHex(16),email,"register",await otpHash(email,"register",code),payload,expires,0,now).run();
-          await sendEmailOtp(env,email,code,"register");
+          const authCodeId=randomHex(16);
+          await env.DB.prepare("INSERT INTO auth_codes(id,email,type,code_hash,payload_json,expires_at,attempts,created_at) VALUES(?,?,?,?,?,?,?,?)").bind(authCodeId,email,"register",await otpHash(email,"register",code),payload,expires,0,now).run();
+          try {
+            await sendEmailOtp(env,email,code,"register");
+          } catch (mailError) {
+            // A failed delivery must not leave a dead OTP that blocks the user for 60 seconds.
+            await env.DB.prepare("DELETE FROM auth_codes WHERE id=?").bind(authCodeId).run();
+            const reason=(mailError instanceof Error?mailError.message:String(mailError)).slice(0,300);
+            console.error("Registration OTP delivery failed", {email,reason});
+            ctx.waitUntil(sendAdminAlert(env,"❌ فشل إرسال كود إنشاء الحساب","✉️ "+email+"\n⚠️ "+reason,"register_otp_failure",60*1000));
+            return json({error:"تعذر إرسال كود إنشاء الحساب. جرّب تاني بعد التأكد من خدمة البريد.",detail:reason,retry:true},502);
+          }
           return json({ok:true,email});
         }
         if(url.pathname==="/api/auth/register/verify" && request.method==="POST") {
