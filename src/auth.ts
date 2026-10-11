@@ -29,7 +29,7 @@ async function req(path:string,options:RequestInit={}) {
 export const authMe=()=>req('/api/auth/me') as Promise<{user:AuthUser|null}>;
 export const authRegister=(name:string,email:string,password:string,phone?:string)=>req('/api/auth/register',{method:'POST',body:JSON.stringify({name,email,password,phone})}) as Promise<{user:AuthUser}>;
 export const authLogin=(email:string,password:string,phone?:string)=>req('/api/auth/login',{method:'POST',body:JSON.stringify({email,password,phone})}) as Promise<{user:AuthUser}>;
-export const authRegisterStart=(name:string,email:string,password:string,phone?:string)=>req('/api/auth/register/start',{method:'POST',body:JSON.stringify({name,email,password,phone})}) as Promise<{ok:boolean;email:string;delivery?:"whatsapp"|"email"}>;
+export const authRegisterStart=(name:string,email:string,password:string,phone?:string)=>req('/api/auth/register/start',{method:'POST',body:JSON.stringify({name,email,password,phone})}) as Promise<{ok:boolean;email:string;delivery?:"whatsapp"|"email"|"both"}>;
 export const authRegisterVerify=(email:string,code:string)=>req('/api/auth/register/verify',{method:'POST',body:JSON.stringify({email,code})}) as Promise<{user:AuthUser}>;
 export const authForgotStart=(email:string)=>req(`/api/auth/forgot/start?email=${encodeURIComponent(email)}`,{method:'GET',headers:{}}) as Promise<{ok:boolean}>;
 export const authResetPassword=(email:string,code:string,password:string)=>req('/api/auth/reset',{method:'POST',body:JSON.stringify({email,code,password})}) as Promise<{ok:boolean}>;
