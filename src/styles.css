@@ -427,32 +427,24 @@ body[data-mod-features~="ultrafocus"] .stat{
   box-shadow:none!important;
   transition:none!important;
 }
-/* Use a fixed animated overlay: body background-position alone is barely visible on long pages. */
-body[data-mod-features~="livebg"]::before{
-  content:"";
-  position:fixed;
-  inset:-18%;
-  z-index:0;
-  pointer-events:none;
-  opacity:.88;
-  background:
-    radial-gradient(ellipse at 18% 28%,color-mix(in srgb,var(--accent) 22%,transparent),transparent 38%),
-    radial-gradient(ellipse at 78% 32%,color-mix(in srgb,var(--accent2) 18%,transparent),transparent 34%),
-    radial-gradient(ellipse at 58% 82%,rgba(56,189,248,.09),transparent 38%);
-  background-size:130% 130%;
-  animation:thanaweyaLiveBg 12s ease-in-out infinite alternate;
-  will-change:transform,background-position;
+/* Live Backgrounds: animate the actual page canvas so opaque app layers cannot hide it. */
+body[data-mod-features~="livebg"]{
+  background-color:var(--bg)!important;
+  background-image:
+    radial-gradient(ellipse at 12% 18%,color-mix(in srgb,var(--accent) 24%,transparent),transparent 42%),
+    radial-gradient(ellipse at 84% 26%,color-mix(in srgb,var(--accent2) 20%,transparent),transparent 38%),
+    radial-gradient(ellipse at 55% 92%,rgba(56,189,248,.13),transparent 42%),
+    linear-gradient(rgba(199,243,107,.025) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(199,243,107,.025) 1px,transparent 1px)!important;
+  background-size:180% 180%,180% 180%,180% 180%,32px 32px,32px 32px!important;
+  background-position:0% 0%,100% 0%,50% 100%,0 0,0 0!important;
+  animation:thanaweyaLiveBg 16s ease-in-out infinite alternate!important;
 }
-body[data-mod-features~="livebg"] .app,
-body[data-mod-features~="livebg"] .onboard,
-body[data-mod-features~="livebg"] .authGate{
-  position:relative;
-  z-index:1;
-}
+body[data-mod-features~="livebg"] .app{background:transparent!important}
 @keyframes thanaweyaLiveBg{
-  0%{transform:translate3d(-2.5%, -1.5%, 0) scale(1);background-position:0% 0%}
-  50%{transform:translate3d(1.5%, 2%, 0) scale(1.04);background-position:50% 65%}
-  100%{transform:translate3d(2.5%, -1%, 0) scale(1.02);background-position:100% 100%}
+  0%{background-position:0% 0%,100% 0%,50% 100%,0 0,0 0}
+  50%{background-position:65% 45%,25% 70%,90% 25%,0 0,0 0}
+  100%{background-position:100% 100%,0% 50%,0% 0%,0 0,0 0}
 }
 body[data-mod-features~="customizer"] .card,
 body[data-mod-features~="customizer"] .stat,
@@ -476,7 +468,7 @@ body[data-mod-features~="gamify"] .stat b{
   color:var(--accent);
 }
 @media(prefers-reduced-motion:reduce){
-  body[data-mod-features~="livebg"]{animation:none!important;background-size:auto}
+  body[data-mod-features~="livebg"]{animation:none!important;background-position:30% 30%,70% 60%,50% 50%,0 0,0 0!important}
   body[data-mod-features~="gaming"] *,
   body[data-mod-features~="gaming"] *::before,
   body[data-mod-features~="gaming"] *::after{transition:none!important}
