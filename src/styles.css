@@ -318,3 +318,11 @@ body.light .focusLab.runningFocus .focusLabTimerPanel{background:radial-gradient
  .focusLabDurations button small{font-size:8px}
  .focusLabFooter{align-items:flex-start;font-size:10px}
 }
+
+
+/* Signature verification seal — Thanaweya */
+.verifiedBadge{display:inline-grid;place-items:center;flex:0 0 19px;width:19px;height:19px;vertical-align:middle;margin-inline:3px;clip-path:polygon(50% 0%,61% 7%,75% 4%,82% 16%,95% 23%,92% 37%,100% 50%,92% 62%,95% 76%,82% 83%,75% 96%,61% 93%,50% 100%,38% 93%,24% 96%,17% 83%,4% 76%,7% 62%,0% 50%,7% 37%,4% 23%,17% 16%,24% 4%,38% 7%);border-radius:0;background:linear-gradient(145deg,#55c7ff 0%,#2878ff 55%,#635bff 100%);color:#fff;box-shadow:none;filter:drop-shadow(0 1px 2px rgba(42,125,255,.22));}
+.verifiedBadge svg{display:block;width:13px;height:13px;}
+.accountChip .verifiedBadge{margin-inline-start:5px}
+.aiHero .verifiedBadge{width:21px;height:21px;flex-basis:21px;}
+.aiHero .verifiedBadge svg{width:15px;height:15px}
