@@ -349,13 +349,23 @@ async function greenApiCall(env:Env,phone:string,message:string){
   const apiUrl=(env.GREEN_API_URL||"https://api.greenapi.com").replace(/\/$/,"");
   const digits=phone.replace(/\D/g,"");
   const chatId=digits+"@c.us";
-  const r=await fetch(apiUrl+"/waInstance"+env.GREEN_API_INSTANCE_ID+"/sendMessage/"+env.GREEN_API_TOKEN,{
-    method:"POST",headers:{"content-type":"application/json"},
-    body:JSON.stringify({chatId,message,linkPreview:false})
-  });
-  const data=await r.json() as any;
-  if(!r.ok||!data?.idMessage) throw new Error(data?.message||data?.error||("GREEN-API error: "+r.status));
-  return String(data.idMessage);
+  const controller=new AbortController();
+  const timeout=setTimeout(()=>controller.abort(),8000);
+  try{
+    const r=await fetch(apiUrl+"/waInstance"+env.GREEN_API_INSTANCE_ID+"/sendMessage/"+env.GREEN_API_TOKEN,{
+      method:"POST",headers:{"content-type":"application/json"},
+      body:JSON.stringify({chatId,message,linkPreview:false}),
+      signal:controller.signal
+    });
+    const data=await r.json() as any;
+    if(!r.ok||!data?.idMessage) throw new Error(data?.message||data?.error||("GREEN-API error: "+r.status));
+    return String(data.idMessage);
+  }catch(e){
+    if(e instanceof Error && e.name==="AbortError") throw new Error("انتهت مهلة إرسال واتساب بعد 8 ثوانٍ");
+    throw e;
+  }finally{
+    clearTimeout(timeout);
+  }
 }
 
 async function sendEmailOtp(env:Env,email:string,code:string,type:"register"|"reset"){
@@ -368,7 +378,7 @@ async function sendEmailOtp(env:Env,email:string,code:string,type:"register"|"re
   if(url.pathname.endsWith("/dev")) throw new Error("GOOGLE_APPS_SCRIPT_URL يجب أن ينتهي بـ /exec وليس /dev.");
 
   let lastError:unknown=null;
-  for(let attempt=1;attempt<=3;attempt++){
+  for(let attempt=1;attempt<=(type==="register"?2:3);attempt++){
     const u=new URL(url.toString());
     u.searchParams.set("action","otp");
     u.searchParams.set("type",type);
@@ -380,7 +390,7 @@ async function sendEmailOtp(env:Env,email:string,code:string,type:"register"|"re
     u.searchParams.set("_ts",String(Date.now()));
 
     const controller=new AbortController();
-    const timeout=setTimeout(()=>controller.abort(),12000);
+    const timeout=setTimeout(()=>controller.abort(),type==="register"?9000:12000);
     try{
       const response=await fetch(u.toString(),{
         method:"GET",
@@ -421,7 +431,7 @@ async function sendEmailOtp(env:Env,email:string,code:string,type:"register"|"re
       throw new Error("Google Apps Script أعاد HTTP "+response.status+" لكن لم يؤكد إرسال كود Gmail."+(sample?" الرد: "+sample:""));
     }catch(e){
       lastError=e;
-      if(attempt<3) await new Promise(resolve=>setTimeout(resolve,1500*attempt));
+      if(attempt<(type==="register"?2:3)) await new Promise(resolve=>setTimeout(resolve,1000*attempt));
     }finally{
       clearTimeout(timeout);
     }
