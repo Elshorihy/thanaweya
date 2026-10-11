@@ -136,12 +136,12 @@ async function callGemini(env:Env, contents:any[], systemInstruction:string, gen
   const apiKey=String(env.GEMINI_API_KEY||"").trim();
   if(!apiKey) throw new Error("NO_AI");
   const configured=String(env.GEMINI_MODEL||"").trim();
-  const models=[...new Set([configured,"gemini-2.5-flash-lite","gemini-2.0-flash"].filter(Boolean))].slice(0,3);
+  const models=[...new Set([configured,"gemini-2.5-flash-lite","gemini-2.0-flash"].filter(Boolean))].slice(0,2);
   let lastError="";
   for(const model of models){
     const endpoint="https://generativelanguage.googleapis.com/v1beta/models/"+encodeURIComponent(model)+":generateContent";
     const controller=new AbortController();
-    const timeout=setTimeout(()=>controller.abort(),8000);
+    const timeout=setTimeout(()=>controller.abort(),9000);
     try{
       const response=await fetch(endpoint,{
         method:"POST",
