@@ -1801,7 +1801,7 @@ export default {
           catch(e) { console.error("D1 health check failed",e); return json({ok:false,db:false,error:"D1 binding/database is not available. Check the DB binding in Cloudflare."},503); }
         }
         await ensureSchema(env);
-        if(url.pathname!=="/api/telegram/webhook" && url.pathname!=="/api/pageview" && url.pathname!=="/api/health"){
+        if(url.pathname!=="/api/telegram/webhook" && url.pathname!=="/api/pageview" && url.pathname!=="/api/health" && !url.pathname.startsWith("/api/auth/")){
           try{
             const currentUser=await userFrom(request,env);
             if(currentUser) ctx.waitUntil(touchUserActivity(env,currentUser.id,url.pathname,request.method));
