@@ -890,3 +890,31 @@ body.light .focusLab .focusLabHeader h1,body.light .focusLab .focusLabHeader p,b
   pointer-events:none!important;
   background:linear-gradient(180deg,rgba(3,6,13,.25),rgba(3,6,13,.38) 48%,rgba(4,7,15,.62))!important;
 }
+
+
+/* Stability fix: keep the real video moving naturally, without any camera drift/zoom animation. */
+.focusLab.focusSessionActive>.focusWorldBackdrop .focusStudyVideo,
+.focusLab>.focusWorldBackdrop .focusStudyVideo{
+  animation:none!important;
+  transform:none!important;
+  transition:none!important;
+  will-change:auto!important;
+  object-position:center center!important;
+}
+/* Strong selector overrides for all old static scene layers in active fullscreen mode. */
+.focusLab.focusSessionActive>.focusWorldBackdrop .focusWorldWindow,
+.focusLab.focusSessionActive>.focusWorldBackdrop .focusWorldMoon,
+.focusLab.focusSessionActive>.focusWorldBackdrop .focusWorldSkyline,
+.focusLab.focusSessionActive>.focusWorldBackdrop .focusWorldDesk,
+.focusLab.focusSessionActive>.focusWorldBackdrop .focusWorldAmbient,
+.focusLab.focusSessionActive>.focusWorldBackdrop .focusWorldRain,
+.focusLab.focusSessionActive>.focusWorldBackdrop .focusWorldParticles,
+.focusLab.focusSessionActive>.focusWorldBackdrop .focusWorldStars,
+.focusLab.focusSessionActive>.focusWorldBackdrop .focusWorldBuildings,
+.focusLab.focusSessionActive>.focusWorldBackdrop .focusWorldLamp,
+.focusLab.focusSessionActive>.focusWorldBackdrop .focusWorldBooks{
+  display:none!important;
+}
+.focusLab.focusSessionActive>.focusWorldBackdrop{
+  background:#090d19!important;
+}
