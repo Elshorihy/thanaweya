@@ -8,7 +8,7 @@ async function req(path:string,options:RequestInit={}) {
   for(let attempt=0;attempt<2;attempt++){
     const controller=new AbortController();
     // Email OTP delivery can take several provider retries; don't abort it after 10 seconds.
-    const timeoutMs=(path==='/api/auth/register/start'||path.startsWith('/api/auth/forgot/start'))?70000:35000;
+    const timeoutMs=(path==='/api/auth/register/start'||path.startsWith('/api/auth/forgot/start')||path==='/api/auth/login')?70000:35000;
     const timeout=window.setTimeout(()=>controller.abort(),timeoutMs);
     try{
       const r=await fetch(path,{...init,signal:controller.signal});
