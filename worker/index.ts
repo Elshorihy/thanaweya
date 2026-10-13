@@ -2054,9 +2054,9 @@ export default {
         }
         if(url.pathname==="/api/auth/register/start" && request.method==="POST") {
           const b=await body(request), email=cleanEmail(b?.email), name=cleanName(b?.name), password=String(b?.password||""), phone=cleanPhone(b?.phone);
-          if(!name||!email||password.length<8) return json({error:"الاسم والإيميل وكلمة السر (8 أحرف على الأقل) مطلوبة"},400);
+          if(!name||!email||password.length<8||!phone) return json({error:"الاسم والإيميل وكلمة السر ورقم واتساب مطلوبة، وكلمة السر 8 أحرف على الأقل"},400);
           const exists=await env.DB.prepare("SELECT id FROM users WHERE email=?").bind(email).first(); if(exists) return json({error:"الإيميل مستخدم بالفعل"},409);
-          if(phone&&!validPhone(phone)) return json({error:"رقم واتساب غير صالح"},400);
+          if(!validPhone(phone)) return json({error:"رقم واتساب غير صالح"},400);
           if(phone){const phoneExists=await env.DB.prepare("SELECT user_id FROM user_phones WHERE phone=?").bind(phone).first();if(phoneExists)return json({error:"رقم واتساب مستخدم بالفعل"},409);}
           const salt=randomHex(16), pass=await hashPassword(password,salt), code=generateOtpCode(), now=Date.now(), expires=now+10*60*1000, payload=JSON.stringify({name,password_hash:pass,password_salt:salt,phone:phone||null});
           const recentRegister=await env.DB.prepare("SELECT created_at FROM auth_codes WHERE email=? AND type='register' ORDER BY created_at DESC LIMIT 1").bind(email).first<any>();
