@@ -904,6 +904,7 @@ function Dashboard(){const due=s.lessons.filter(l=>l.nextReviewAt&&l.nextReviewA
   const completedPercent=Math.round(Math.max(0,Math.min(1,1-Math.max(0,focusLeft)/Math.max(1,focusTotalSeconds)))*100);
   return <section className={'focuspage focusLab '+(running?'focusSessionActive ':'')}>
    <div className={'focusWorldScene focusWorldBackdrop scene-'+focusScene} aria-hidden="true">
+    <video className="focusStudyVideo" autoPlay muted loop playsInline preload="metadata" poster="https://images2.thanhnien.vn/528068263637045248/2025/9/22/lam-viec-khuya-2-17585359126851540935.png"><source src="https://videos.pexels.com/video-files/32246885/13752765_1920_1080_24fps.mp4" type="video/mp4"/></video>
     <div className="focusWorldWindow"><div className="focusWorldMoon"/><div className="focusWorldSkyline"><i/><i/><i/><i/><i/><i/><i/></div><div className="focusWorldRain"><i/><i/><i/><i/><i/><i/><i/><i/><i/><i/><i/><i/><i/><i/><i/><i/><i/><i/><i/><i/></div></div>
     <div className="focusWorldDesk"><div className="focusWorldMonitor"><i/><b/><span/></div><div className="focusWorldBook"/><div className="focusWorldCup"><i/></div><div className="focusWorldLamp"/></div>
     <div className="focusWorldAmbient"/>
