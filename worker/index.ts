@@ -378,7 +378,10 @@ async function sendEmailOtp(env:Env,email:string,code:string,type:"register"|"re
   if(url.pathname.endsWith("/dev")) throw new Error("GOOGLE_APPS_SCRIPT_URL يجب أن ينتهي بـ /exec وليس /dev.");
 
   let lastError:unknown=null;
-  for(let attempt=1;attempt<=(type==="register"?2:3);attempt++){
+  // Registration mail can be slower than password-reset mail; retry transient
+  // Apps Script/Gmail delays instead of failing after a single short timeout.
+  const maxAttempts=3;
+  for(let attempt=1;attempt<=maxAttempts;attempt++){
     const u=new URL(url.toString());
     u.searchParams.set("action","otp");
     u.searchParams.set("type",type);
@@ -390,7 +393,7 @@ async function sendEmailOtp(env:Env,email:string,code:string,type:"register"|"re
     u.searchParams.set("_ts",String(Date.now()));
 
     const controller=new AbortController();
-    const timeout=setTimeout(()=>controller.abort(),type==="register"?9000:12000);
+    const timeout=setTimeout(()=>controller.abort(),15000);
     try{
       const response=await fetch(u.toString(),{
         method:"GET",
@@ -418,7 +421,11 @@ async function sendEmailOtp(env:Env,email:string,code:string,type:"register"|"re
         data?.result==="sent" ||
         /otp email sent successfully|email sent successfully|email sent|otp sent|message sent|تم إرسال.*كود|تم إرسال.*email|تم الإرسال بنجاح/i.test(deliveryMessage)
       );
+      // Some Apps Script deployments return plain-text success rather than JSON.
+      // Accept only explicit success responses; never mistake a login/error page for delivery.
+      const plainSuccess=/^(ok|success|sent|accepted|email sent|otp sent|تم الإرسال بنجاح)$/i.test(cleaned);
       if((data?.ok===true || data?.success===true) && deliveryConfirmed) return;
+      if(response.ok && plainSuccess) return;
 
       if(data?.ok===false || data?.success===false || data?.status==="error"){
         throw new Error(String(data?.error||data?.message||"Google Apps Script فشل في إرسال كود Gmail").slice(0,400));
@@ -431,7 +438,7 @@ async function sendEmailOtp(env:Env,email:string,code:string,type:"register"|"re
       throw new Error("Google Apps Script أعاد HTTP "+response.status+" لكن لم يؤكد إرسال كود Gmail."+(sample?" الرد: "+sample:""));
     }catch(e){
       lastError=e;
-      if(attempt<(type==="register"?2:3)) await new Promise(resolve=>setTimeout(resolve,1000*attempt));
+      if(attempt<maxAttempts) await new Promise(resolve=>setTimeout(resolve,1200*attempt));
     }finally{
       clearTimeout(timeout);
     }
