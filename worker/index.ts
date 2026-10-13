@@ -968,7 +968,8 @@ async function sendTelegramCommandCenter(env:Env,chatId:string){
     [{text:"🛡️ الأمان",callback_data:"dash_security"},{text:"📚 البيانات",callback_data:"dash_data"}],
     [{text:"🧾 Audit Log",callback_data:"admin_activity"},{text:"🚨 التنبيهات",callback_data:"dash_alerts"}],
     [{text:"📢 الحملات",callback_data:"dash_campaigns"},{text:"📣 الإعلانات",callback_data:"admin_announcements"}],
-    [{text:"🩺 النظام",callback_data:"dash_system"},{text:"🧰 الصيانة",callback_data:"dash_tools"}],\n    [{text:"🧪 تشخيص عميق",callback_data:"dash_diagnostics"}],
+    [{text:"🩺 النظام",callback_data:"dash_system"},{text:"🧰 الصيانة",callback_data:"dash_tools"}],
+    [{text:"🧪 تشخيص عميق",callback_data:"dash_diagnostics"}],
     [{text:"⬅️ لوحة التحكم",callback_data:"dash_home"}]
   ]}});
 }
@@ -1225,7 +1226,8 @@ async function createGlobalNotification(env:Env,chatId:string,payload:any){
 }
 function telegramDashboardKeyboard(){
   return {inline_keyboard:[
-    [{text:"⚡ مركز القيادة",callback_data:"dash_center"}],\n    [{text:"🧪 تشخيص عميق للنظام",callback_data:"dash_diagnostics"}],
+    [{text:"⚡ مركز القيادة",callback_data:"dash_center"}],
+    [{text:"🧪 تشخيص عميق للنظام",callback_data:"dash_diagnostics"}],
     [{text:"📊 الرئيسية والإحصائيات",callback_data:"dash_stats"},{text:"🩺 حالة النظام",callback_data:"dash_system"}],
     [{text:"👥 المستخدمين",callback_data:"dash_users"},{text:"💳 التوثيق",callback_data:"dash_verifications"}],
     [{text:"🔎 بحث عن مستخدم",callback_data:"dash_search"}],
