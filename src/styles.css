@@ -505,3 +505,36 @@ body[data-mod-features~="livebg"] .onboard{position:relative!important;z-index:1
   from{transform:translate3d(-5%, -3%, 0) scale(.94);filter:hue-rotate(0deg)}
   to{transform:translate3d(5%, 3%, 0) scale(1.08);filter:hue-rotate(35deg)}
 }
+
+
+/* Animated account/session preparation screen */
+.authGateLoading{position:relative;isolation:isolate;overflow:hidden;background:radial-gradient(ellipse at 50% 38%,rgba(82,112,255,.13),transparent 42%),radial-gradient(ellipse at 50% 100%,rgba(43,203,190,.08),transparent 48%)}
+.authGateLoading:before,.authGateLoading:after{content:"";position:absolute;z-index:-1;pointer-events:none;width:260px;height:260px;border:1px solid rgba(130,151,255,.09);border-radius:50%;animation:bootBackdrop 12s linear infinite}
+.authGateLoading:before{top:7%;left:-145px}
+.authGateLoading:after{right:-150px;bottom:4%;width:330px;height:330px;animation-direction:reverse;animation-duration:17s}
+.authBootCard{position:relative;text-align:center;overflow:hidden;max-width:460px;padding:34px 26px 28px;background:linear-gradient(155deg,rgba(20,29,49,.97),rgba(12,18,32,.98));border-color:rgba(135,153,255,.22);box-shadow:0 22px 80px rgba(0,0,0,.32),inset 0 1px rgba(255,255,255,.035);animation:bootCardIn .65s cubic-bezier(.2,.8,.2,1) both}
+.bootLogoStage{width:116px;height:116px;position:relative;display:grid;place-items:center;margin:0 auto 20px}
+.bootLogo{width:62px;height:62px;position:relative;z-index:2;margin:0;border-radius:18px;box-shadow:0 0 32px rgba(102,130,255,.22);animation:bootLogoFloat 3.2s ease-in-out infinite}
+.bootOrbit{position:absolute;inset:6px;border:1px solid rgba(124,149,255,.45);border-radius:31%;animation:bootOrbitSpin 7s linear infinite}
+.bootOrbit:after{content:"";position:absolute;top:12px;left:12px;width:7px;height:7px;border-radius:50%;background:#9fb1ff;box-shadow:0 0 12px rgba(159,177,255,.8)}
+.bootOrbitTwo{inset:15px;border-color:rgba(56,210,198,.38);border-radius:50%;transform:rotate(35deg);animation:bootOrbitSpin 5s linear infinite reverse}
+.bootOrbitTwo:after{top:auto;left:auto;right:4px;bottom:18px;width:5px;height:5px;background:#55e1d3;box-shadow:0 0 12px rgba(85,225,211,.85)}
+.bootSpark{position:absolute;width:4px;height:4px;border-radius:50%;background:#e0e7ff;box-shadow:0 0 10px rgba(170,190,255,.9);animation:bootSparkPulse 2s ease-in-out infinite}
+.bootSparkOne{top:13px;right:20px}.bootSparkTwo{bottom:18px;left:15px;animation-delay:.8s}
+.bootEyebrow{letter-spacing:2px;font-size:10px;color:#9eafff;margin-bottom:12px}
+.authBootCard h1{font-size:clamp(24px,5vw,30px);margin:0 0 8px;letter-spacing:-.5px}
+.authBootCard>p{color:var(--muted);font-size:14px;line-height:1.8;margin:0 auto;max-width:310px}
+.bootProgress{height:4px;max-width:280px;margin:25px auto 20px;overflow:hidden;border-radius:999px;background:rgba(150,166,220,.13)}
+.bootProgress span{display:block;width:42%;height:100%;border-radius:inherit;background:linear-gradient(90deg,#5b77ff,#52dfcf,#a3b5ff);box-shadow:0 0 14px rgba(98,131,255,.4);animation:bootProgressSlide 1.65s ease-in-out infinite}
+.bootSteps{display:flex;justify-content:center;align-items:center;gap:12px;flex-wrap:wrap;color:var(--muted);font-size:11px}
+.bootStep{display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
+.bootStep i{display:block;width:5px;height:5px;border-radius:50%;background:rgba(155,169,204,.38)}
+.bootStep.active{color:#dce4ff}.bootStep.active i{background:#7f98ff;box-shadow:0 0 9px rgba(127,152,255,.8);animation:bootSparkPulse 1.4s ease-in-out infinite}
+@keyframes bootCardIn{from{opacity:0;transform:translateY(12px) scale(.985)}to{opacity:1;transform:translateY(0) scale(1)}}
+@keyframes bootLogoFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}
+@keyframes bootOrbitSpin{to{transform:rotate(360deg)}}
+@keyframes bootSparkPulse{0%,100%{opacity:.45;scale:.8}50%{opacity:1;scale:1.25}}
+@keyframes bootProgressSlide{0%{transform:translateX(150%)}100%{transform:translateX(-250%)}}
+@keyframes bootBackdrop{to{transform:rotate(360deg)}}
+@media(max-width:420px){.authBootCard{padding:28px 18px 24px}.bootSteps{gap:8px;font-size:10px}.bootLogoStage{width:104px;height:104px}}
+@media(prefers-reduced-motion:reduce){.authGateLoading:before,.authGateLoading:after,.authBootCard,.bootLogo,.bootOrbit,.bootSpark,.bootProgress span,.bootStep.active i{animation:none!important}.bootProgress span{width:100%;transform:none;opacity:.8}}
