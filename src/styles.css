@@ -868,3 +868,10 @@ body.light .focusLab .focusLabHeader h1,body.light .focusLab .focusLabHeader p,b
 @media(prefers-reduced-motion:reduce){
   .focusLab>.focusWorldBackdrop:before{animation:none!important;transform:scale(1.04)!important}
 }
+
+
+/* Keep the actual animated study video visible; never swap it with a static photo layer. */
+.focusLab>.focusWorldBackdrop:before{background-image:none!important;animation:none!important;content:none!important;display:none!important}
+.focusLab>.focusWorldBackdrop .focusStudyVideo{display:block!important;position:absolute!important;inset:0!important;z-index:0!important;width:100%!important;height:100%!important;object-fit:cover!important;object-position:center 44%!important;opacity:.9!important;transform:scale(1.035);animation:focusStudyVideoDrift 48s ease-in-out infinite alternate!important;will-change:transform}
+.focusLab>.focusWorldBackdrop:after{z-index:2!important}
+@media(prefers-reduced-motion:reduce){.focusLab>.focusWorldBackdrop .focusStudyVideo{animation:none!important;transform:scale(1.04)!important}}
