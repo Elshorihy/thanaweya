@@ -918,3 +918,45 @@ body.light .focusLab .focusLabHeader h1,body.light .focusLab .focusLabHeader p,b
 .focusLab.focusSessionActive>.focusWorldBackdrop{
   background:#090d19!important;
 }
+
+
+/* Final anti-flicker video rendering: keep one continuously visible video layer. */
+.focusLab .focusWorldBackdrop{
+  isolation:isolate!important;
+  contain:paint!important;
+}
+.focusLab .focusWorldBackdrop .focusStudyVideo{
+  display:block!important;
+  visibility:visible!important;
+  opacity:1!important;
+  animation:none!important;
+  transition:none!important;
+  transform:translate3d(0,0,0)!important;
+  filter:none!important;
+  backface-visibility:hidden!important;
+  -webkit-backface-visibility:hidden!important;
+  will-change:auto!important;
+  object-fit:cover!important;
+  object-position:center center!important;
+  z-index:0!important;
+}
+.focusLab.focusSessionActive .focusWorldBackdrop .focusStudyVideo{
+  animation:none!important;
+  transform:translate3d(0,0,0)!important;
+  opacity:1!important;
+  visibility:visible!important;
+}
+.focusLab .focusWorldBackdrop .focusWorldWindow,
+.focusLab .focusWorldBackdrop .focusWorldMoon,
+.focusLab .focusWorldBackdrop .focusWorldSkyline,
+.focusLab .focusWorldBackdrop .focusWorldDesk,
+.focusLab .focusWorldBackdrop .focusWorldAmbient,
+.focusLab .focusWorldBackdrop .focusWorldRain,
+.focusLab .focusWorldBackdrop .focusWorldParticles,
+.focusLab .focusWorldBackdrop .focusWorldStars,
+.focusLab .focusWorldBackdrop .focusWorldBuildings,
+.focusLab .focusWorldBackdrop .focusWorldLamp,
+.focusLab .focusWorldBackdrop .focusWorldBooks{
+  display:none!important;
+  animation:none!important;
+}
