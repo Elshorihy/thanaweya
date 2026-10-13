@@ -8,7 +8,7 @@ async function req(path:string,options:RequestInit={}) {
   for(let attempt=0;attempt<2;attempt++){
     const controller=new AbortController();
     // Email OTP delivery can take several provider retries; don't abort it after 10 seconds.
-    const timeoutMs=(path==='/api/auth/register/start'||path.startsWith('/api/auth/forgot/start'))?50000:20000;
+    const timeoutMs=(path==='/api/auth/register/start'||path.startsWith('/api/auth/forgot/start'))?70000:35000;
     const timeout=window.setTimeout(()=>controller.abort(),timeoutMs);
     try{
       const r=await fetch(path,{...init,signal:controller.signal});
@@ -17,7 +17,11 @@ async function req(path:string,options:RequestInit={}) {
       return data;
     }catch(e){
       lastError=e;
-      if(e instanceof DOMException && e.name==='AbortError') throw new Error('الخادم اتأخر في الرد. جرّب تحديث الصفحة.');
+      if(e instanceof DOMException && e.name==='AbortError'){
+        const method=String(init.method||'GET').toUpperCase();
+        if(attempt===0 && (method==='GET'||method==='PUT')){await new Promise(resolve=>setTimeout(resolve,700));continue;}
+        throw new Error('الخادم اتأخر في الرد. حاول مرة أخرى بعد قليل.');
+      }
       if(attempt===0 && e instanceof TypeError){await new Promise(resolve=>setTimeout(resolve,500));continue;}
       throw e;
     }finally{
