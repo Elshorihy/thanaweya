@@ -2134,7 +2134,7 @@ export default {
             await env.DB.prepare("INSERT INTO user_phones(user_id,phone,updated_at) VALUES(?,?,?) ON CONFLICT(user_id) DO UPDATE SET phone=excluded.phone,updated_at=excluded.updated_at").bind(u.id,phone,Date.now()).run();
           }
           const phoneRow=await env.DB.prepare("SELECT phone FROM user_phones WHERE user_id=?").bind(u.id).first<any>();
-          await env.DB.prepare("DELETE FROM sessions WHERE expires_at<=?").bind(Date.now()).run();
+          // Expired sessions are already rejected by userFrom() via expires_at; avoid a table-wide cleanup on every login.
           const token=await createSession(u.id,env);
           return json({user:{id:u.id,email:u.email,name:u.name,phone:phoneRow?.phone||null,role:u.role||"user",verified:Number(u.verified||0)===1}},200,{"set-cookie":sessionCookie(token)});
         }
