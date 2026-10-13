@@ -902,7 +902,12 @@ function Dashboard(){const due=s.lessons.filter(l=>l.nextReviewAt&&l.nextReviewA
   const todayFocusMinutes=s.sessions.filter(x=>x.date===today()).reduce((sum,x)=>sum+x.duration,0);
   const todayFocusSessions=s.sessions.filter(x=>x.date===today()).length;
   const completedPercent=Math.round(Math.max(0,Math.min(1,1-Math.max(0,focusLeft)/Math.max(1,focusTotalSeconds)))*100);
-  return <section className={'focuspage focusLab '+(running?'runningFocus ':'')}>
+  return <section className={'focuspage focusLab '+(running?'focusSessionActive ':'')}>
+   <div className={'focusWorldScene focusWorldBackdrop scene-'+focusScene} aria-hidden="true">
+    <div className="focusWorldWindow"><div className="focusWorldMoon"/><div className="focusWorldSkyline"><i/><i/><i/><i/><i/><i/><i/></div><div className="focusWorldRain"><i/><i/><i/><i/><i/><i/><i/><i/><i/><i/><i/><i/><i/><i/><i/><i/><i/><i/><i/><i/></div></div>
+    <div className="focusWorldDesk"><div className="focusWorldMonitor"><i/><b/><span/></div><div className="focusWorldBook"/><div className="focusWorldCup"><i/></div><div className="focusWorldLamp"/></div>
+    <div className="focusWorldAmbient"/>
+   </div>
    <div className="focusLabHeader">
     <div><span className="eyebrow">STUDY LAB / 01</span><h1>مساحة التركيز</h1><p>اقفل المشتتات، اختار هدفك، وابدأ جلسة على قد وقتك.</p></div>
     <div className={'focusLabStatus '+(running?'isLive':'')}><i/>{running?'جلسة شغالة الآن':'جاهز لجلسة جديدة'}</div>
@@ -914,11 +919,6 @@ function Dashboard(){const due=s.lessons.filter(l=>l.nextReviewAt&&l.nextReviewA
    </div>
    <div className="focusLabLayout">
     <div className={'focusLabTimerPanel focusWorldPanel scene-'+focusScene}>
-     <div className="focusWorldScene" aria-hidden="true">
-      <div className="focusWorldWindow"><div className="focusWorldMoon"/><div className="focusWorldSkyline"><i/><i/><i/><i/><i/><i/><i/></div><div className="focusWorldRain"><i/><i/><i/><i/><i/><i/><i/><i/><i/><i/><i/><i/><i/><i/><i/><i/><i/><i/><i/><i/></div></div>
-      <div className="focusWorldDesk"><div className="focusWorldMonitor"><i/><b/><span/></div><div className="focusWorldBook"/><div className="focusWorldCup"><i/></div><div className="focusWorldLamp"/></div>
-      <div className="focusWorldAmbient"/>
-     </div>
      <div className="focusWorldPicker" aria-label="اختار أجواء التركيز">
       <button type="button" className={focusScene==='rain'?'active':''} onClick={()=>setFocusScene('rain')}>🌧️ ليلة ممطرة</button>
       <button type="button" className={focusScene==='space'?'active':''} onClick={()=>setFocusScene('space')}>🌌 فضاء هادئ</button>
