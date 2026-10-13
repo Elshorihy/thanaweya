@@ -768,6 +768,51 @@ async function cleanupAdminData(env:Env,chatId:string){
   const b=await env.DB.prepare("DELETE FROM auth_codes WHERE expires_at<=?").bind(now).run();
   await telegramCall(env,"sendMessage",{chat_id:chatId,text:"🧹 تم التنظيف بنجاح\n\n🚪 جلسات محذوفة: "+Number(a.meta?.changes||0)+"\n🔐 أكواد OTP محذوفة: "+Number(b.meta?.changes||0),reply_markup:{inline_keyboard:[[ {text:"🧰 أدوات الإدارة",callback_data:"dash_tools"} ],[ {text:"🎛️ اللوحة",callback_data:"dash_home"} ]] }});
 }
+async function ensureBridgeTools(env:Env){
+  await env.DB.prepare("CREATE TABLE IF NOT EXISTS student_reports (id TEXT PRIMARY KEY,user_id TEXT NOT NULL,category TEXT NOT NULL,message TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'new',admin_reply TEXT NOT NULL DEFAULT '',created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE)").run();
+  await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_student_reports_status_created ON student_reports(status,created_at)").run();
+  await env.DB.prepare("CREATE TABLE IF NOT EXISTS admin_messages (id TEXT PRIMARY KEY,user_id TEXT NOT NULL,sender TEXT NOT NULL,message TEXT NOT NULL,read_at INTEGER,created_at INTEGER NOT NULL,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE)").run();
+  await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_admin_messages_user_created ON admin_messages(user_id,created_at)").run();
+  await env.DB.prepare("CREATE TABLE IF NOT EXISTS site_polls (id TEXT PRIMARY KEY,question TEXT NOT NULL,options_json TEXT NOT NULL,active INTEGER NOT NULL DEFAULT 1,expires_at INTEGER,created_at INTEGER NOT NULL)").run();
+  await env.DB.prepare("CREATE TABLE IF NOT EXISTS site_poll_votes (poll_id TEXT NOT NULL,user_id TEXT NOT NULL,option_index INTEGER NOT NULL,created_at INTEGER NOT NULL,PRIMARY KEY(poll_id,user_id),FOREIGN KEY(poll_id) REFERENCES site_polls(id) ON DELETE CASCADE,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE)").run();
+}
+async function notifyOwnerTelegram(env:Env,text:string,keyboard:any=null){
+  try{await telegramCall(env,"sendMessage",{chat_id:env.TELEGRAM_CHAT_ID,text,...(keyboard?{reply_markup:keyboard}:{})});}catch(e){console.error("Owner Telegram notification failed",e);}
+}
+async function sendTelegramBridgeReports(env:Env,chatId:string){
+  await ensureBridgeTools(env);
+  const rows=await env.DB.prepare("SELECT r.id,r.category,r.message,r.status,r.created_at,u.name,u.email FROM student_reports r JOIN users u ON u.id=r.user_id WHERE r.status IN ('new','in_progress') ORDER BY r.created_at DESC LIMIT 10").all<any>();
+  const items=rows.results||[];
+  if(!items.length){await telegramCall(env,"sendMessage",{chat_id:chatId,text:"🎫 مفيش بلاغات مفتوحة حاليًا.",reply_markup:dashBack()});return;}
+  for(const x of items){
+    const txt="🎫 بلاغ #"+String(x.id).slice(0,8)+"\n👤 "+String(x.name||"طالب")+" — "+String(x.email||"")+"\n📂 "+String(x.category)+"\n📌 الحالة: "+String(x.status==="new"?"جديد":"قيد الحل")+"\n\n"+String(x.message||"").slice(0,1800);
+    await telegramCall(env,"sendMessage",{chat_id:chatId,text:txt,reply_markup:{inline_keyboard:[
+      [{text:"✍️ رد على الطالب",callback_data:"bridge_report_reply:"+x.id}],
+      [{text:"🛠️ قيد الحل",callback_data:"bridge_report_status:in_progress:"+x.id},{text:"✅ تم الحل",callback_data:"bridge_report_status:resolved:"+x.id}]
+    ]}});
+  }
+}
+async function sendTelegramBridgeMessages(env:Env,chatId:string){
+  await ensureBridgeTools(env);
+  const rows=await env.DB.prepare("SELECT m.user_id,m.message,m.created_at,u.name,u.email FROM admin_messages m JOIN users u ON u.id=m.user_id WHERE m.sender='user' AND m.read_at IS NULL ORDER BY m.created_at DESC LIMIT 10").all<any>();
+  const items=rows.results||[];
+  if(!items.length){await telegramCall(env,"sendMessage",{chat_id:chatId,text:"💬 مفيش رسائل جديدة من الطلاب.",reply_markup:dashBack()});return;}
+  for(const x of items){
+    await telegramCall(env,"sendMessage",{chat_id:chatId,text:"💬 رسالة من "+String(x.name||"طالب")+" ("+String(x.email||"")+")\n\n"+String(x.message||"").slice(0,1800),reply_markup:{inline_keyboard:[[{text:"↩️ الرد على الطالب",callback_data:"bridge_message_reply:"+x.user_id}]]}});
+    await env.DB.prepare("UPDATE admin_messages SET read_at=? WHERE user_id=? AND sender='user' AND read_at IS NULL").bind(Date.now(),x.user_id).run();
+  }
+}
+async function sendTelegramBridgeAnalysis(env:Env,chatId:string){
+  await ensureBridgeTools(env); await ensureAdminTools(env);
+  const since=Date.now()-24*60*60*1000;
+  const reports=await env.DB.prepare("SELECT status,COUNT(*) n FROM student_reports WHERE created_at>=? GROUP BY status").bind(since).all<any>();
+  const activity=await env.DB.prepare("SELECT action,target,message,created_at FROM admin_activity WHERE created_at>=? ORDER BY created_at DESC LIMIT 8").bind(since).all<any>();
+  let failed:any=null;try{failed=await env.DB.prepare("SELECT COUNT(*) n FROM whatsapp_messages WHERE status='failed' AND created_at>=?").bind(since).first<any>();}catch{}
+  const reportText=(reports.results||[]).map((x:any)=>"• "+String(x.status)+": "+Number(x.n||0)).join("\n")||"• لا توجد بلاغات جديدة";
+  const activityText=(activity.results||[]).map((x:any)=>"• "+new Date(Number(x.created_at||0)).toLocaleTimeString("ar-EG")+" — "+String(x.action||"")+" "+String(x.target||"")+" "+String(x.message||"").slice(0,120)).join("\n")||"• لا توجد إجراءات إدارية مسجلة خلال 24 ساعة";
+  const txt=["🧠 تحليل تشغيلي لثانوية — آخر 24 ساعة","","🎫 البلاغات:",reportText,"","🧾 آخر إجراءات الإدارة:",activityText,"","📱 رسائل واتساب الفاشلة: "+(failed?Number(failed.n||0):"غير متاح"),"","⚠️ التحليل مبني على السجلات المتاحة فقط؛ لا يدّعي اختبار اتصال كل خدمات البريد والذكاء الاصطناعي. لا يتم تعديل الموقع تلقائيًا."].join("\n");
+  await telegramCall(env,"sendMessage",{chat_id:chatId,text:txt,reply_markup:{inline_keyboard:[[ {text:"🎫 البلاغات المفتوحة",callback_data:"bridge_reports"} ],[ {text:"🩺 التشخيص العميق",callback_data:"dash_diagnostics"} ]] }});
+}
 async function ensureAdminTools(env:Env){
   await env.DB.prepare("CREATE TABLE IF NOT EXISTS admin_settings (key TEXT PRIMARY KEY,value TEXT NOT NULL,updated_at INTEGER NOT NULL)").run();
   await env.DB.prepare("CREATE TABLE IF NOT EXISTS admin_activity (id INTEGER PRIMARY KEY AUTOINCREMENT,chat_id TEXT NOT NULL,action TEXT NOT NULL,target TEXT,message TEXT,created_at INTEGER NOT NULL)").run();
@@ -1226,6 +1271,8 @@ async function createGlobalNotification(env:Env,chatId:string,payload:any){
 }
 function telegramDashboardKeyboard(){
   return {inline_keyboard:[
+    [{text:"🎫 بلاغات الطلاب",callback_data:"bridge_reports"},{text:"💬 رسائل الموقع",callback_data:"bridge_messages"}],
+    [{text:"🧠 تحليل الأعطال",callback_data:"bridge_analysis"},{text:"📊 استطلاع جديد",callback_data:"bridge_poll_create"}],
     [{text:"⚡ مركز القيادة",callback_data:"dash_center"}],
     [{text:"🧪 تشخيص عميق للنظام",callback_data:"dash_diagnostics"}],
     [{text:"📊 الرئيسية والإحصائيات",callback_data:"dash_stats"},{text:"🩺 حالة النظام",callback_data:"dash_system"}],
@@ -1441,6 +1488,50 @@ async function handleTelegramUpdate(env:Env,update:any){
   if(callback){
     if(callback.id) await safeTelegramAnswer(env,callback.id);
     const data=String(callback.data||"");
+    if(data==="bridge_reports"){await clearTelegramAdminMode(env,chatId);await sendTelegramBridgeReports(env,chatId);return;}
+    if(data==="bridge_messages"){await clearTelegramAdminMode(env,chatId);await sendTelegramBridgeMessages(env,chatId);return;}
+    if(data==="bridge_analysis"){await clearTelegramAdminMode(env,chatId);await sendTelegramBridgeAnalysis(env,chatId);return;}
+    if(data.startsWith("bridge_report_status:")){
+      const p=data.split(":"),status=p[1],id=p.slice(2).join(":");
+      if(!["in_progress","resolved"].includes(status))return;
+      await ensureBridgeTools(env);
+      const report=await env.DB.prepare("SELECT user_id FROM student_reports WHERE id=?").bind(id).first<any>();
+      if(!report){await telegramCall(env,"sendMessage",{chat_id:chatId,text:"البلاغ مش موجود."});return;}
+      await env.DB.prepare("UPDATE student_reports SET status=?,updated_at=? WHERE id=?").bind(status,Date.now(),id).run();
+      if(status==="resolved")await env.DB.prepare("INSERT INTO admin_messages(id,user_id,sender,message,created_at) VALUES(?,?,'admin',?,?)").bind(randomHex(10),report.user_id,"تم حل البلاغ رقم "+id.slice(0,8)+". لو المشكلة لسه موجودة ابعتلنا رسالة.",Date.now()).run();
+      await adminLog(env,chatId,"REPORT_STATUS",id,status);
+      await telegramCall(env,"sendMessage",{chat_id:chatId,text:status==="resolved"?"✅ تم إغلاق البلاغ وإبلاغ الطالب.":"🛠️ تم تحويل البلاغ إلى قيد الحل.",reply_markup:{inline_keyboard:[[ {text:"🎫 باقي البلاغات",callback_data:"bridge_reports"} ]] }});
+      return;
+    }
+    if(data.startsWith("bridge_report_reply:")){
+      const id=data.slice("bridge_report_reply:".length); await ensureBridgeTools(env);
+      const report=await env.DB.prepare("SELECT user_id FROM student_reports WHERE id=?").bind(id).first<any>();
+      if(!report){await telegramCall(env,"sendMessage",{chat_id:chatId,text:"البلاغ مش موجود."});return;}
+      await setTelegramAdminMode(env,chatId,"bridge_reply",{userId:String(report.user_id),reportId:id});
+      await telegramCall(env,"sendMessage",{chat_id:chatId,text:"✍️ اكتب الرد اللي هيوصل للطالب داخل الموقع.\nبلاغ: "+id.slice(0,8),reply_markup:{inline_keyboard:[[ {text:"❌ إلغاء",callback_data:"dash_cancel"} ]] }});
+      return;
+    }
+    if(data.startsWith("bridge_message_reply:")){
+      await setTelegramAdminMode(env,chatId,"bridge_reply",{userId:data.slice("bridge_message_reply:".length)});
+      await telegramCall(env,"sendMessage",{chat_id:chatId,text:"💬 اكتب رسالتك للطالب داخل الموقع.",reply_markup:{inline_keyboard:[[ {text:"❌ إلغاء",callback_data:"dash_cancel"} ]] }});
+      return;
+    }
+    if(data==="bridge_poll_create"){
+      await setTelegramAdminMode(env,chatId,"bridge_poll_question",{});
+      await telegramCall(env,"sendMessage",{chat_id:chatId,text:"📊 إنشاء استطلاع\n\nابعت سؤال الاستطلاع.",reply_markup:{inline_keyboard:[[ {text:"❌ إلغاء",callback_data:"dash_cancel"} ]] }});
+      return;
+    }
+    if(data==="bridge_poll_confirm"){
+      const st=await getTelegramAdminState(env,chatId),p=st.payload||{};
+      if(st.mode!=="bridge_poll_confirm"||!p.question||!Array.isArray(p.options)||p.options.length<2){await telegramCall(env,"sendMessage",{chat_id:chatId,text:"الاستطلاع ناقص. ابدأ من جديد."});return;}
+      await ensureBridgeTools(env);
+      const id=randomHex(10),now=Date.now(),hours=Math.min(720,Math.max(1,Number(p.hours)||24));
+      await env.DB.prepare("INSERT INTO site_polls(id,question,options_json,active,expires_at,created_at) VALUES(?,?,?,1,?,?)").bind(id,p.question,JSON.stringify(p.options),now+hours*3600000,now).run();
+      await clearTelegramAdminMode(env,chatId); await adminLog(env,chatId,"CREATE_POLL",id,p.question);
+      await telegramCall(env,"sendMessage",{chat_id:chatId,text:"✅ الاستطلاع اتنشر داخل الموقع.\n📊 "+p.question+"\n⏳ المدة: "+hours+" ساعة",reply_markup:{inline_keyboard:[[ {text:"📊 استطلاع جديد",callback_data:"bridge_poll_create"} ],[ {text:"🎛️ لوحة التحكم",callback_data:"dash_home"} ]] }});
+      return;
+    }
+
     if(data==="dash_center"){await clearTelegramAdminMode(env,chatId);await sendTelegramCommandCenter(env,chatId);return;}
     if(data==="dash_diagnostics"){await clearTelegramAdminMode(env,chatId);await sendTelegramDiagnostics(env,chatId);return;}
     if(data==="admin_nl_maintenance_on"||data==="admin_nl_maintenance_off"){
@@ -1484,6 +1575,33 @@ async function handleTelegramUpdate(env:Env,update:any){
 
     if(data==="global_notification_send"){
       const state=await getTelegramAdminState(env,chatId);
+  if(text && /^(بلاغات|بلاغات الطلاب|تذاكر الدعم)$/.test(text)){await clearTelegramAdminMode(env,chatId);await sendTelegramBridgeReports(env,chatId);return;}
+  if(text && /^(رسائل الموقع|رسائل الطلاب|صندوق الرسائل)$/.test(text)){await clearTelegramAdminMode(env,chatId);await sendTelegramBridgeMessages(env,chatId);return;}
+  if(text && /^(حلل الاعطال|تحليل الاعطال|حلل المشاكل|مساعد الاعطال)$/.test(text)){await clearTelegramAdminMode(env,chatId);await sendTelegramBridgeAnalysis(env,chatId);return;}
+  if(text && /^(استطلاع جديد|اعمل استطلاع|انشاء استطلاع)$/.test(text)){await setTelegramAdminMode(env,chatId,"bridge_poll_question",{});await telegramCall(env,"sendMessage",{chat_id:chatId,text:"📊 ابعت سؤال الاستطلاع.",reply_markup:{inline_keyboard:[[ {text:"❌ إلغاء",callback_data:"dash_cancel"} ]] }});return;}
+  if(state.mode==="bridge_reply" && text){
+    const userId=String(state.payload?.userId||"");
+    if(!userId){await clearTelegramAdminMode(env,chatId);await telegramCall(env,"sendMessage",{chat_id:chatId,text:"تعذر تحديد الطالب."});return;}
+    await ensureBridgeTools(env);
+    await env.DB.prepare("INSERT INTO admin_messages(id,user_id,sender,message,created_at) VALUES(?,?,'admin',?,?)").bind(randomHex(10),userId,text.slice(0,2000),Date.now()).run();
+    if(state.payload?.reportId)await env.DB.prepare("UPDATE student_reports SET admin_reply=?,updated_at=? WHERE id=?").bind(text.slice(0,2000),Date.now(),String(state.payload.reportId)).run();
+    await clearTelegramAdminMode(env,chatId);await adminLog(env,chatId,"REPLY_STUDENT",userId,text.slice(0,300));
+    await telegramCall(env,"sendMessage",{chat_id:chatId,text:"✅ الرد اتسجل وهيظهر للطالب داخل الموقع.",reply_markup:{inline_keyboard:[[ {text:"💬 رسائل جديدة",callback_data:"bridge_messages"} ],[ {text:"🎫 البلاغات",callback_data:"bridge_reports"} ]] }});
+    return;
+  }
+  if(state.mode==="bridge_poll_question" && text){
+    await setTelegramAdminMode(env,chatId,"bridge_poll_options",{question:text.slice(0,240)});
+    await telegramCall(env,"sendMessage",{chat_id:chatId,text:"🗳️ ابعت الاختيارات مفصولة بفاصلة عربية أو إنجليزية.\nمثال: جدول مذاكرة، بنك أسئلة، وضع جماعي",reply_markup:{inline_keyboard:[[ {text:"❌ إلغاء",callback_data:"dash_cancel"} ]] }});
+    return;
+  }
+  if(state.mode==="bridge_poll_options" && text){
+    const options=text.split(/[,،\n]/).map((x:string)=>x.trim()).filter(Boolean).slice(0,8);
+    if(options.length<2){await telegramCall(env,"sendMessage",{chat_id:chatId,text:"لازم اختيارين على الأقل. ابعتهم مفصولين بفواصل."});return;}
+    await setTelegramAdminMode(env,chatId,"bridge_poll_confirm",{...state.payload,options,hours:24});
+    await telegramCall(env,"sendMessage",{chat_id:chatId,text:"📊 معاينة الاستطلاع\n\n"+String(state.payload?.question||"")+"\n\n"+options.map((x:string,i:number)=>(i+1)+". "+x).join("\n")+"\n\nالمدة الافتراضية 24 ساعة.",reply_markup:{inline_keyboard:[[ {text:"🚀 نشر الاستطلاع",callback_data:"bridge_poll_confirm"} ],[ {text:"❌ إلغاء",callback_data:"dash_cancel"} ]] }});
+    return;
+  }
+
       if(state.mode!=="global_notification_confirm"){await sendTelegramGlobalNotifications(env,chatId);return;}
       await safeTelegramAnswer(env,callback.id,"⏳ جاري الإرسال...");
       await createGlobalNotification(env,chatId,state.payload);
@@ -1881,6 +1999,58 @@ export default {
           catch(e) { console.error("D1 health check failed",e); return json({ok:false,db:false,error:"D1 binding/database is not available. Check the DB binding in Cloudflare."},503); }
         }
         await ensureSchema(env);
+        if(url.pathname.startsWith("/api/bridge/")){
+          await ensureBridgeTools(env);
+          const u=await userFrom(request,env);
+          if(!u)return json({error:"يجب تسجيل الدخول"},401);
+          if(url.pathname==="/api/bridge/reports" && request.method==="POST"){
+            const b=await body(request), category=String(b?.category||"مشكلة عامة").trim().slice(0,60), message=String(b?.message||"").trim().slice(0,2000);
+            if(message.length<8)return json({error:"اكتب تفاصيل أوضح للمشكلة (8 أحرف على الأقل)."},400);
+            const id=randomHex(10), now=Date.now();
+            await env.DB.prepare("INSERT INTO student_reports(id,user_id,category,message,status,admin_reply,created_at,updated_at) VALUES(?,?,?,?,'new','',?,?)").bind(id,u.id,category,message,now,now).run();
+            ctx.waitUntil(notifyOwnerTelegram(env,"🎫 بلاغ جديد من ثانوية\n\n👤 "+u.name+" ("+u.email+")\n📂 "+category+"\n🆔 "+id+"\n\n"+message,{inline_keyboard:[[{text:"✍️ رد على الطالب",callback_data:"bridge_report_reply:"+id}],[{text:"🛠️ قيد الحل",callback_data:"bridge_report_status:in_progress:"+id},{text:"✅ تم الحل",callback_data:"bridge_report_status:resolved:"+id}]]}));
+            return json({ok:true,id,message:"وصل بلاغك للإدارة."});
+          }
+          if(url.pathname==="/api/bridge/reports" && request.method==="GET"){
+            const rows=await env.DB.prepare("SELECT id,category,message,status,admin_reply,created_at,updated_at FROM student_reports WHERE user_id=? ORDER BY created_at DESC LIMIT 20").bind(u.id).all<any>();
+            return json({ok:true,reports:rows.results||[]});
+          }
+          if(url.pathname==="/api/bridge/messages" && request.method==="GET"){
+            const rows=await env.DB.prepare("SELECT id,sender,message,created_at,read_at FROM admin_messages WHERE user_id=? ORDER BY created_at ASC LIMIT 100").bind(u.id).all<any>();
+            await env.DB.prepare("UPDATE admin_messages SET read_at=? WHERE user_id=? AND sender='admin' AND read_at IS NULL").bind(Date.now(),u.id).run();
+            return json({ok:true,messages:rows.results||[]});
+          }
+          if(url.pathname==="/api/bridge/messages" && request.method==="POST"){
+            const b=await body(request), message=String(b?.message||"").trim().slice(0,2000);
+            if(message.length<1)return json({error:"اكتب الرسالة الأول."},400);
+            const id=randomHex(10),now=Date.now();
+            await env.DB.prepare("INSERT INTO admin_messages(id,user_id,sender,message,created_at) VALUES(?,?,'user',?,?)").bind(id,u.id,message,now).run();
+            ctx.waitUntil(notifyOwnerTelegram(env,"💬 رسالة جديدة من طالب\n\n👤 "+u.name+" ("+u.email+")\n🆔 user_id: "+u.id+"\n\n"+message,{inline_keyboard:[[{text:"↩️ الرد على الطالب",callback_data:"bridge_message_reply:"+u.id}]]}));
+            return json({ok:true});
+          }
+          if(url.pathname==="/api/bridge/polls" && request.method==="GET"){
+            const rows=await env.DB.prepare("SELECT id,question,options_json,expires_at,created_at FROM site_polls WHERE active=1 AND (expires_at IS NULL OR expires_at>?) ORDER BY created_at DESC LIMIT 10").bind(Date.now()).all<any>();
+            const polls=[];
+            for(const p of rows.results||[]){
+              let options:string[]=[];try{options=JSON.parse(p.options_json)}catch{}
+              const vote=await env.DB.prepare("SELECT option_index FROM site_poll_votes WHERE poll_id=? AND user_id=?").bind(p.id,u.id).first<any>();
+              const counts=await env.DB.prepare("SELECT option_index,COUNT(*) n FROM site_poll_votes WHERE poll_id=? GROUP BY option_index").bind(p.id).all<any>();
+              polls.push({id:p.id,question:p.question,options,voted:vote?Number(vote.option_index):null,counts:Object.fromEntries((counts.results||[]).map((x:any)=>[String(x.option_index),Number(x.n||0)]))});
+            }
+            return json({ok:true,polls});
+          }
+          if(url.pathname==="/api/bridge/polls/vote" && request.method==="POST"){
+            const b=await body(request),pollId=String(b?.pollId||""),optionIndex=Number(b?.optionIndex);
+            const poll=await env.DB.prepare("SELECT id,options_json,active,expires_at FROM site_polls WHERE id=?").bind(pollId).first<any>();
+            if(!poll||!Number(poll.active)||(poll.expires_at&&Number(poll.expires_at)<=Date.now()))return json({error:"الاستطلاع انتهى أو غير متاح."},404);
+            let options:any[]=[];try{options=JSON.parse(poll.options_json)}catch{}
+            if(!Number.isInteger(optionIndex)||optionIndex<0||optionIndex>=options.length)return json({error:"اختيار غير صحيح."},400);
+            try{await env.DB.prepare("INSERT INTO site_poll_votes(poll_id,user_id,option_index,created_at) VALUES(?,?,?,?)").bind(pollId,u.id,optionIndex,Date.now()).run();}
+            catch{return json({error:"صوتك مسجل بالفعل في الاستطلاع ده."},409);}
+            return json({ok:true});
+          }
+          return json({error:"المسار غير موجود"},404);
+        }
         if(url.pathname!=="/api/telegram/webhook" && url.pathname!=="/api/pageview" && url.pathname!=="/api/health" && !url.pathname.startsWith("/api/auth/")){
           try{
             const currentUser=await userFrom(request,env);
