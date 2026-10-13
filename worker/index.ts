@@ -1441,7 +1441,15 @@ async function handleTelegramUpdate(env:Env,update:any){
   if(callback){
     if(callback.id) await safeTelegramAnswer(env,callback.id);
     const data=String(callback.data||"");
-    if(data==="dash_center"){await clearTelegramAdminMode(env,chatId);await sendTelegramCommandCenter(env,chatId);return;}\n    if(data==="dash_diagnostics"){await clearTelegramAdminMode(env,chatId);await sendTelegramDiagnostics(env,chatId);return;}\n    if(data==="admin_nl_maintenance_on"||data==="admin_nl_maintenance_off"){\n      const enabled=data==="admin_nl_maintenance_on";\n      await setAdminSetting(env,"maintenance",enabled?"1":"0");\n      await adminLog(env,chatId,enabled?"ENABLE_MAINTENANCE":"DISABLE_MAINTENANCE","maintenance","natural_language_command");\n      await telegramCall(env,"sendMessage",{chat_id:chatId,text:enabled?"🔴 تم تفعيل وضع الصيانة بأمر مؤكد.":"🟢 تم إيقاف وضع الصيانة والموقع متاح للزوار.",reply_markup:{inline_keyboard:[[ {text:"🧪 تشخيص النظام",callback_data:"dash_diagnostics"} ],[ {text:"🎛️ لوحة التحكم",callback_data:"dash_home"} ]]}});\n      return;\n    }
+    if(data==="dash_center"){await clearTelegramAdminMode(env,chatId);await sendTelegramCommandCenter(env,chatId);return;}
+    if(data==="dash_diagnostics"){await clearTelegramAdminMode(env,chatId);await sendTelegramDiagnostics(env,chatId);return;}
+    if(data==="admin_nl_maintenance_on"||data==="admin_nl_maintenance_off"){
+      const enabled=data==="admin_nl_maintenance_on";
+      await setAdminSetting(env,"maintenance",enabled?"1":"0");
+      await adminLog(env,chatId,enabled?"ENABLE_MAINTENANCE":"DISABLE_MAINTENANCE","maintenance","natural_language_command");
+      await telegramCall(env,"sendMessage",{chat_id:chatId,text:enabled?"🔴 تم تفعيل وضع الصيانة بأمر مؤكد.":"🟢 تم إيقاف وضع الصيانة والموقع متاح للزوار.",reply_markup:{inline_keyboard:[[ {text:"🧪 تشخيص النظام",callback_data:"dash_diagnostics"} ],[ {text:"🎛️ لوحة التحكم",callback_data:"dash_home"} ]]}});
+      return;
+    }
     if(data==="dash_live"){await clearTelegramAdminMode(env,chatId);await sendTelegramLive(env,chatId);return;}
     if(data==="dash_growth"){await clearTelegramAdminMode(env,chatId);await sendTelegramGrowth(env,chatId);return;}
     if(data==="dash_security"){await clearTelegramAdminMode(env,chatId);await sendTelegramSecurity(env,chatId);return;}
@@ -1730,7 +1738,9 @@ async function handleTelegramUpdate(env:Env,update:any){
   if(text==="/start" || text==="/panel" || text==="/dashboard" || text==="/stats" || text==="📊 الإحصائيات الآن"){await sendTelegramDashboard(env,chatId);return;}
   if(text==="/report"){await sendTelegramAdminReport(env,chatId);return;}
   if(text==="/tools"){await sendTelegramAdminTools(env,chatId);return;}
-  if(await handleTelegramNaturalCommand(env,chatId,text)) return;\n\n  if(text.startsWith("/waall ")){
+  if(await handleTelegramNaturalCommand(env,chatId,text)) return;
+
+  if(text.startsWith("/waall ")){
     const messageText=text.slice(7).trim();
     if(!messageText){await telegramCall(env,"sendMessage",{chat_id:chatId,text:"الاستخدام: /waall رسالتك هنا"});return;}
     try{const result=await broadcastWhatsApp(env,messageText);await telegramCall(env,"sendMessage",{chat_id:chatId,text:"📲 تم إرسال حملة واتساب\n\n👥 الإجمالي: "+result.total+"\n✅ نجح: "+result.sent+"\n❌ فشل: "+result.failed});}
