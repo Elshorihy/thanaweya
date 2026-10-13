@@ -636,3 +636,14 @@ body[data-mod-features~="livebg"] .onboard{position:relative!important;z-index:1
 body.light .focusLab .focusLabSetup,body.light .focusLab .focusLabStats>div{background:rgba(10,15,30,.78);color:#f2f4ff}
 body.light .focusLab .focusLabHeader h1,body.light .focusLab .focusLabHeader p,body.light .focusLab .focusLabStats span,body.light .focusLab .focusLabStats strong{color:#f2f4ff}
 @media(max-width:560px){.focusLab.focusSessionActive{min-height:calc(100vh - 90px);margin:0 auto 18px;padding:15px 12px;border-radius:14px}}
+
+/* Scene selector follows the background element itself */
+.focusLab>.focusWorldBackdrop.scene-space .focusWorldWindow{background:radial-gradient(circle at 72% 25%,#fff 0 2px,transparent 3px),radial-gradient(circle at 30% 30%,#a7caff 0 1px,transparent 2px),radial-gradient(circle at 52% 62%,#e6dcff 0 1px,transparent 2px),radial-gradient(ellipse at 50% 120%,#6b4ab4 0%,#1a1d4b 47%,#070c22 100%)}
+.focusLab>.focusWorldBackdrop.scene-space .focusWorldRain{opacity:.12}
+.focusLab>.focusWorldBackdrop.scene-space .focusWorldMoon{width:48px;height:48px;right:24%;background:#b6c8ff;box-shadow:0 0 34px rgba(137,159,255,.75)}
+.focusLab>.focusWorldBackdrop.scene-space .focusWorldSkyline i{background:linear-gradient(180deg,#191c46,#0c1029);opacity:.7}
+.focusLab>.focusWorldBackdrop.scene-space .focusWorldAmbient{background:radial-gradient(ellipse at 50% 40%,rgba(117,92,255,.28),transparent 52%),radial-gradient(ellipse at 10% 80%,rgba(62,192,255,.13),transparent 40%);animation-duration:11s}
+.focusLab>.focusWorldBackdrop.scene-city .focusWorldWindow{background:linear-gradient(180deg,#101631 0%,#282d58 62%,#694b81 100%)}
+.focusLab>.focusWorldBackdrop.scene-city .focusWorldMoon{width:18px;height:18px;right:18%;background:#ffcf9e;box-shadow:0 0 23px rgba(255,190,135,.7)}
+.focusLab>.focusWorldBackdrop.scene-city .focusWorldRain{opacity:.18}
+.focusLab>.focusWorldBackdrop.scene-city .focusWorldSkyline i:after{background:repeating-linear-gradient(180deg,rgba(255,191,115,.82) 0 3px,transparent 3px 10px);opacity:.75}
