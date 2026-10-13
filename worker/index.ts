@@ -2124,7 +2124,7 @@ export default {
               return json({user:{id:owner.id,email:owner.email,name:owner.name,phone:null,role:"owner",verified:true}},200,{"set-cookie":sessionCookie(token)});
             }
           }
-          const b=await body(request), email=cleanEmail(b?.email), password=String(b?.password||""), phone=cleanPhone(b?.phone);
+          const email=loginEmail, password=loginPassword, phone=cleanPhone(loginBody?.phone);
           const u=await env.DB.prepare("SELECT id,email,name,password_hash,password_salt,role,verified FROM users WHERE email=?").bind(email).first<any>();
           if(!u||!(await verifyPassword(password,u.password_salt,u.password_hash))) return json({error:"الإيميل أو كلمة السر غير صحيحة"},401);
           if(phone && !validPhone(phone)) return json({error:"رقم واتساب غير صالح"},400);
