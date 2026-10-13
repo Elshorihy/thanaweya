@@ -647,3 +647,32 @@ body.light .focusLab .focusLabHeader h1,body.light .focusLab .focusLabHeader p,b
 .focusLab>.focusWorldBackdrop.scene-city .focusWorldMoon{width:18px;height:18px;right:18%;background:#ffcf9e;box-shadow:0 0 23px rgba(255,190,135,.7)}
 .focusLab>.focusWorldBackdrop.scene-city .focusWorldRain{opacity:.18}
 .focusLab>.focusWorldBackdrop.scene-city .focusWorldSkyline i:after{background:repeating-linear-gradient(180deg,rgba(255,191,115,.82) 0 3px,transparent 3px 10px);opacity:.75}
+
+
+/* Active Focus World: show only the animated scene, clock and pause control. */
+.focusLab.focusSessionActive{min-height:calc(100vh - 84px);height:calc(100vh - 84px);max-width:none;margin:0;padding:0;overflow:hidden;display:flex;flex-direction:column;justify-content:center;border-radius:0;background:#090d19!important}
+.focusLab.focusSessionActive>.focusWorldBackdrop{position:absolute;inset:0;border-radius:0}
+.focusLab.focusSessionActive>.focusLabHeader,
+.focusLab.focusSessionActive>.focusLabStats,
+.focusLab.focusSessionActive>.focusLabFooter,
+.focusLab.focusSessionActive .focusLabSetup{display:none!important}
+.focusLab.focusSessionActive>.focusLabLayout{position:relative;z-index:1;display:block;width:100%;margin:0 auto;padding:0}
+.focusLab.focusSessionActive .focusLabTimerPanel{width:100%;min-height:calc(100vh - 84px);margin:0;padding:28px 16px;display:flex;justify-content:center;align-items:center;gap:18px;border:0;border-radius:0;background:transparent!important;box-shadow:none;backdrop-filter:none}
+.focusLab.focusSessionActive .focusWorldPicker,
+.focusLab.focusSessionActive .focusBlessing,
+.focusLab.focusSessionActive .focusLabTimerMeta,
+.focusLab.focusSessionActive .focusCoreProgress,
+.focusLab.focusSessionActive .focusCoreLabel,
+.focusLab.focusSessionActive .focusCoreSubject,
+.focusLab.focusSessionActive .focusLabHint,
+.focusLab.focusSessionActive .focusResetButton{display:none!important}
+.focusLab.focusSessionActive .focusCore{width:min(76vw,460px);margin:0}
+.focusLab.focusSessionActive .focusCoreRing{width:min(76vw,460px);height:min(76vw,460px);max-width:460px;max-height:460px}
+.focusLab.focusSessionActive .focusCoreInner strong{font-size:clamp(48px,10vw,92px);font-variant-numeric:tabular-nums}
+.focusLab.focusSessionActive .focusLabControls{display:flex!important;justify-content:center;width:100%;margin-top:4px}
+.focusLab.focusSessionActive .focusStartButton{min-width:190px;min-height:52px;justify-content:center}
+@media(max-width:560px){
+ .focusLab.focusSessionActive{min-height:calc(100dvh - 70px);height:calc(100dvh - 70px);padding:0}
+ .focusLab.focusSessionActive .focusLabTimerPanel{min-height:calc(100dvh - 70px);padding:20px 12px}
+ .focusLab.focusSessionActive .focusCore,.focusLab.focusSessionActive .focusCoreRing{width:min(78vw,340px);height:min(78vw,340px)}
+}
