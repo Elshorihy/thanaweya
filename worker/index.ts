@@ -1096,7 +1096,7 @@ async function sendTelegramDiagnostics(env:Env,chatId:string){
   ]}});
 }
 async function handleTelegramNaturalCommand(env:Env,chatId:string,raw:string):Promise<boolean>{
-  const t=raw.toLowerCase().replace(/[أإآ]/g,"ا").replace(/[ًٌٍَُِّْـ]/g,"").replace(/[؟?!.,،]/g," ").replace(/\\s+/g," ").trim();
+  const t=raw.toLowerCase().replace(/[أإآ]/g,"ا").replace(/[ًٌٍَُِّْـ]/g,"").replace(/[؟?!.,،]/g," ").replace(/\s+/g," ").trim();
   if(/^(افحص النظام|شخص الموقع|اعمل تشخيص|اختبر الخدمات|التشخيص العميق)$/.test(t)){await sendTelegramDiagnostics(env,chatId);return true;}
   if(/^(هات التقرير|تقرير شامل|احصائيات الموقع|كام مستخدم|كم مستخدم)$/.test(t)){await sendTelegramAdminReport(env,chatId);return true;}
   if(/^(هات التنبيهات|افحص التنبيهات|في مشاكل|ايه المشاكل)$/.test(t)){await sendTelegramAlerts(env,chatId);return true;}
@@ -1116,7 +1116,7 @@ async function handleTelegramNaturalCommand(env:Env,chatId:string,raw:string):Pr
     ]}});
     return true;
   }
-  const search=raw.match(/^(?:دور على|ابحث عن|هات حساب|افتح حساب)\\s+(.+)$/i);
+  const search=raw.match(/^(?:دور على|ابحث عن|هات حساب|افتح حساب)\s+(.+)$/i);
   if(search?.[1]?.trim()){await sendTelegramUserSearch(env,chatId,search[1].trim());return true;}
   return false;
 }
