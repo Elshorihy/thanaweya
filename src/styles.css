@@ -676,3 +676,70 @@ body.light .focusLab .focusLabHeader h1,body.light .focusLab .focusLabHeader p,b
  .focusLab.focusSessionActive .focusLabTimerPanel{min-height:calc(100dvh - 70px);padding:20px 12px}
  .focusLab.focusSessionActive .focusCore,.focusLab.focusSessionActive .focusCoreRing{width:min(78vw,340px);height:min(78vw,340px)}
 }
+
+
+/* True immersive fullscreen focus mode + visible ambient motion */
+.focusLab.focusSessionActive{
+ position:fixed!important;inset:0!important;z-index:99999!important;
+ width:100vw!important;height:100vh!important;height:100dvh!important;
+ min-height:100vh!important;max-width:none!important;margin:0!important;padding:0!important;
+ overflow:hidden!important;border-radius:0!important;display:flex!important;
+ align-items:stretch!important;justify-content:center!important;
+ background:#090d19!important;isolation:isolate!important
+}
+.focusLab.focusSessionActive>.focusWorldBackdrop{
+ position:absolute!important;inset:0!important;width:100%!important;height:100%!important;
+ border-radius:0!important;z-index:0!important;overflow:hidden!important
+}
+.focusLab.focusSessionActive>.focusWorldBackdrop .focusWorldWindow{
+ position:absolute;inset:0!important;left:0!important;right:0!important;top:0!important;
+ width:100%!important;height:100%!important;border:0!important;border-radius:0!important;
+ background:linear-gradient(180deg,#10182f 0%,#25284c 44%,#101422 100%)!important;
+ animation:focusAmbient 12s ease-in-out infinite alternate
+}
+.focusLab.focusSessionActive>.focusWorldBackdrop .focusWorldMoon{animation:focusMoonGlow 4s ease-in-out infinite alternate}
+.focusLab.focusSessionActive>.focusWorldBackdrop .focusWorldSkyline{animation:focusCityDrift 24s ease-in-out infinite alternate}
+.focusLab.focusSessionActive>.focusWorldBackdrop .focusWorldRain i{animation:focusRainFall 1.6s linear infinite!important}
+.focusLab.focusSessionActive>.focusWorldBackdrop .focusWorldRain i:nth-child(3n){animation-duration:2.1s!important}
+.focusLab.focusSessionActive>.focusWorldBackdrop .focusWorldRain i:nth-child(3n + 1){animation-duration:1.25s!important}
+.focusLab.focusSessionActive>.focusWorldBackdrop .focusWorldAmbient{animation:focusAmbient 7s ease-in-out infinite alternate!important}
+.focusLab.focusSessionActive>.focusLabHeader,
+.focusLab.focusSessionActive>.focusLabStats,
+.focusLab.focusSessionActive>.focusLabFooter,
+.focusLab.focusSessionActive .focusLabSetup{display:none!important}
+.focusLab.focusSessionActive>.focusLabLayout{
+ position:relative!important;z-index:1!important;display:flex!important;align-items:center!important;
+ justify-content:center!important;width:100%!important;height:100%!important;margin:0!important;padding:0!important
+}
+.focusLab.focusSessionActive .focusLabTimerPanel{
+ position:relative!important;width:100%!important;height:100%!important;min-height:100%!important;
+ margin:0!important;padding:20px 12px!important;display:flex!important;flex-direction:column!important;
+ justify-content:center!important;align-items:center!important;gap:18px!important;
+ border:0!important;border-radius:0!important;background:transparent!important;box-shadow:none!important;
+ backdrop-filter:none!important
+}
+.focusLab.focusSessionActive .focusWorldPicker,
+.focusLab.focusSessionActive .focusBlessing,
+.focusLab.focusSessionActive .focusLabTimerMeta,
+.focusLab.focusSessionActive .focusCoreProgress,
+.focusLab.focusSessionActive .focusCoreLabel,
+.focusLab.focusSessionActive .focusCoreSubject,
+.focusLab.focusSessionActive .focusLabHint,
+.focusLab.focusSessionActive .focusResetButton{display:none!important}
+.focusLab.focusSessionActive .focusCore{width:min(78vw,460px)!important;margin:0!important;flex:0 0 auto}
+.focusLab.focusSessionActive .focusCoreRing{
+ width:min(78vw,460px)!important;height:min(78vw,460px)!important;max-width:460px!important;max-height:460px!important
+}
+.focusLab.focusSessionActive .focusCoreInner strong{font-size:clamp(48px,10vw,92px)!important;font-variant-numeric:tabular-nums}
+.focusLab.focusSessionActive .focusLabControls{display:flex!important;justify-content:center!important;width:100%!important;margin:0!important;flex:0 0 auto}
+.focusLab.focusSessionActive .focusStartButton{min-width:190px!important;min-height:52px!important;justify-content:center!important}
+@keyframes focusCityDrift{from{transform:translateX(-1.2%) scale(1.02)}to{transform:translateX(1.2%) scale(1.06)}}
+@media(max-width:560px){
+ .focusLab.focusSessionActive .focusLabTimerPanel{padding:12px!important;gap:16px!important}
+ .focusLab.focusSessionActive .focusCore,.focusLab.focusSessionActive .focusCoreRing{width:min(82vw,340px)!important;height:min(82vw,340px)!important}
+}
+@media(prefers-reduced-motion:reduce){
+ .focusLab.focusSessionActive>.focusWorldBackdrop .focusWorldRain i,
+ .focusLab.focusSessionActive>.focusWorldBackdrop .focusWorldAmbient,
+ .focusLab.focusSessionActive>.focusWorldBackdrop .focusWorldMoon{animation-duration:4s!important;animation-iteration-count:infinite!important}
+}
