@@ -1485,6 +1485,39 @@ async function handleTelegramUpdate(env:Env,update:any){
   await ensureSchema(env);
   await ensureAdminTools(env);
 
+  // Handle student-support replies on ordinary incoming Telegram messages,
+  // before dashboard/callback routing can consume the message.
+  if(message?.text){
+    const pending=await getTelegramAdminState(env,chatId);
+    if(pending.mode==="bridge_reply"){
+      const replyText=String(message.text).trim().slice(0,2000);
+      const userId=String(pending.payload?.userId||"");
+      if(!userId){
+        await clearTelegramAdminMode(env,chatId);
+        await telegramCall(env,"sendMessage",{chat_id:chatId,text:"❌ تعذر تحديد الطالب. افتح رسالة الطالب واضغط «رد» من جديد."});
+        return;
+      }
+      if(!replyText){
+        await telegramCall(env,"sendMessage",{chat_id:chatId,text:"اكتب نص الرد في رسالة عادية."});
+        return;
+      }
+      await ensureBridgeTools(env);
+      await env.DB.prepare("INSERT INTO admin_messages(id,user_id,sender,message,created_at) VALUES(?,?,'admin',?,?)")
+        .bind(randomHex(10),userId,replyText,Date.now()).run();
+      if(pending.payload?.reportId){
+        await env.DB.prepare("UPDATE student_reports SET admin_reply=?,updated_at=? WHERE id=?")
+          .bind(replyText,Date.now(),String(pending.payload.reportId)).run();
+      }
+      await clearTelegramAdminMode(env,chatId);
+      await adminLog(env,chatId,"REPLY_STUDENT",userId,replyText.slice(0,300));
+      await telegramCall(env,"sendMessage",{chat_id:chatId,text:"✅ الرد اتسجل وهيظهر للطالب داخل الموقع.",reply_markup:{inline_keyboard:[
+        [{text:"💬 رسائل جديدة",callback_data:"bridge_messages"}],
+        [{text:"🎫 البلاغات",callback_data:"bridge_reports"}]
+      ]}});
+      return;
+    }
+  }
+
   if(callback){
     if(callback.id) await safeTelegramAnswer(env,callback.id);
     const data=String(callback.data||"");
