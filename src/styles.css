@@ -605,3 +605,34 @@ body[data-mod-features~="livebg"] .onboard{position:relative!important;z-index:1
 @keyframes focusAmbient{from{filter:hue-rotate(-7deg);opacity:.75}to{filter:hue-rotate(9deg);opacity:1}}
 @media(max-width:560px){.focusWorldWindow{left:5%;right:5%;top:9%;height:44%}.focusWorldPicker{gap:4px}.focusWorldPicker button{font-size:9px;padding:6px 7px}.focusWorldMonitor{width:42%;height:65%}.focusWorldBook{left:12%}.focusWorldCup{right:12%}}
 @media(prefers-reduced-motion:reduce){.focusWorldPanel *{animation-duration:.01ms!important;animation-iteration-count:1!important;scroll-behavior:auto!important}}
+
+/* Focus World correction: animated room covers the whole workspace and setup stays visible while running */
+.focusLab{position:relative;isolation:isolate;overflow:hidden;background:#090d19!important}
+.focusLab>.focusWorldBackdrop{position:absolute;inset:0;z-index:0;overflow:hidden;pointer-events:none;border-radius:inherit;background:linear-gradient(180deg,#111a36 0%,#20244a 35%,#111321 70%,#090d18 100%)}
+.focusLab>.focusWorldBackdrop:after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(5,9,20,.34),rgba(5,9,20,.5) 40%,rgba(4,7,15,.88))}
+.focusLab>.focusLabHeader,.focusLab>.focusLabStats,.focusLab>.focusLabLayout,.focusLab>.focusLabFooter{position:relative;z-index:1}
+.focusLab .focusLabTimerPanel{background:rgba(7,11,24,.32)!important;backdrop-filter:blur(2px);border-color:rgba(126,133,255,.3)}
+.focusLab .focusLabSetup{background:rgba(9,14,29,.76);backdrop-filter:blur(12px);border-color:rgba(153,165,255,.25)}
+.focusLab .focusLabStats>div{background:rgba(9,14,29,.66);backdrop-filter:blur(10px);border-color:rgba(153,165,255,.2)}
+.focusLab .focusLabHeader{border-color:rgba(153,165,255,.22)}
+.focusLab .focusWorldPicker{z-index:2}
+.focusLab .focusWorldPicker button{background:rgba(7,12,28,.82)}
+.focusLab.scene-space>.focusWorldBackdrop .focusWorldWindow{background:radial-gradient(circle at 72% 25%,#fff 0 2px,transparent 3px),radial-gradient(circle at 30% 30%,#a7caff 0 1px,transparent 2px),radial-gradient(circle at 52% 62%,#e6dcff 0 1px,transparent 2px),radial-gradient(ellipse at 50% 120%,#6b4ab4 0%,#1a1d4b 47%,#070c22 100%)}
+.focusLab.scene-space>.focusWorldBackdrop .focusWorldRain{opacity:.12}
+.focusLab.scene-space>.focusWorldBackdrop .focusWorldMoon{width:48px;height:48px;right:24%;background:#b6c8ff;box-shadow:0 0 34px rgba(137,159,255,.75)}
+.focusLab.scene-space>.focusWorldBackdrop .focusWorldSkyline i{background:linear-gradient(180deg,#191c46,#0c1029);opacity:.7}
+.focusLab.scene-space>.focusWorldBackdrop .focusWorldAmbient{background:radial-gradient(ellipse at 50% 40%,rgba(117,92,255,.28),transparent 52%),radial-gradient(ellipse at 10% 80%,rgba(62,192,255,.13),transparent 40%);animation-duration:11s}
+.focusLab.scene-city>.focusWorldBackdrop .focusWorldWindow{background:linear-gradient(180deg,#101631 0%,#282d58 62%,#694b81 100%)}
+.focusLab.scene-city>.focusWorldBackdrop .focusWorldMoon{width:18px;height:18px;right:18%;background:#ffcf9e;box-shadow:0 0 23px rgba(255,190,135,.7)}
+.focusLab.scene-city>.focusWorldBackdrop .focusWorldRain{opacity:.18}
+.focusLab.scene-city>.focusWorldBackdrop .focusWorldSkyline i:after{background:repeating-linear-gradient(180deg,rgba(255,191,115,.82) 0 3px,transparent 3px 10px);opacity:.75}
+.focusLab.focusSessionActive{min-height:calc(100vh - 90px);max-width:1240px;margin:8px auto 28px;padding:clamp(18px,3vw,38px);display:block;align-items:initial;justify-content:initial;border-radius:20px;color:var(--text);background:#090d19!important}
+.focusLab.focusSessionActive:before{content:none}
+.focusLab.focusSessionActive .focusLabSetup{display:block;visibility:visible;opacity:1}
+.focusLab.focusSessionActive .focusLabTimerPanel{border-color:rgba(126,133,255,.42)}
+.focusLab.focusSessionActive .focusLabHeader h1{font-size:clamp(28px,4vw,44px);line-height:1.15;margin:8px 0 7px;text-shadow:none}
+.focusLab.focusSessionActive .focusLabControls,.focusLab.focusSessionActive .focusLabStats{display:grid}
+.focusLab.focusSessionActive .focusLabFooter{display:flex}
+body.light .focusLab .focusLabSetup,body.light .focusLab .focusLabStats>div{background:rgba(10,15,30,.78);color:#f2f4ff}
+body.light .focusLab .focusLabHeader h1,body.light .focusLab .focusLabHeader p,body.light .focusLab .focusLabStats span,body.light .focusLab .focusLabStats strong{color:#f2f4ff}
+@media(max-width:560px){.focusLab.focusSessionActive{min-height:calc(100vh - 90px);margin:0 auto 18px;padding:15px 12px;border-radius:14px}}
