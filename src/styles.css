@@ -743,3 +743,47 @@ body.light .focusLab .focusLabHeader h1,body.light .focusLab .focusLabHeader p,b
  .focusLab.focusSessionActive>.focusWorldBackdrop .focusWorldAmbient,
  .focusLab.focusSessionActive>.focusWorldBackdrop .focusWorldMoon{animation-duration:4s!important;animation-iteration-count:infinite!important}
 }
+
+
+/* Focus Lab: real late-night study photo with subtle cinematic motion */
+.focusLab>.focusWorldBackdrop{
+  background:#080b15!important;
+}
+.focusLab>.focusWorldBackdrop:before{
+  content:"";
+  position:absolute;
+  inset:-5%;
+  z-index:0;
+  background-image:url("https://images2.thanhnien.vn/528068263637045248/2025/9/22/lam-viec-khuya-2-17585359126851540935.png");
+  background-size:cover;
+  background-position:center 48%;
+  background-repeat:no-repeat;
+  opacity:.96;
+  transform:scale(1.02);
+  animation:focusPhotoDrift 34s ease-in-out infinite alternate;
+  will-change:transform;
+}
+.focusLab>.focusWorldBackdrop:after{
+  z-index:1;
+  background:linear-gradient(90deg,rgba(3,7,15,.64),rgba(3,7,15,.30) 48%,rgba(3,7,15,.62)),linear-gradient(180deg,rgba(4,7,15,.28),rgba(4,7,15,.58));
+}
+.focusLab>.focusWorldBackdrop .focusWorldWindow,
+.focusLab>.focusWorldBackdrop .focusWorldDesk{
+  display:none!important;
+}
+.focusLab>.focusWorldBackdrop .focusWorldAmbient{
+  z-index:2;
+  background:radial-gradient(ellipse at 50% 85%,rgba(111,91,255,.15),transparent 48%);
+  animation:focusAmbient 9s ease-in-out infinite alternate;
+}
+.focusLab>.focusLabHeader,.focusLab>.focusLabStats,.focusLab>.focusLabLayout,.focusLab>.focusLabFooter{
+  z-index:3;
+}
+@keyframes focusPhotoDrift{
+  from{transform:scale(1.02) translate3d(0,0,0)}
+  to{transform:scale(1.13) translate3d(-1.2%,.6%,0)}
+}
+@media(prefers-reduced-motion:reduce){
+  .focusLab>.focusWorldBackdrop:before{animation:none;transform:scale(1.04)}
+  .focusLab>.focusWorldBackdrop .focusWorldAmbient{animation:none}
+}
