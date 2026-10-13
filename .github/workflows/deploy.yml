@@ -75,6 +75,13 @@ jobs:
           smoke="$(curl -fsSL --retry 5 --retry-delay 2 --max-time 20 -X GET "$BASE/api/auth/forgot/start?email=__deploy_smoke_test__%40example.invalid")"
           echo "Auth smoke: $smoke"
           node -e 'const x=JSON.parse(process.argv[1]); if(x.ok!==true) process.exit(1)' "$smoke"
+          login_body="$(mktemp)"
+          login_status="$(curl -sS -o "$login_body" -w '%{http_code}' --max-time 15 -H 'content-type: application/json' -X POST "$BASE/api/auth/login" --data '{"email":"__deploy_smoke_test__@example.invalid","password":"invalid-test-password"}')"
+          echo "Login endpoint HTTP status: $login_status"
+          cat "$login_body"
+          echo
+          rm -f "$login_body"
+          test "$login_status" = "401"
 
       - name: Refresh Telegram webhook
         env:
