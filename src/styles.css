@@ -831,3 +831,62 @@ body.light .focusLab .focusLabHeader h1,body.light .focusLab .focusLabHeader p,b
   background:linear-gradient(180deg,rgba(3,6,13,.35),rgba(3,6,13,.48) 48%,rgba(4,7,15,.72))!important;
   z-index:2!important;
 }
+
+
+/* FINAL FOCUS BACKGROUND FIX: moving video is the only background art. */
+.focusLab,
+.focusLab.focusSessionActive{
+  background:transparent!important;
+  background-image:none!important;
+}
+.focusLab>.focusWorldBackdrop,
+.focusLab.focusSessionActive>.focusWorldBackdrop{
+  position:absolute!important;
+  inset:0!important;
+  z-index:0!important;
+  overflow:hidden!important;
+  background:transparent!important;
+  background-image:none!important;
+}
+.focusLab>.focusWorldBackdrop .focusStudyVideo,
+.focusLab.focusSessionActive>.focusWorldBackdrop .focusStudyVideo{
+  display:block!important;
+  position:absolute!important;
+  inset:0!important;
+  z-index:0!important;
+  width:100%!important;
+  height:100%!important;
+  object-fit:cover!important;
+  opacity:1!important;
+  background:transparent!important;
+  animation:focusStudyVideoDrift 48s ease-in-out infinite alternate!important;
+}
+/* Remove the static CSS-drawn room/city/space layers that were covering the video. */
+.focusLab>.focusWorldBackdrop .focusWorldWindow,
+.focusLab>.focusWorldBackdrop .focusWorldMoon,
+.focusLab>.focusWorldBackdrop .focusWorldSkyline,
+.focusLab>.focusWorldBackdrop .focusWorldDesk,
+.focusLab>.focusWorldBackdrop .focusWorldAmbient,
+.focusLab>.focusWorldBackdrop .focusWorldRain,
+.focusLab>.focusWorldBackdrop .focusWorldParticles,
+.focusLab>.focusWorldBackdrop .focusWorldStars,
+.focusLab>.focusWorldBackdrop .focusWorldBuildings,
+.focusLab>.focusWorldBackdrop .focusWorldLamp,
+.focusLab>.focusWorldBackdrop .focusWorldBooks{
+  display:none!important;
+}
+.focusLab>.focusWorldBackdrop:before{
+  content:none!important;
+  display:none!important;
+  background:none!important;
+  animation:none!important;
+}
+.focusLab>.focusWorldBackdrop:after{
+  content:""!important;
+  display:block!important;
+  position:absolute!important;
+  inset:0!important;
+  z-index:1!important;
+  pointer-events:none!important;
+  background:linear-gradient(180deg,rgba(3,6,13,.25),rgba(3,6,13,.38) 48%,rgba(4,7,15,.62))!important;
+}
