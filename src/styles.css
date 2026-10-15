@@ -960,3 +960,21 @@ body.light .focusLab .focusLabHeader h1,body.light .focusLab .focusLabHeader p,b
   display:none!important;
   animation:none!important;
 }
+
+
+/* Grouped navigation: keep Focus as its own section. */
+.app nav.groupedNav{display:grid;align-content:start;gap:8px;overflow:auto;scrollbar-width:thin;scrollbar-color:var(--border) transparent;padding:0 2px 10px}
+.app .navGroup{display:grid;gap:4px;padding-top:9px;margin-top:3px;border-top:1px solid rgba(148,163,184,.13)}
+.app .navGroup-home{padding-top:0;margin-top:0;border-top:0}
+.app .navGroupTitle{padding:2px 12px 4px;color:var(--muted);font-size:10px;font-weight:800;letter-spacing:.03em;opacity:.9}
+.app .navGroup-focus{padding-bottom:7px;border-bottom:1px solid rgba(139,124,255,.18)}
+.app .navGroup-focus .navGroupTitle{color:var(--accent2)}
+.mobileNavGroups{display:grid;gap:18px;max-height:min(68vh,720px);overflow:auto;padding:2px 1px 8px}
+.mobileNavGroup{display:grid;gap:8px}
+.mobileNavGroup h3{margin:0;padding:0 3px 7px;border-bottom:1px solid var(--border);font-size:13px;color:var(--muted)}
+.mobileNavGroup-focus h3{color:var(--accent2)}
+.mobileNavGrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.mobileNavGrid button{min-width:0;justify-content:flex-start;text-align:right;background:var(--surface2);border:1px solid var(--border);padding:12px 10px;font-size:12px;line-height:1.45}
+.mobileNavGrid button span{overflow-wrap:anywhere}
+.mobileNavGrid button.active{background:linear-gradient(100deg,rgba(139,124,255,.2),rgba(54,207,201,.07));border-color:rgba(139,124,255,.4)}
+@media(max-width:520px){.mobileNavGrid{grid-template-columns:repeat(2,minmax(0,1fr))}.mobileNavGroups{gap:15px}}
