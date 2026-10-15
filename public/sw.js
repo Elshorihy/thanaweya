@@ -1,4 +1,4 @@
-const CACHE='thanaweya-shell-v22-nav-fix';
+const CACHE='thanaweya-shell-v21-logo-new';
 const CORE=['/','/manifest.webmanifest','/icons/thanaweya-palestine-192.jpg?v=20261007-logo-new','/sw.js'];
 
 self.addEventListener('install',event=>{
