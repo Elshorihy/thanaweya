@@ -1006,15 +1006,3 @@ body.light .focusLab .focusLabHeader h1,body.light .focusLab .focusLabHeader p,b
   width:100%;
   min-width:0;
 }
-
-
-/* Responsive grouped navigation: show labels on tablet widths too. */
-@media (min-width:561px) and (max-width:820px){
-  .app>aside{width:248px!important;padding:18px 12px!important}
-  .appMain{margin-right:248px!important;width:calc(100% - 248px)!important}
-  .app nav.groupedNav button{display:flex!important;justify-content:flex-start!important;font-size:13px!important;padding:10px 12px!important;min-height:42px!important}
-  .app nav.groupedNav button span{display:inline!important;visibility:visible!important;opacity:1!important;font-size:13px!important}
-  .app nav.groupedNav .navGroupTitle{font-size:10px!important}
-  .brand{justify-content:flex-start!important}
-  .brand>div:not(.brandLogo){display:block!important}
-}
