@@ -978,3 +978,31 @@ body.light .focusLab .focusLabHeader h1,body.light .focusLab .focusLabHeader p,b
 .mobileNavGrid button span{overflow-wrap:anywhere}
 .mobileNavGrid button.active{background:linear-gradient(100deg,rgba(139,124,255,.2),rgba(54,207,201,.07));border-color:rgba(139,124,255,.4)}
 @media(max-width:520px){.mobileNavGrid{grid-template-columns:repeat(2,minmax(0,1fr))}.mobileNavGroups{gap:15px}}
+
+
+/* FIX: grouped navigation inherited the old icon-only nav rules. */
+.app nav.groupedNav button{
+  width:100%!important;
+  min-width:0!important;
+  justify-content:flex-start!important;
+  text-align:right!important;
+  font-size:13px!important;
+  gap:10px!important;
+  padding:10px 12px!important;
+  min-height:42px!important;
+}
+.app nav.groupedNav button span{
+  display:inline!important;
+  visibility:visible!important;
+  opacity:1!important;
+  font-size:13px!important;
+  line-height:1.45!important;
+  white-space:normal!important;
+}
+.app nav.groupedNav button svg{
+  flex:0 0 18px!important;
+}
+.app nav.groupedNav .navGroup{
+  width:100%;
+  min-width:0;
+}
