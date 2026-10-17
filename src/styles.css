@@ -1022,3 +1022,136 @@ body[data-layout="classic"] .hero h1,body[data-layout="classic"] .title h1{lette
 body[data-layout="classic"] .stat:after{display:none!important}
 body[data-layout="classic"] .search,body[data-layout="classic"] input,body[data-layout="classic"] select,body[data-layout="classic"] textarea{border-radius:8px!important}
 .layoutChoice{display:grid;gap:10px}.layoutChoice .choices button{min-height:42px}.dividerLine{height:1px;background:var(--border);margin:14px 0}
+
+
+/* Full classic layout: convert the fixed side rail into a top navigation area. */
+body[data-layout="classic"] .app{
+  display:flex!important;
+  flex-direction:column!important;
+  min-height:100vh;
+  direction:inherit;
+}
+body[data-layout="classic"] .app>aside{
+  position:relative!important;
+  inset:auto!important;
+  width:100%!important;
+  height:auto!important;
+  min-height:0!important;
+  padding:12px clamp(12px,2.5vw,30px)!important;
+  display:grid!important;
+  grid-template-columns:minmax(180px,240px) minmax(0,1fr)!important;
+  grid-template-rows:auto auto!important;
+  align-items:center!important;
+  gap:10px 20px!important;
+  border:0!important;
+  border-bottom:1px solid var(--border)!important;
+  border-radius:0!important;
+  background:var(--surface)!important;
+  box-shadow:0 3px 14px rgba(0,0,0,.08)!important;
+  z-index:20!important;
+}
+body[data-layout="classic"] .app>aside .brand{
+  grid-column:1;
+  grid-row:1;
+  margin:0!important;
+  padding:0!important;
+  border:0!important;
+  min-width:0;
+}
+body[data-layout="classic"] .app>aside nav{
+  grid-column:1 / -1;
+  grid-row:2;
+  display:flex!important;
+  flex-direction:row!important;
+  flex-wrap:wrap!important;
+  align-items:center!important;
+  gap:6px!important;
+  overflow:visible!important;
+  max-height:none!important;
+  padding:4px 0 0!important;
+}
+body[data-layout="classic"] .app>aside nav button{
+  width:auto!important;
+  min-width:0!important;
+  min-height:36px!important;
+  flex:0 0 auto!important;
+  justify-content:center!important;
+  text-align:center!important;
+  padding:8px 11px!important;
+  border-radius:8px!important;
+  font-size:12px!important;
+  white-space:nowrap;
+  box-shadow:none!important;
+}
+body[data-layout="classic"] .app>aside nav button span{
+  display:inline!important;
+  visibility:visible!important;
+  opacity:1!important;
+  font-size:12px!important;
+  white-space:nowrap;
+}
+body[data-layout="classic"] .app>aside nav button.active{
+  background:rgba(100,126,232,.15)!important;
+  border-color:rgba(100,126,232,.32)!important;
+  box-shadow:inset 0 -2px 0 var(--accent)!important;
+}
+body[data-layout="classic"] .app>aside .rescue{
+  grid-column:2;
+  grid-row:1;
+  justify-self:end;
+  margin:0!important;
+  padding:8px 11px!important;
+}
+body[data-layout="classic"] .appMain{
+  margin:0!important;
+  width:100%!important;
+  min-height:calc(100vh - 130px);
+  padding:22px clamp(14px,3vw,42px) 32px!important;
+}
+body[data-layout="classic"] .appMain>header{
+  position:sticky;
+  top:8px;
+  z-index:10;
+  border-radius:10px!important;
+  margin-bottom:22px!important;
+}
+body[data-layout="classic"] .appMain>header .search{max-width:none}
+body[data-layout="classic"] .card,
+body[data-layout="classic"] .stat,
+body[data-layout="classic"] .daycard{
+  border-radius:10px!important;
+  box-shadow:0 2px 8px rgba(0,0,0,.06)!important;
+}
+body[data-layout="classic"] .appMain .grid,
+body[data-layout="classic"] .appMain .dashboardGrid{
+  gap:14px;
+}
+@media(max-width:760px){
+  body[data-layout="classic"] .app>aside{
+    grid-template-columns:minmax(0,1fr) auto!important;
+    gap:10px!important;
+    padding:10px 12px!important;
+  }
+  body[data-layout="classic"] .app>aside .brand{grid-column:1;grid-row:1}
+  body[data-layout="classic"] .app>aside .brandLogo{width:38px;height:38px;flex-basis:38px}
+  body[data-layout="classic"] .app>aside .brand small{font-size:9px}
+  body[data-layout="classic"] .app>aside .rescue{grid-column:2;grid-row:1;font-size:11px}
+  body[data-layout="classic"] .app>aside nav{
+    grid-column:1 / -1;
+    grid-row:2;
+    flex-wrap:nowrap!important;
+    overflow-x:auto!important;
+    overflow-y:hidden!important;
+    white-space:nowrap;
+    padding:4px 0 7px!important;
+    scrollbar-width:thin;
+  }
+  body[data-layout="classic"] .app>aside nav button{flex:0 0 auto!important}
+  body[data-layout="classic"] .appMain{padding:12px 10px 24px!important}
+  body[data-layout="classic"] .appMain>header{position:relative;top:auto;flex-wrap:wrap}
+}
+@media(max-width:420px){
+  body[data-layout="classic"] .app>aside .brand small{display:none}
+  body[data-layout="classic"] .app>aside .rescue{padding:7px 8px!important}
+  body[data-layout="classic"] .appMain>header .accountChip{max-width:110px;overflow:hidden}
+}
