@@ -1006,3 +1006,19 @@ body.light .focusLab .focusLabHeader h1,body.light .focusLab .focusLabHeader p,b
   width:100%;
   min-width:0;
 }
+
+
+/* Optional classic appearance: visual-only overrides; app behavior and navigation stay unchanged. */
+body[data-layout="classic"]{--radius:10px;--surface:#151b29;--surface2:#1b2433;--surface3:#222d3f;--border:#303b4d;--border2:#455267;--accent:#647ee8;--accent2:#5fb8b0}
+body[data-layout="classic"]{background:var(--bg)!important}
+body[data-layout="classic"] .app>aside{background:var(--surface)!important;backdrop-filter:none!important;box-shadow:none!important;border-radius:0!important}
+body[data-layout="classic"] .appMain>header{background:var(--surface)!important;box-shadow:none!important;border-radius:10px!important}
+body[data-layout="classic"] .card,body[data-layout="classic"] .stat,body[data-layout="classic"] .daycard{background:var(--surface)!important;box-shadow:none!important;border-radius:10px!important}
+body[data-layout="classic"] .app nav button{border-radius:8px!important}
+body[data-layout="classic"] .app nav button.active{background:rgba(100,126,232,.16)!important;box-shadow:inset -3px 0 0 var(--accent)!important}
+body[data-layout="classic"] .primary{background:var(--accent)!important;box-shadow:none!important;border-radius:8px!important}
+body[data-layout="classic"] .iconbox{border-radius:10px!important;background:rgba(100,126,232,.12)!important;color:var(--accent)!important}
+body[data-layout="classic"] .hero h1,body[data-layout="classic"] .title h1{letter-spacing:0!important}
+body[data-layout="classic"] .stat:after{display:none!important}
+body[data-layout="classic"] .search,body[data-layout="classic"] input,body[data-layout="classic"] select,body[data-layout="classic"] textarea{border-radius:8px!important}
+.layoutChoice{display:grid;gap:10px}.layoutChoice .choices button{min-height:42px}.dividerLine{height:1px;background:var(--border);margin:14px 0}
