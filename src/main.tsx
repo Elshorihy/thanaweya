@@ -135,7 +135,7 @@ async function createImagePdf(files:FileList|File[]|null,title:string){
  const {jsPDF}=await import('jspdf');
  const pdf=new jsPDF({orientation:'portrait',unit:'mm',format:'a4',compress:true});
  const pageW=210,pageH=297,margin=12,headerH=34;
- const toDataUrl=(blob:Blob)=>new Promise<string>((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>typeof reader.result==='string'?resolve(reader.result):reject(new Error('تعذر قراءة الصورة.'));reader.onerror=()=>reject(new Error('تعذر قراءة الصورة.'));reader.readAsDataURL(blob)});
+ const toDataUrl=async(blob:Blob)=>{try{const bytes=new Uint8Array(await blob.arrayBuffer());let binary='';const chunkSize=0x8000;for(let offset=0;offset<bytes.length;offset+=chunkSize)binary+=String.fromCharCode(...bytes.subarray(offset,Math.min(offset+chunkSize,bytes.length)));const mime=blob.type&&blob.type.startsWith('image/')?blob.type:'image/jpeg';return 'data:'+mime+';base64,'+btoa(binary)}catch{throw new Error('تعذرت قراءة الصورة من الجهاز. جرّب حفظها بصيغة JPG أو PNG ثم اخترها مرة أخرى.')}};
  const imageSize=(src:string)=>new Promise<{width:number;height:number}>((resolve,reject)=>{const img=new Image();img.onload=()=>resolve({width:img.naturalWidth,height:img.naturalHeight});img.onerror=()=>reject(new Error('إحدى الصور غير صالحة.'));img.src=src});
  let logoData:string|undefined;
  try{const response=await fetch('/icons/thanaweya-palestine-192.jpg');if(response.ok)logoData=await toDataUrl(await response.blob())}catch{}
