@@ -122,7 +122,7 @@ async function createImagePdf(files:FileList|File[]|null,title:string){
  if(imgs.length>40)throw new Error('الحد الأقصى 40 صورة في الملف الواحد.');
  const {jsPDF}=await import('jspdf');
  const pdf=new jsPDF({orientation:'portrait',unit:'mm',format:'a4',compress:true});
- const pageW=210,pageH=297,margin=12,headerH=24;
+ const pageW=210,pageH=297,margin=12,headerH=34;
  const toDataUrl=(blob:Blob)=>new Promise<string>((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>typeof reader.result==='string'?resolve(reader.result):reject(new Error('تعذر قراءة الصورة.'));reader.onerror=()=>reject(new Error('تعذر قراءة الصورة.'));reader.readAsDataURL(blob)});
  const imageSize=(src:string)=>new Promise<{width:number;height:number}>((resolve,reject)=>{const img=new Image();img.onload=()=>resolve({width:img.naturalWidth,height:img.naturalHeight});img.onerror=()=>reject(new Error('إحدى الصور غير صالحة.'));img.src=src});
  let logoData:string|undefined;
@@ -137,12 +137,16 @@ async function createImagePdf(files:FileList|File[]|null,title:string){
   ctx.fillStyle='#ffffff';ctx.fillRect(0,0,canvas.width,canvas.height);ctx.drawImage(image,0,0);
   const normalized=canvas.toDataURL('image/jpeg',0.92);
   if(i>0)pdf.addPage();
-  if(logoData)pdf.addImage(logoData,'JPEG',pageW-margin-13,margin,13,13);
-  pdf.setFont('helvetica','bold');pdf.setFontSize(15);pdf.setTextColor(23,32,51);
-  pdf.text('Thanaweya | '+safe, pageW/2, margin+8,{align:'center',maxWidth:pageW-2*margin-18});
-  pdf.setDrawColor(39,52,75);pdf.setLineWidth(0.6);pdf.line(margin,margin+17,pageW-margin,margin+17);
+  const headerCanvas=document.createElement('canvas');headerCanvas.width=1200;headerCanvas.height=150;
+  const headerCtx=headerCanvas.getContext('2d');if(!headerCtx)throw new Error('تعذر تجهيز عنوان الملف.');
+  headerCtx.fillStyle='#ffffff';headerCtx.fillRect(0,0,1200,150);
+  if(logoData){const logoImg=new Image();logoImg.src=logoData;await new Promise<void>((resolve,reject)=>{logoImg.onload=()=>resolve();logoImg.onerror=()=>reject(new Error('تعذر تحميل شعار ثانوية.'))});headerCtx.drawImage(logoImg,1060,18,105,105)}
+  headerCtx.fillStyle='#172033';headerCtx.font='bold 44px Arial,sans-serif';headerCtx.textAlign='center';headerCtx.direction='rtl';
+  headerCtx.fillText('ثانوية | '+safe,600,72,logoData?990:1120);
+  headerCtx.strokeStyle='#27344b';headerCtx.lineWidth=4;headerCtx.beginPath();headerCtx.moveTo(20,125);headerCtx.lineTo(1180,125);headerCtx.stroke();
+  pdf.addImage(headerCanvas.toDataURL('image/jpeg',0.94),'JPEG',margin,margin,pageW-2*margin,26,'thanaweya-header-'+i,'FAST');
   pdf.setFont('helvetica','normal');pdf.setFontSize(9);pdf.setTextColor(89,101,121);
-  pdf.text('Page '+(i+1)+' / '+imgs.length,pageW/2,margin+22,{align:'center'});
+  pdf.text('Page '+(i+1)+' / '+imgs.length,pageW/2,margin+31,{align:'center'});
   const availW=pageW-2*margin,availH=pageH-2*margin-headerH;
   const scale=Math.min(availW/size.width,availH/size.height);
   const w=size.width*scale,h=size.height*scale;
