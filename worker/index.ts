@@ -48,6 +48,12 @@ async function ensureSchema(env:Env){
     await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_ai_chats_user_updated ON ai_chats(user_id,updated_at)").run();
     await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_ai_messages_chat_created ON ai_messages(chat_id,created_at)").run();
     await env.DB.prepare("CREATE TABLE IF NOT EXISTS user_data (user_id TEXT PRIMARY KEY,data_json TEXT NOT NULL DEFAULT '{}',updated_at INTEGER NOT NULL,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE)").run();
+    await env.DB.prepare("CREATE TABLE IF NOT EXISTS parent_link_requests (id TEXT PRIMARY KEY,parent_id TEXT NOT NULL,student_id TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'pending',created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL,FOREIGN KEY(parent_id) REFERENCES users(id) ON DELETE CASCADE,FOREIGN KEY(student_id) REFERENCES users(id) ON DELETE CASCADE)").run();
+    await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_parent_requests_student_status ON parent_link_requests(student_id,status)").run();
+    await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_parent_requests_parent_status ON parent_link_requests(parent_id,status)").run();
+    await env.DB.prepare("CREATE TABLE IF NOT EXISTS parent_student_links (id TEXT PRIMARY KEY,parent_id TEXT NOT NULL,student_id TEXT NOT NULL,created_at INTEGER NOT NULL,UNIQUE(parent_id,student_id),FOREIGN KEY(parent_id) REFERENCES users(id) ON DELETE CASCADE,FOREIGN KEY(student_id) REFERENCES users(id) ON DELETE CASCADE)").run();
+    await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_parent_links_student ON parent_student_links(student_id)").run();
+    await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_parent_links_parent ON parent_student_links(parent_id)").run();
     await env.DB.prepare("CREATE TABLE IF NOT EXISTS global_lectures (id TEXT PRIMARY KEY,title TEXT NOT NULL,subject_name TEXT NOT NULL,url TEXT NOT NULL,description TEXT NOT NULL DEFAULT '',kind TEXT NOT NULL DEFAULT 'link',enabled INTEGER NOT NULL DEFAULT 1,created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL)").run();
     await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_global_lectures_subject ON global_lectures(subject_name,enabled)").run();
     await env.DB.prepare("CREATE TABLE IF NOT EXISTS global_notifications (id TEXT PRIMARY KEY,title TEXT NOT NULL,message TEXT NOT NULL,type TEXT NOT NULL DEFAULT 'info',enabled INTEGER NOT NULL DEFAULT 1,expires_at INTEGER,created_at INTEGER NOT NULL)").run();
