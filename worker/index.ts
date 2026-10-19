@@ -2329,12 +2329,12 @@ export default {
           }
         }
         if(url.pathname==="/api/auth/register/start" && request.method==="POST") {
-          const b=await body(request), email=cleanEmail(b?.email), name=cleanName(b?.name), password=String(b?.password||""), phone=cleanPhone(b?.phone);
+          const b=await body(request), email=cleanEmail(b?.email), name=cleanName(b?.name), password=String(b?.password||""), phone=cleanPhone(b?.phone), accountType=(b?.accountType==="parent"?"parent":"student");
           if(!name||!email||password.length<8||!phone) return json({error:"الاسم والإيميل وكلمة السر ورقم واتساب مطلوبة، وكلمة السر 8 أحرف على الأقل"},400);
           const exists=await env.DB.prepare("SELECT id FROM users WHERE email=?").bind(email).first(); if(exists) return json({error:"الإيميل مستخدم بالفعل"},409);
           if(!validPhone(phone)) return json({error:"رقم واتساب غير صالح"},400);
           if(phone){const phoneExists=await env.DB.prepare("SELECT user_id FROM user_phones WHERE phone=?").bind(phone).first();if(phoneExists)return json({error:"رقم واتساب مستخدم بالفعل"},409);}
-          const salt=randomHex(16), pass=await hashPassword(password,salt), code=generateOtpCode(), now=Date.now(), expires=now+10*60*1000, payload=JSON.stringify({name,password_hash:pass,password_salt:salt,phone:phone||null});
+          const salt=randomHex(16), pass=await hashPassword(password,salt), code=generateOtpCode(), now=Date.now(), expires=now+10*60*1000, payload=JSON.stringify({name,password_hash:pass,password_salt:salt,phone:phone||null,role:accountType});
           const recentRegister=await env.DB.prepare("SELECT created_at FROM auth_codes WHERE email=? AND type='register' ORDER BY created_at DESC LIMIT 1").bind(email).first<any>();
           if(recentRegister&&Date.now()-Number(recentRegister.created_at)<60000) return json({error:"استنى 60 ثانية قبل طلب كود جديد."},429);
           await env.DB.prepare("DELETE FROM auth_codes WHERE email=? AND type='register'").bind(email).run();
@@ -2366,9 +2366,9 @@ export default {
           const p=JSON.parse(row.payload_json||"{}");
           const exists=await env.DB.prepare("SELECT id FROM users WHERE email=?").bind(email).first(); if(exists){await env.DB.prepare("DELETE FROM auth_codes WHERE id=?").bind(row.id).run();return json({error:"الإيميل مستخدم بالفعل"},409);}
           const id=randomHex(16), now=Date.now();
-          await env.DB.batch([env.DB.prepare("INSERT INTO users(id,email,name,password_hash,password_salt,email_verified_at,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)").bind(id,email,p.name,p.password_hash,p.password_salt,now,now,now),env.DB.prepare("INSERT INTO user_data(user_id,data_json,updated_at) VALUES(?,?,?)").bind(id,"",now),...(p.phone?[env.DB.prepare("INSERT INTO user_phones(user_id,phone,updated_at) VALUES(?,?,?)").bind(id,p.phone,now)]:[]),env.DB.prepare("DELETE FROM auth_codes WHERE id=?").bind(row.id)]);
+          await env.DB.batch([env.DB.prepare("INSERT INTO users(id,email,name,password_hash,password_salt,email_verified_at,role,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?)").bind(id,email,p.name,p.password_hash,p.password_salt,now,(p.role==="parent"?"parent":"student"),now,now),env.DB.prepare("INSERT INTO user_data(user_id,data_json,updated_at) VALUES(?,?,?)").bind(id,"",now),...(p.phone?[env.DB.prepare("INSERT INTO user_phones(user_id,phone,updated_at) VALUES(?,?,?)").bind(id,p.phone,now)]:[]),env.DB.prepare("DELETE FROM auth_codes WHERE id=?").bind(row.id)]);
           ctx.waitUntil(sendAdminAlert(env,"👤 تسجيل مستخدم جديد","👤 "+p.name+"\n✉️ "+email+"\n📱 "+String(p.phone||"غير مرتبط"),"new_user",0));
-          const token=await createSession(id,env); return json({user:{id,email,name:p.name,phone:p.phone||null}},200,{"set-cookie":sessionCookie(token)});
+          const token=await createSession(id,env); return json({user:{id,email,name:p.name,phone:p.phone||null,role:p.role==="parent"?"parent":"student"}},200,{"set-cookie":sessionCookie(token)});
         }
         if(url.pathname==="/api/auth/forgot/start" && (request.method==="POST"||request.method==="GET")) {
           const b=request.method==="POST"?await body(request):null;
