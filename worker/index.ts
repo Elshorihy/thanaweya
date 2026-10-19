@@ -2481,6 +2481,64 @@ export default {
           }
           return json({ok:true,phone});
         }
+        if(url.pathname==="/api/family" && request.method==="GET") {
+          const u=await userFrom(request,env); if(!u) return json({error:"يجب تسجيل الدخول"},401);
+          const [links,requests]=await Promise.all([
+            env.DB.prepare("SELECT l.id,l.parent_id AS parentId,l.student_id AS studentId,p.name AS parentName,p.email AS parentEmail,s.name AS studentName,s.email AS studentEmail,l.created_at AS createdAt FROM parent_student_links l JOIN users p ON p.id=l.parent_id JOIN users s ON s.id=l.student_id WHERE l.parent_id=? OR l.student_id=? ORDER BY l.created_at DESC").bind(u.id,u.id).all<any>(),
+            env.DB.prepare("SELECT r.id,r.parent_id AS parentId,r.student_id AS studentId,r.status,r.created_at AS createdAt,p.name AS parentName,p.email AS parentEmail,s.name AS studentName FROM parent_link_requests r JOIN users p ON p.id=r.parent_id JOIN users s ON s.id=r.student_id WHERE (r.parent_id=? OR r.student_id=?) ORDER BY r.created_at DESC LIMIT 100").bind(u.id,u.id).all<any>()
+          ]);
+          return json({links:links.results||[],requests:requests.results||[]});
+        }
+        if(url.pathname==="/api/family/requests" && request.method==="POST") {
+          const u=await userFrom(request,env); if(!u) return json({error:"يجب تسجيل الدخول"},401);
+          if(u.role!=="parent") return json({error:"هذه الوظيفة متاحة لحساب ولي الأمر فقط"},403);
+          const b=await body(request), email=cleanEmail(b?.studentEmail);
+          if(!email) return json({error:"اكتب إيميل الطالب"},400);
+          const student=await env.DB.prepare("SELECT id,role FROM users WHERE email=?").bind(email).first<any>();
+          if(!student||student.id===u.id||student.role==="parent"||student.role==="owner") return json({ok:true});
+          const linked=await env.DB.prepare("SELECT id FROM parent_student_links WHERE parent_id=? AND student_id=?").bind(u.id,student.id).first();
+          if(linked) return json({error:"الحساب مرتبط بالفعل"},409);
+          const pending=await env.DB.prepare("SELECT id FROM parent_link_requests WHERE parent_id=? AND student_id=? AND status='pending'").bind(u.id,student.id).first();
+          if(pending) return json({error:"يوجد طلب ربط قيد الانتظار بالفعل"},409);
+          const now=Date.now();
+          await env.DB.prepare("INSERT INTO parent_link_requests(id,parent_id,student_id,status,created_at,updated_at) VALUES(?,?,?,'pending',?,?)").bind(randomHex(16),u.id,student.id,now,now).run();
+          return json({ok:true});
+        }
+        if(url.pathname==="/api/family/requests/decision" && request.method==="POST") {
+          const u=await userFrom(request,env); if(!u) return json({error:"يجب تسجيل الدخول"},401);
+          if(u.role==="parent"||u.role==="owner") return json({error:"موافقة الربط من حساب الطالب فقط"},403);
+          const b=await body(request), id=String(b?.requestId||""), decision=String(b?.decision||"");
+          if(!id||!["approve","reject"].includes(decision)) return json({error:"طلب غير صالح"},400);
+          const row=await env.DB.prepare("SELECT id,parent_id,student_id FROM parent_link_requests WHERE id=? AND student_id=? AND status='pending'").bind(id,u.id).first<any>();
+          if(!row) return json({error:"الطلب غير موجود أو تمت معالجته بالفعل"},404);
+          const now=Date.now();
+          if(decision==="approve") await env.DB.batch([
+            env.DB.prepare("INSERT OR IGNORE INTO parent_student_links(id,parent_id,student_id,created_at) VALUES(?,?,?,?)").bind(randomHex(16),row.parent_id,row.student_id,now),
+            env.DB.prepare("UPDATE parent_link_requests SET status='accepted',updated_at=? WHERE id=? AND status='pending'").bind(now,id)
+          ]);
+          else await env.DB.prepare("UPDATE parent_link_requests SET status='rejected',updated_at=? WHERE id=? AND status='pending'").bind(now,id).run();
+          return json({ok:true});
+        }
+        if(url.pathname==="/api/family/links" && request.method==="DELETE") {
+          const u=await userFrom(request,env); if(!u) return json({error:"يجب تسجيل الدخول"},401);
+          const b=await body(request), id=String(b?.linkId||"");
+          if(!id) return json({error:"معرّف الارتباط مطلوب"},400);
+          const result=await env.DB.prepare("DELETE FROM parent_student_links WHERE id=? AND (parent_id=? OR student_id=?)").bind(id,u.id,u.id).run();
+          if(!result.meta.changes) return json({error:"الارتباط غير موجود أو لا تملك صلاحية فصله"},404);
+          return json({ok:true});
+        }
+        if(url.pathname==="/api/family/student-data" && request.method==="GET") {
+          const u=await userFrom(request,env); if(!u) return json({error:"يجب تسجيل الدخول"},401);
+          if(u.role!=="parent") return json({error:"هذه البيانات متاحة لحساب ولي الأمر فقط"},403);
+          const studentId=String(url.searchParams.get("studentId")||"");
+          if(!studentId) return json({error:"معرّف الطالب مطلوب"},400);
+          const linked=await env.DB.prepare("SELECT id FROM parent_student_links WHERE parent_id=? AND student_id=?").bind(u.id,studentId).first();
+          if(!linked) return json({error:"لا يوجد ارتباط فعّال يسمح بقراءة هذه البيانات"},403);
+          const row=await env.DB.prepare("SELECT data_json,updated_at FROM user_data WHERE user_id=?").bind(studentId).first<any>();
+          let data:any={}; try { data=row?.data_json?JSON.parse(row.data_json)||{}:{}; } catch { data={}; }
+          const safeData={profile:{name:String(data?.profile?.name||"")},subjects:Array.isArray(data?.subjects)?data.subjects.map((x:any)=>({id:x.id,name:x.name,color:x.color,priority:x.priority})):[],units:Array.isArray(data?.units)?data.units.map((x:any)=>({id:x.id,subjectId:x.subjectId,name:x.name})):[],lessons:Array.isArray(data?.lessons)?data.lessons.map((x:any)=>({id:x.id,unitId:x.unitId,name:x.name,status:x.status,estimatedMinutes:x.estimatedMinutes})):[],tasks:Array.isArray(data?.tasks)?data.tasks.map((x:any)=>({id:x.id,lessonId:x.lessonId,status:x.status,date:x.date,estimatedMinutes:x.estimatedMinutes})):[],sessions:Array.isArray(data?.sessions)?data.sessions.map((x:any)=>({id:x.id,date:x.date,duration:x.duration,type:x.type})):[],studySchedule:Array.isArray(data?.studySchedule)?data.studySchedule:[]};
+          return json({data:safeData,updatedAt:Number(row?.updated_at||0)});
+        }
         if(url.pathname==="/api/auth/me" && request.method==="GET") {
           const u=await userFrom(request,env); if(!u) return json({user:null});
           const row=await env.DB.prepare("SELECT phone FROM user_phones WHERE user_id=?").bind(u.id).first<any>();
