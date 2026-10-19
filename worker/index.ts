@@ -48,6 +48,16 @@ async function ensureSchema(env:Env){
     await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_ai_chats_user_updated ON ai_chats(user_id,updated_at)").run();
     await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_ai_messages_chat_created ON ai_messages(chat_id,created_at)").run();
     await env.DB.prepare("CREATE TABLE IF NOT EXISTS user_data (user_id TEXT PRIMARY KEY,data_json TEXT NOT NULL DEFAULT '{}',updated_at INTEGER NOT NULL,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE)").run();
+    await env.DB.prepare("CREATE TABLE IF NOT EXISTS parent_link_requests (id TEXT PRIMARY KEY,parent_id TEXT NOT NULL,student_id TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'pending',created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL,FOREIGN KEY(parent_id) REFERENCES users(id) ON DELETE CASCADE,FOREIGN KEY(student_id) REFERENCES users(id) ON DELETE CASCADE)").run();
+    await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_parent_requests_student_status ON parent_link_requests(student_id,status)").run();
+    await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_parent_requests_parent_status ON parent_link_requests(parent_id,status)").run();
+    await env.DB.prepare("CREATE TABLE IF NOT EXISTS parent_student_links (id TEXT PRIMARY KEY,parent_id TEXT NOT NULL,student_id TEXT NOT NULL,created_at INTEGER NOT NULL,UNIQUE(parent_id,student_id),FOREIGN KEY(parent_id) REFERENCES users(id) ON DELETE CASCADE,FOREIGN KEY(student_id) REFERENCES users(id) ON DELETE CASCADE)").run();
+    await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_parent_links_student ON parent_student_links(student_id)").run();
+    await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_parent_links_parent ON parent_student_links(parent_id)").run();
+    await env.DB.prepare("CREATE TABLE IF NOT EXISTS family_messages (id TEXT PRIMARY KEY,link_id TEXT NOT NULL,sender_id TEXT NOT NULL,recipient_id TEXT NOT NULL,message TEXT NOT NULL,created_at INTEGER NOT NULL,FOREIGN KEY(link_id) REFERENCES parent_student_links(id) ON DELETE CASCADE,FOREIGN KEY(sender_id) REFERENCES users(id) ON DELETE CASCADE,FOREIGN KEY(recipient_id) REFERENCES users(id) ON DELETE CASCADE)").run();
+    await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_family_messages_link_created ON family_messages(link_id,created_at)").run();
+    await env.DB.prepare("CREATE TABLE IF NOT EXISTS family_goals (id TEXT PRIMARY KEY,link_id TEXT NOT NULL,title TEXT NOT NULL,proposed_by TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'pending',student_approved INTEGER NOT NULL DEFAULT 0,parent_approved INTEGER NOT NULL DEFAULT 0,created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL,FOREIGN KEY(link_id) REFERENCES parent_student_links(id) ON DELETE CASCADE,FOREIGN KEY(proposed_by) REFERENCES users(id) ON DELETE CASCADE)").run();
+    await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_family_goals_link_created ON family_goals(link_id,created_at)").run();
     await env.DB.prepare("CREATE TABLE IF NOT EXISTS global_lectures (id TEXT PRIMARY KEY,title TEXT NOT NULL,subject_name TEXT NOT NULL,url TEXT NOT NULL,description TEXT NOT NULL DEFAULT '',kind TEXT NOT NULL DEFAULT 'link',enabled INTEGER NOT NULL DEFAULT 1,created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL)").run();
     await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_global_lectures_subject ON global_lectures(subject_name,enabled)").run();
     await env.DB.prepare("CREATE TABLE IF NOT EXISTS global_notifications (id TEXT PRIMARY KEY,title TEXT NOT NULL,message TEXT NOT NULL,type TEXT NOT NULL DEFAULT 'info',enabled INTEGER NOT NULL DEFAULT 1,expires_at INTEGER,created_at INTEGER NOT NULL)").run();
@@ -2329,12 +2339,12 @@ export default {
           }
         }
         if(url.pathname==="/api/auth/register/start" && request.method==="POST") {
-          const b=await body(request), email=cleanEmail(b?.email), name=cleanName(b?.name), password=String(b?.password||""), phone=cleanPhone(b?.phone);
+          const b=await body(request), email=cleanEmail(b?.email), name=cleanName(b?.name), password=String(b?.password||""), phone=cleanPhone(b?.phone), accountType=(b?.accountType==="parent"?"parent":"student");
           if(!name||!email||password.length<8||!phone) return json({error:"الاسم والإيميل وكلمة السر ورقم واتساب مطلوبة، وكلمة السر 8 أحرف على الأقل"},400);
           const exists=await env.DB.prepare("SELECT id FROM users WHERE email=?").bind(email).first(); if(exists) return json({error:"الإيميل مستخدم بالفعل"},409);
           if(!validPhone(phone)) return json({error:"رقم واتساب غير صالح"},400);
           if(phone){const phoneExists=await env.DB.prepare("SELECT user_id FROM user_phones WHERE phone=?").bind(phone).first();if(phoneExists)return json({error:"رقم واتساب مستخدم بالفعل"},409);}
-          const salt=randomHex(16), pass=await hashPassword(password,salt), code=generateOtpCode(), now=Date.now(), expires=now+10*60*1000, payload=JSON.stringify({name,password_hash:pass,password_salt:salt,phone:phone||null});
+          const salt=randomHex(16), pass=await hashPassword(password,salt), code=generateOtpCode(), now=Date.now(), expires=now+10*60*1000, payload=JSON.stringify({name,password_hash:pass,password_salt:salt,phone:phone||null,role:accountType});
           const recentRegister=await env.DB.prepare("SELECT created_at FROM auth_codes WHERE email=? AND type='register' ORDER BY created_at DESC LIMIT 1").bind(email).first<any>();
           if(recentRegister&&Date.now()-Number(recentRegister.created_at)<60000) return json({error:"استنى 60 ثانية قبل طلب كود جديد."},429);
           await env.DB.prepare("DELETE FROM auth_codes WHERE email=? AND type='register'").bind(email).run();
@@ -2366,9 +2376,9 @@ export default {
           const p=JSON.parse(row.payload_json||"{}");
           const exists=await env.DB.prepare("SELECT id FROM users WHERE email=?").bind(email).first(); if(exists){await env.DB.prepare("DELETE FROM auth_codes WHERE id=?").bind(row.id).run();return json({error:"الإيميل مستخدم بالفعل"},409);}
           const id=randomHex(16), now=Date.now();
-          await env.DB.batch([env.DB.prepare("INSERT INTO users(id,email,name,password_hash,password_salt,email_verified_at,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)").bind(id,email,p.name,p.password_hash,p.password_salt,now,now,now),env.DB.prepare("INSERT INTO user_data(user_id,data_json,updated_at) VALUES(?,?,?)").bind(id,"",now),...(p.phone?[env.DB.prepare("INSERT INTO user_phones(user_id,phone,updated_at) VALUES(?,?,?)").bind(id,p.phone,now)]:[]),env.DB.prepare("DELETE FROM auth_codes WHERE id=?").bind(row.id)]);
+          await env.DB.batch([env.DB.prepare("INSERT INTO users(id,email,name,password_hash,password_salt,email_verified_at,role,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?)").bind(id,email,p.name,p.password_hash,p.password_salt,now,(p.role==="parent"?"parent":"student"),now,now),env.DB.prepare("INSERT INTO user_data(user_id,data_json,updated_at) VALUES(?,?,?)").bind(id,"",now),...(p.phone?[env.DB.prepare("INSERT INTO user_phones(user_id,phone,updated_at) VALUES(?,?,?)").bind(id,p.phone,now)]:[]),env.DB.prepare("DELETE FROM auth_codes WHERE id=?").bind(row.id)]);
           ctx.waitUntil(sendAdminAlert(env,"👤 تسجيل مستخدم جديد","👤 "+p.name+"\n✉️ "+email+"\n📱 "+String(p.phone||"غير مرتبط"),"new_user",0));
-          const token=await createSession(id,env); return json({user:{id,email,name:p.name,phone:p.phone||null}},200,{"set-cookie":sessionCookie(token)});
+          const token=await createSession(id,env); return json({user:{id,email,name:p.name,phone:p.phone||null,role:p.role==="parent"?"parent":"student"}},200,{"set-cookie":sessionCookie(token)});
         }
         if(url.pathname==="/api/auth/forgot/start" && (request.method==="POST"||request.method==="GET")) {
           const b=request.method==="POST"?await body(request):null;
@@ -2474,6 +2484,111 @@ export default {
             await env.DB.prepare("DELETE FROM user_phones WHERE user_id=?").bind(u.id).run();
           }
           return json({ok:true,phone});
+        }
+        if(url.pathname==="/api/family" && request.method==="GET") {
+          const u=await userFrom(request,env); if(!u) return json({error:"يجب تسجيل الدخول"},401);
+          const [links,requests]=await Promise.all([
+            env.DB.prepare("SELECT l.id,l.parent_id AS parentId,l.student_id AS studentId,p.name AS parentName,p.email AS parentEmail,s.name AS studentName,s.email AS studentEmail,l.created_at AS createdAt FROM parent_student_links l JOIN users p ON p.id=l.parent_id JOIN users s ON s.id=l.student_id WHERE l.parent_id=? OR l.student_id=? ORDER BY l.created_at DESC").bind(u.id,u.id).all<any>(),
+            env.DB.prepare("SELECT r.id,r.parent_id AS parentId,r.student_id AS studentId,r.status,r.created_at AS createdAt,p.name AS parentName,p.email AS parentEmail,s.name AS studentName FROM parent_link_requests r JOIN users p ON p.id=r.parent_id JOIN users s ON s.id=r.student_id WHERE (r.parent_id=? OR r.student_id=?) ORDER BY r.created_at DESC LIMIT 100").bind(u.id,u.id).all<any>()
+          ]);
+          return json({links:links.results||[],requests:requests.results||[]});
+        }
+        if(url.pathname==="/api/family/requests" && request.method==="POST") {
+          const u=await userFrom(request,env); if(!u) return json({error:"يجب تسجيل الدخول"},401);
+          if(u.role!=="parent") return json({error:"هذه الوظيفة متاحة لحساب ولي الأمر فقط"},403);
+          const b=await body(request), email=cleanEmail(b?.studentEmail);
+          if(!email) return json({error:"اكتب إيميل الطالب"},400);
+          const student=await env.DB.prepare("SELECT id,role FROM users WHERE email=?").bind(email).first<any>();
+          if(!student||student.id===u.id||student.role==="parent"||student.role==="owner") return json({ok:true});
+          const linked=await env.DB.prepare("SELECT id FROM parent_student_links WHERE parent_id=? AND student_id=?").bind(u.id,student.id).first();
+          if(linked) return json({error:"الحساب مرتبط بالفعل"},409);
+          const pending=await env.DB.prepare("SELECT id FROM parent_link_requests WHERE parent_id=? AND student_id=? AND status='pending'").bind(u.id,student.id).first();
+          if(pending) return json({error:"يوجد طلب ربط قيد الانتظار بالفعل"},409);
+          const now=Date.now();
+          await env.DB.prepare("INSERT INTO parent_link_requests(id,parent_id,student_id,status,created_at,updated_at) VALUES(?,?,?,'pending',?,?)").bind(randomHex(16),u.id,student.id,now,now).run();
+          return json({ok:true});
+        }
+        if(url.pathname==="/api/family/requests/decision" && request.method==="POST") {
+          const u=await userFrom(request,env); if(!u) return json({error:"يجب تسجيل الدخول"},401);
+          if(u.role==="parent"||u.role==="owner") return json({error:"موافقة الربط من حساب الطالب فقط"},403);
+          const b=await body(request), id=String(b?.requestId||""), decision=String(b?.decision||"");
+          if(!id||!["approve","reject"].includes(decision)) return json({error:"طلب غير صالح"},400);
+          const row=await env.DB.prepare("SELECT id,parent_id,student_id FROM parent_link_requests WHERE id=? AND student_id=? AND status='pending'").bind(id,u.id).first<any>();
+          if(!row) return json({error:"الطلب غير موجود أو تمت معالجته بالفعل"},404);
+          const now=Date.now();
+          if(decision==="approve") await env.DB.batch([
+            env.DB.prepare("INSERT OR IGNORE INTO parent_student_links(id,parent_id,student_id,created_at) VALUES(?,?,?,?)").bind(randomHex(16),row.parent_id,row.student_id,now),
+            env.DB.prepare("UPDATE parent_link_requests SET status='accepted',updated_at=? WHERE id=? AND status='pending'").bind(now,id)
+          ]);
+          else await env.DB.prepare("UPDATE parent_link_requests SET status='rejected',updated_at=? WHERE id=? AND status='pending'").bind(now,id).run();
+          return json({ok:true});
+        }
+        if(url.pathname==="/api/family/links" && request.method==="DELETE") {
+          const u=await userFrom(request,env); if(!u) return json({error:"يجب تسجيل الدخول"},401);
+          const b=await body(request), id=String(b?.linkId||"");
+          if(!id) return json({error:"معرّف الارتباط مطلوب"},400);
+          const result=await env.DB.prepare("DELETE FROM parent_student_links WHERE id=? AND (parent_id=? OR student_id=?)").bind(id,u.id,u.id).run();
+          if(!result.meta.changes) return json({error:"الارتباط غير موجود أو لا تملك صلاحية فصله"},404);
+          return json({ok:true});
+        }
+        if(url.pathname==="/api/family/student-data" && request.method==="GET") {
+          const u=await userFrom(request,env); if(!u) return json({error:"يجب تسجيل الدخول"},401);
+          if(u.role!=="parent") return json({error:"هذه البيانات متاحة لحساب ولي الأمر فقط"},403);
+          const studentId=String(url.searchParams.get("studentId")||"");
+          if(!studentId) return json({error:"معرّف الطالب مطلوب"},400);
+          const linked=await env.DB.prepare("SELECT id FROM parent_student_links WHERE parent_id=? AND student_id=?").bind(u.id,studentId).first();
+          if(!linked) return json({error:"لا يوجد ارتباط فعّال يسمح بقراءة هذه البيانات"},403);
+          const row=await env.DB.prepare("SELECT data_json,updated_at FROM user_data WHERE user_id=?").bind(studentId).first<any>();
+          let data:any={}; try { data=row?.data_json?JSON.parse(row.data_json)||{}:{}; } catch { data={}; }
+          const safeData={profile:{name:String(data?.profile?.name||"")},subjects:Array.isArray(data?.subjects)?data.subjects.map((x:any)=>({id:x.id,name:x.name,color:x.color,priority:x.priority})):[],units:Array.isArray(data?.units)?data.units.map((x:any)=>({id:x.id,subjectId:x.subjectId,name:x.name})):[],lessons:Array.isArray(data?.lessons)?data.lessons.map((x:any)=>({id:x.id,unitId:x.unitId,name:x.name,status:x.status,estimatedMinutes:x.estimatedMinutes})):[],tasks:Array.isArray(data?.tasks)?data.tasks.map((x:any)=>({id:x.id,lessonId:x.lessonId,status:x.status,date:x.date,estimatedMinutes:x.estimatedMinutes})):[],sessions:Array.isArray(data?.sessions)?data.sessions.map((x:any)=>({id:x.id,date:x.date,duration:x.duration,type:x.type})):[],studySchedule:Array.isArray(data?.studySchedule)?data.studySchedule:[]};
+          return json({data:safeData,updatedAt:Number(row?.updated_at||0)});
+        }
+        if(url.pathname==="/api/family/conversation" && request.method==="GET") {
+          const u=await userFrom(request,env); if(!u) return json({error:"يجب تسجيل الدخول"},401);
+          const linkId=String(url.searchParams.get("linkId")||"");
+          const link=await env.DB.prepare("SELECT id FROM parent_student_links WHERE id=? AND (parent_id=? OR student_id=?)").bind(linkId,u.id,u.id).first();
+          if(!link) return json({error:"لا تملك صلاحية الوصول للمساحة المشتركة"},403);
+          const [messages,goals]=await Promise.all([
+            env.DB.prepare("SELECT m.id,m.sender_id AS senderId,m.recipient_id AS recipientId,m.message,m.created_at AS createdAt,u.name AS senderName FROM family_messages m JOIN users u ON u.id=m.sender_id WHERE m.link_id=? ORDER BY m.created_at ASC LIMIT 200").bind(linkId).all<any>(),
+            env.DB.prepare("SELECT id,title,proposed_by AS proposedBy,status,student_approved AS studentApproved,parent_approved AS parentApproved,created_at AS createdAt FROM family_goals WHERE link_id=? ORDER BY created_at DESC LIMIT 100").bind(linkId).all<any>()
+          ]);
+          return json({messages:messages.results||[],goals:goals.results||[]});
+        }
+        if(url.pathname==="/api/family/messages" && request.method==="POST") {
+          const u=await userFrom(request,env); if(!u) return json({error:"يجب تسجيل الدخول"},401);
+          const b=await body(request),linkId=String(b?.linkId||""),message=String(b?.message||"").trim().slice(0,1000);
+          if(!linkId||message.length<1) return json({error:"اكتب رسالة قصيرة"},400);
+          const link=await env.DB.prepare("SELECT parent_id,student_id FROM parent_student_links WHERE id=? AND (parent_id=? OR student_id=?)").bind(linkId,u.id,u.id).first<any>();
+          if(!link) return json({error:"لا تملك صلاحية الإرسال في هذه المساحة"},403);
+          const recipient=link.parent_id===u.id?link.student_id:link.parent_id;
+          await env.DB.prepare("INSERT INTO family_messages(id,link_id,sender_id,recipient_id,message,created_at) VALUES(?,?,?,?,?,?)").bind(randomHex(16),linkId,u.id,recipient,message,Date.now()).run();
+          return json({ok:true});
+        }
+        if(url.pathname==="/api/family/goals" && request.method==="POST") {
+          const u=await userFrom(request,env); if(!u) return json({error:"يجب تسجيل الدخول"},401);
+          const b=await body(request),linkId=String(b?.linkId||""),title=String(b?.title||"").trim().slice(0,160);
+          if(!linkId||title.length<3) return json({error:"اكتب هدفًا واضحًا"},400);
+          const link=await env.DB.prepare("SELECT parent_id,student_id FROM parent_student_links WHERE id=? AND (parent_id=? OR student_id=?)").bind(linkId,u.id,u.id).first<any>();
+          if(!link) return json({error:"لا تملك صلاحية اقتراح هدف هنا"},403);
+          const isParent=link.parent_id===u.id,now=Date.now();
+          await env.DB.prepare("INSERT INTO family_goals(id,link_id,title,proposed_by,status,student_approved,parent_approved,created_at,updated_at) VALUES(?,?,?,?,'pending',?,?,?,?)").bind(randomHex(16),linkId,title,u.id,isParent?0:1,isParent?1:0,now,now).run();
+          return json({ok:true});
+        }
+        if(url.pathname==="/api/family/goals/decision" && request.method==="POST") {
+          const u=await userFrom(request,env); if(!u) return json({error:"يجب تسجيل الدخول"},401);
+          const b=await body(request),goalId=String(b?.goalId||""),decision=String(b?.decision||"");
+          if(!goalId||!["approve","reject"].includes(decision)) return json({error:"طلب غير صالح"},400);
+          const goal=await env.DB.prepare("SELECT g.id,g.link_id,l.parent_id,l.student_id,g.student_approved,g.parent_approved FROM family_goals g JOIN parent_student_links l ON l.id=g.link_id WHERE g.id=? AND g.status='pending' AND (l.parent_id=? OR l.student_id=?)").bind(goalId,u.id,u.id).first<any>();
+          if(!goal) return json({error:"الهدف غير موجود أو لا تملك صلاحية تعديله"},404);
+          if(decision==="reject"){
+            await env.DB.prepare("UPDATE family_goals SET status='rejected',updated_at=? WHERE id=? AND status='pending'").bind(Date.now(),goalId).run();
+          } else {
+            const isParent=goal.parent_id===u.id;
+            const studentApproved=Number(goal.student_approved)===1||!isParent;
+            const parentApproved=Number(goal.parent_approved)===1||isParent;
+            await env.DB.prepare("UPDATE family_goals SET student_approved=?,parent_approved=?,status=?,updated_at=? WHERE id=? AND status='pending'").bind(studentApproved?1:0,parentApproved?1:0,studentApproved&&parentApproved?'active':'pending',Date.now(),goalId).run();
+          }
+          return json({ok:true});
         }
         if(url.pathname==="/api/auth/me" && request.method==="GET") {
           const u=await userFrom(request,env); if(!u) return json({user:null});

@@ -17,6 +17,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
       - run: npm install --no-audit --no-fund --before=2026-09-30T00:00:00Z
       - run: npm run build
+      - name: Validate Cloudflare Worker bundle (dry run)
+        run: npx --yes wrangler@4.136.1 deploy --dry-run
