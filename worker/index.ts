@@ -54,6 +54,10 @@ async function ensureSchema(env:Env){
     await env.DB.prepare("CREATE TABLE IF NOT EXISTS parent_student_links (id TEXT PRIMARY KEY,parent_id TEXT NOT NULL,student_id TEXT NOT NULL,created_at INTEGER NOT NULL,UNIQUE(parent_id,student_id),FOREIGN KEY(parent_id) REFERENCES users(id) ON DELETE CASCADE,FOREIGN KEY(student_id) REFERENCES users(id) ON DELETE CASCADE)").run();
     await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_parent_links_student ON parent_student_links(student_id)").run();
     await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_parent_links_parent ON parent_student_links(parent_id)").run();
+    await env.DB.prepare("CREATE TABLE IF NOT EXISTS family_messages (id TEXT PRIMARY KEY,link_id TEXT NOT NULL,sender_id TEXT NOT NULL,recipient_id TEXT NOT NULL,message TEXT NOT NULL,created_at INTEGER NOT NULL,FOREIGN KEY(link_id) REFERENCES parent_student_links(id) ON DELETE CASCADE,FOREIGN KEY(sender_id) REFERENCES users(id) ON DELETE CASCADE,FOREIGN KEY(recipient_id) REFERENCES users(id) ON DELETE CASCADE)").run();
+    await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_family_messages_link_created ON family_messages(link_id,created_at)").run();
+    await env.DB.prepare("CREATE TABLE IF NOT EXISTS family_goals (id TEXT PRIMARY KEY,link_id TEXT NOT NULL,title TEXT NOT NULL,proposed_by TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'pending',student_approved INTEGER NOT NULL DEFAULT 0,parent_approved INTEGER NOT NULL DEFAULT 0,created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL,FOREIGN KEY(link_id) REFERENCES parent_student_links(id) ON DELETE CASCADE,FOREIGN KEY(proposed_by) REFERENCES users(id) ON DELETE CASCADE)").run();
+    await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_family_goals_link_created ON family_goals(link_id,created_at)").run();
     await env.DB.prepare("CREATE TABLE IF NOT EXISTS global_lectures (id TEXT PRIMARY KEY,title TEXT NOT NULL,subject_name TEXT NOT NULL,url TEXT NOT NULL,description TEXT NOT NULL DEFAULT '',kind TEXT NOT NULL DEFAULT 'link',enabled INTEGER NOT NULL DEFAULT 1,created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL)").run();
     await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_global_lectures_subject ON global_lectures(subject_name,enabled)").run();
     await env.DB.prepare("CREATE TABLE IF NOT EXISTS global_notifications (id TEXT PRIMARY KEY,title TEXT NOT NULL,message TEXT NOT NULL,type TEXT NOT NULL DEFAULT 'info',enabled INTEGER NOT NULL DEFAULT 1,expires_at INTEGER,created_at INTEGER NOT NULL)").run();
@@ -2538,6 +2542,53 @@ export default {
           let data:any={}; try { data=row?.data_json?JSON.parse(row.data_json)||{}:{}; } catch { data={}; }
           const safeData={profile:{name:String(data?.profile?.name||"")},subjects:Array.isArray(data?.subjects)?data.subjects.map((x:any)=>({id:x.id,name:x.name,color:x.color,priority:x.priority})):[],units:Array.isArray(data?.units)?data.units.map((x:any)=>({id:x.id,subjectId:x.subjectId,name:x.name})):[],lessons:Array.isArray(data?.lessons)?data.lessons.map((x:any)=>({id:x.id,unitId:x.unitId,name:x.name,status:x.status,estimatedMinutes:x.estimatedMinutes})):[],tasks:Array.isArray(data?.tasks)?data.tasks.map((x:any)=>({id:x.id,lessonId:x.lessonId,status:x.status,date:x.date,estimatedMinutes:x.estimatedMinutes})):[],sessions:Array.isArray(data?.sessions)?data.sessions.map((x:any)=>({id:x.id,date:x.date,duration:x.duration,type:x.type})):[],studySchedule:Array.isArray(data?.studySchedule)?data.studySchedule:[]};
           return json({data:safeData,updatedAt:Number(row?.updated_at||0)});
+        }
+        if(url.pathname==="/api/family/conversation" && request.method==="GET") {
+          const u=await userFrom(request,env); if(!u) return json({error:"يجب تسجيل الدخول"},401);
+          const linkId=String(url.searchParams.get("linkId")||"");
+          const link=await env.DB.prepare("SELECT id FROM parent_student_links WHERE id=? AND (parent_id=? OR student_id=?)").bind(linkId,u.id,u.id).first();
+          if(!link) return json({error:"لا تملك صلاحية الوصول للمساحة المشتركة"},403);
+          const [messages,goals]=await Promise.all([
+            env.DB.prepare("SELECT m.id,m.sender_id AS senderId,m.recipient_id AS recipientId,m.message,m.created_at AS createdAt,u.name AS senderName FROM family_messages m JOIN users u ON u.id=m.sender_id WHERE m.link_id=? ORDER BY m.created_at ASC LIMIT 200").bind(linkId).all<any>(),
+            env.DB.prepare("SELECT id,title,proposed_by AS proposedBy,status,student_approved AS studentApproved,parent_approved AS parentApproved,created_at AS createdAt FROM family_goals WHERE link_id=? ORDER BY created_at DESC LIMIT 100").bind(linkId).all<any>()
+          ]);
+          return json({messages:messages.results||[],goals:goals.results||[]});
+        }
+        if(url.pathname==="/api/family/messages" && request.method==="POST") {
+          const u=await userFrom(request,env); if(!u) return json({error:"يجب تسجيل الدخول"},401);
+          const b=await body(request),linkId=String(b?.linkId||""),message=String(b?.message||"").trim().slice(0,1000);
+          if(!linkId||message.length<1) return json({error:"اكتب رسالة قصيرة"},400);
+          const link=await env.DB.prepare("SELECT parent_id,student_id FROM parent_student_links WHERE id=? AND (parent_id=? OR student_id=?)").bind(linkId,u.id,u.id).first<any>();
+          if(!link) return json({error:"لا تملك صلاحية الإرسال في هذه المساحة"},403);
+          const recipient=link.parent_id===u.id?link.student_id:link.parent_id;
+          await env.DB.prepare("INSERT INTO family_messages(id,link_id,sender_id,recipient_id,message,created_at) VALUES(?,?,?,?,?,?)").bind(randomHex(16),linkId,u.id,recipient,message,Date.now()).run();
+          return json({ok:true});
+        }
+        if(url.pathname==="/api/family/goals" && request.method==="POST") {
+          const u=await userFrom(request,env); if(!u) return json({error:"يجب تسجيل الدخول"},401);
+          const b=await body(request),linkId=String(b?.linkId||""),title=String(b?.title||"").trim().slice(0,160);
+          if(!linkId||title.length<3) return json({error:"اكتب هدفًا واضحًا"},400);
+          const link=await env.DB.prepare("SELECT parent_id,student_id FROM parent_student_links WHERE id=? AND (parent_id=? OR student_id=?)").bind(linkId,u.id,u.id).first<any>();
+          if(!link) return json({error:"لا تملك صلاحية اقتراح هدف هنا"},403);
+          const isParent=link.parent_id===u.id,now=Date.now();
+          await env.DB.prepare("INSERT INTO family_goals(id,link_id,title,proposed_by,status,student_approved,parent_approved,created_at,updated_at) VALUES(?,?,?,?,'pending',?,?,?,?)").bind(randomHex(16),linkId,title,u.id,isParent?0:1,isParent?1:0,now,now).run();
+          return json({ok:true});
+        }
+        if(url.pathname==="/api/family/goals/decision" && request.method==="POST") {
+          const u=await userFrom(request,env); if(!u) return json({error:"يجب تسجيل الدخول"},401);
+          const b=await body(request),goalId=String(b?.goalId||""),decision=String(b?.decision||"");
+          if(!goalId||!["approve","reject"].includes(decision)) return json({error:"طلب غير صالح"},400);
+          const goal=await env.DB.prepare("SELECT g.id,g.link_id,l.parent_id,l.student_id,g.student_approved,g.parent_approved FROM family_goals g JOIN parent_student_links l ON l.id=g.link_id WHERE g.id=? AND g.status='pending' AND (l.parent_id=? OR l.student_id=?)").bind(goalId,u.id,u.id).first<any>();
+          if(!goal) return json({error:"الهدف غير موجود أو لا تملك صلاحية تعديله"},404);
+          if(decision==="reject"){
+            await env.DB.prepare("UPDATE family_goals SET status='rejected',updated_at=? WHERE id=? AND status='pending'").bind(Date.now(),goalId);
+          } else {
+            const isParent=goal.parent_id===u.id;
+            const studentApproved=Number(goal.student_approved)===1||!isParent;
+            const parentApproved=Number(goal.parent_approved)===1||isParent;
+            await env.DB.prepare("UPDATE family_goals SET student_approved=?,parent_approved=?,status=?,updated_at=? WHERE id=? AND status='pending'").bind(studentApproved?1:0,parentApproved?1:0,studentApproved&&parentApproved?'active':'pending',Date.now(),goalId).run();
+          }
+          return json({ok:true});
         }
         if(url.pathname==="/api/auth/me" && request.method==="GET") {
           const u=await userFrom(request,env); if(!u) return json({user:null});
