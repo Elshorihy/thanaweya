@@ -2485,6 +2485,55 @@ export default {
           }
           return json({ok:true,phone});
         }
+        if(url.pathname==="/api/community" && (request.method==="GET" || request.method==="POST")) {
+          await ensureSchema(env);
+          const u=await userFrom(request,env); if(!u) return json({error:"يجب تسجيل الدخول"},401);
+          await env.DB.prepare("CREATE TABLE IF NOT EXISTS community_posts (id TEXT PRIMARY KEY,user_id TEXT NOT NULL,subject TEXT NOT NULL,kind TEXT NOT NULL,title TEXT NOT NULL,content TEXT NOT NULL,created_at INTEGER NOT NULL,deleted_at INTEGER,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE)").run();
+          await env.DB.prepare("CREATE TABLE IF NOT EXISTS community_comments (id TEXT PRIMARY KEY,post_id TEXT NOT NULL,user_id TEXT NOT NULL,content TEXT NOT NULL,created_at INTEGER NOT NULL,FOREIGN KEY(post_id) REFERENCES community_posts(id) ON DELETE CASCADE,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE)").run();
+          await env.DB.prepare("CREATE TABLE IF NOT EXISTS community_likes (post_id TEXT NOT NULL,user_id TEXT NOT NULL,created_at INTEGER NOT NULL,PRIMARY KEY(post_id,user_id),FOREIGN KEY(post_id) REFERENCES community_posts(id) ON DELETE CASCADE,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE)").run();
+          await env.DB.prepare("CREATE TABLE IF NOT EXISTS community_reports (id TEXT PRIMARY KEY,post_id TEXT NOT NULL,reporter_id TEXT NOT NULL,reason TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'open',created_at INTEGER NOT NULL,FOREIGN KEY(post_id) REFERENCES community_posts(id) ON DELETE CASCADE,FOREIGN KEY(reporter_id) REFERENCES users(id) ON DELETE CASCADE)").run();
+          await env.DB.prepare("CREATE TABLE IF NOT EXISTS community_best_answers (post_id TEXT PRIMARY KEY,comment_id TEXT NOT NULL,selected_by TEXT NOT NULL,created_at INTEGER NOT NULL,FOREIGN KEY(post_id) REFERENCES community_posts(id) ON DELETE CASCADE,FOREIGN KEY(comment_id) REFERENCES community_comments(id) ON DELETE CASCADE,FOREIGN KEY(selected_by) REFERENCES users(id) ON DELETE CASCADE)").run();
+          await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_community_posts_created ON community_posts(deleted_at,created_at)").run();
+          if(request.method==="GET"){
+            const rows=await env.DB.prepare("SELECT p.id,p.user_id AS userId,u.name,p.subject,p.kind,p.title,p.content,p.created_at AS createdAt,(SELECT COUNT(*) FROM community_likes l WHERE l.post_id=p.id) AS likes,EXISTS(SELECT 1 FROM community_likes l WHERE l.post_id=p.id AND l.user_id=?) AS liked,(SELECT c.id FROM community_best_answers b JOIN community_comments c ON c.id=b.comment_id WHERE b.post_id=p.id) AS bestCommentId FROM community_posts p JOIN users u ON u.id=p.user_id WHERE p.deleted_at IS NULL ORDER BY p.created_at DESC LIMIT 100").bind(u.id).all<any>();
+            const posts=await Promise.all((rows.results||[]).map(async(p:any)=>{const cs=await env.DB.prepare("SELECT c.id,c.post_id AS postId,c.user_id AS userId,u.name,c.content,c.created_at AS createdAt FROM community_comments c JOIN users u ON u.id=c.user_id WHERE c.post_id=? ORDER BY c.created_at ASC LIMIT 100").bind(p.id).all<any>();return {...p,createdAt:Number(p.createdAt),likes:Number(p.likes||0),liked:!!p.liked,isMine:p.userId===u.id,comments:(cs.results||[]).map((c:any)=>({...c,createdAt:Number(c.createdAt)}))}}));
+            return json({ok:true,posts});
+          }
+          const b=await body(request); const action=String(b?.action||""); const postId=String(b?.postId||"").slice(0,80); const now=Date.now();
+          if(action==="create"){
+            const title=String(b?.title||"").trim().slice(0,120), content=String(b?.content||"").trim().slice(0,4000), subject=String(b?.subject||"عام").slice(0,60), kind=String(b?.kind||"discussion");
+            if(title.length<2||content.length<3)return json({error:"العنوان أو المحتوى قصير جدًا"},400);
+            if(!["discussion","question","resource"].includes(kind))return json({error:"نوع المشاركة غير صالح"},400);
+            const id=crypto.randomUUID(); await env.DB.prepare("INSERT INTO community_posts(id,user_id,subject,kind,title,content,created_at) VALUES(?,?,?,?,?,?,?)").bind(id,u.id,subject,kind,title,content,now).run(); return json({ok:true,id});
+          }
+          if(action==="comment"){
+            const content=String(b?.content||"").trim().slice(0,1200); if(content.length<1)return json({error:"اكتب الرد أولًا"},400);
+            const post=await env.DB.prepare("SELECT id FROM community_posts WHERE id=? AND deleted_at IS NULL").bind(postId).first(); if(!post)return json({error:"المشاركة غير موجودة"},404);
+            await env.DB.prepare("INSERT INTO community_comments(id,post_id,user_id,content,created_at) VALUES(?,?,?,?,?)").bind(crypto.randomUUID(),postId,u.id,content,now).run(); return json({ok:true});
+          }
+          if(action==="like"){
+            const post=await env.DB.prepare("SELECT id FROM community_posts WHERE id=? AND deleted_at IS NULL").bind(postId).first(); if(!post)return json({error:"المشاركة غير موجودة"},404);
+            const exists=await env.DB.prepare("SELECT post_id FROM community_likes WHERE post_id=? AND user_id=?").bind(postId,u.id).first();
+            if(exists)await env.DB.prepare("DELETE FROM community_likes WHERE post_id=? AND user_id=?").bind(postId,u.id).run();else await env.DB.prepare("INSERT INTO community_likes(post_id,user_id,created_at) VALUES(?,?,?)").bind(postId,u.id,now).run();return json({ok:true,liked:!exists});
+          }
+          if(action==="best"){
+            const commentId=String(b?.commentId||"").slice(0,80);const post=await env.DB.prepare("SELECT id,user_id,kind FROM community_posts WHERE id=? AND deleted_at IS NULL").bind(postId).first<any>();
+            const comment=await env.DB.prepare("SELECT id FROM community_comments WHERE id=? AND post_id=?").bind(commentId,postId).first();
+            if(!post||post.user_id!==u.id||post.kind!=="question"||!comment)return json({error:"لا يمكن تحديد أفضل إجابة للمشاركة دي"},403);
+            await env.DB.prepare("INSERT INTO community_best_answers(post_id,comment_id,selected_by,created_at) VALUES(?,?,?,?) ON CONFLICT(post_id) DO UPDATE SET comment_id=excluded.comment_id,selected_by=excluded.selected_by,created_at=excluded.created_at").bind(postId,commentId,u.id,now).run();return json({ok:true});
+          }
+          if(action==="report"){
+            if(!postId)return json({error:"المشاركة غير محددة"},400);
+            const post=await env.DB.prepare("SELECT id,user_id FROM community_posts WHERE id=? AND deleted_at IS NULL").bind(postId).first<any>();if(!post)return json({error:"المشاركة غير موجودة"},404);if(post.user_id===u.id)return json({error:"لا يمكنك الإبلاغ عن مشاركتك"},400);
+            const prior=await env.DB.prepare("SELECT id FROM community_reports WHERE post_id=? AND reporter_id=? AND status='open'").bind(postId,u.id).first();if(prior)return json({ok:true,message:"سبق الإبلاغ عن المشاركة"});
+            await env.DB.prepare("INSERT INTO community_reports(id,post_id,reporter_id,reason,status,created_at) VALUES(?,?,?,?,?,?)").bind(crypto.randomUUID(),postId,u.id,String(b?.reason||"مراجعة").slice(0,250),"open",now).run();return json({ok:true});
+          }
+          if(action==="delete"){
+            const post=await env.DB.prepare("SELECT id,user_id FROM community_posts WHERE id=? AND deleted_at IS NULL").bind(postId).first<any>();if(!post)return json({error:"المشاركة غير موجودة"},404);if(post.user_id!==u.id&&u.role!=="owner")return json({error:"غير مسموح بحذف المشاركة دي"},403);
+            await env.DB.prepare("UPDATE community_posts SET deleted_at=? WHERE id=?").bind(now,postId).run();return json({ok:true});
+          }
+          return json({error:"طلب غير معروف"},400);
+        }
         if(url.pathname==="/api/family" && request.method==="GET") {
           const u=await userFrom(request,env); if(!u) return json({error:"يجب تسجيل الدخول"},401);
           const [links,requests]=await Promise.all([
