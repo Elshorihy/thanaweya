@@ -2581,7 +2581,7 @@ export default {
           const goal=await env.DB.prepare("SELECT g.id,g.link_id,l.parent_id,l.student_id,g.student_approved,g.parent_approved FROM family_goals g JOIN parent_student_links l ON l.id=g.link_id WHERE g.id=? AND g.status='pending' AND (l.parent_id=? OR l.student_id=?)").bind(goalId,u.id,u.id).first<any>();
           if(!goal) return json({error:"الهدف غير موجود أو لا تملك صلاحية تعديله"},404);
           if(decision==="reject"){
-            await env.DB.prepare("UPDATE family_goals SET status='rejected',updated_at=? WHERE id=? AND status='pending'").bind(Date.now(),goalId);
+            await env.DB.prepare("UPDATE family_goals SET status='rejected',updated_at=? WHERE id=? AND status='pending'").bind(Date.now(),goalId).run();
           } else {
             const isParent=goal.parent_id===u.id;
             const studentApproved=Number(goal.student_approved)===1||!isParent;
