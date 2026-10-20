@@ -76,6 +76,27 @@ async function ensureSchema(env:Env){
   })().catch(e=>{schemaReady=null;throw e});
   await schemaReady;
 }
+let authSchemaReady:Promise<void>|null=null;
+async function ensureAuthSchema(env:Env){
+  if(!authSchemaReady) authSchemaReady=(async()=>{
+    await env.DB.prepare("CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY,email TEXT NOT NULL UNIQUE,name TEXT NOT NULL,password_hash TEXT NOT NULL,password_salt TEXT NOT NULL,phone TEXT,email_verified_at INTEGER,role TEXT NOT NULL DEFAULT 'user',verified INTEGER NOT NULL DEFAULT 0,created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL)").run();
+    try { await env.DB.prepare("ALTER TABLE users ADD COLUMN email_verified_at INTEGER").run(); } catch {}
+    try { await env.DB.prepare("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'user'").run(); } catch {}
+    try { await env.DB.prepare("ALTER TABLE users ADD COLUMN verified INTEGER NOT NULL DEFAULT 0").run(); } catch {}
+    try { await env.DB.prepare("ALTER TABLE users ADD COLUMN phone TEXT").run(); } catch {}
+    const now=Date.now();
+    await env.DB.prepare("INSERT OR IGNORE INTO users(id,email,name,password_hash,password_salt,email_verified_at,role,verified,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)").bind("owner-hamza","hamza@thanaweya.dev","Hamza Shaheen","OWNER_LOGIN_ONLY","OWNER_LOGIN_ONLY",now,"owner",1,now,now).run();
+    await env.DB.prepare("CREATE TABLE IF NOT EXISTS user_phones (user_id TEXT PRIMARY KEY, phone TEXT UNIQUE, updated_at INTEGER NOT NULL, FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE)").run();
+    try { await env.DB.prepare("INSERT OR IGNORE INTO user_phones(user_id,phone,updated_at) SELECT id,phone,updated_at FROM users WHERE phone IS NOT NULL AND phone<>''").run(); } catch {}
+    await env.DB.prepare("CREATE TABLE IF NOT EXISTS sessions (id TEXT PRIMARY KEY,user_id TEXT NOT NULL,token_hash TEXT NOT NULL UNIQUE,expires_at INTEGER NOT NULL,created_at INTEGER NOT NULL,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE)").run();
+    await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token_hash)").run();
+    await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_sessions_expiry ON sessions(expires_at)").run();
+    await env.DB.prepare("CREATE TABLE IF NOT EXISTS auth_codes (id TEXT PRIMARY KEY,email TEXT NOT NULL,type TEXT NOT NULL,code_hash TEXT NOT NULL,payload_json TEXT,expires_at INTEGER NOT NULL,attempts INTEGER NOT NULL DEFAULT 0,created_at INTEGER NOT NULL)").run();
+    await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_auth_codes_lookup ON auth_codes(email,type,expires_at)").run();
+    await env.DB.prepare("CREATE TABLE IF NOT EXISTS user_data (user_id TEXT PRIMARY KEY,data_json TEXT NOT NULL DEFAULT '{}',updated_at INTEGER NOT NULL,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE)").run();
+  })().catch(e=>{authSchemaReady=null;throw e});
+  await authSchemaReady;
+}
 const COOKIE = "thanaweya_session";
 const SESSION_DAYS = 30;
 
@@ -2185,7 +2206,10 @@ export default {
           try { await ensureSchema(env); await env.DB.prepare("SELECT 1 AS ok").first(); return json({ok:true,db:true}); }
           catch(e) { console.error("D1 health check failed",e); return json({ok:false,db:false,error:"D1 binding/database is not available. Check the DB binding in Cloudflare."},503); }
         }
-        await ensureSchema(env);
+        // Auth endpoints only initialize the small set of tables they need.
+        // Avoid blocking login/registration on unrelated AI, family, and subscription schema setup.
+        if(url.pathname.startsWith("/api/auth/")) await ensureAuthSchema(env);
+        else await ensureSchema(env);
         if(url.pathname.startsWith("/api/bridge/")){
           await ensureBridgeTools(env);
           const u=await userFrom(request,env);
