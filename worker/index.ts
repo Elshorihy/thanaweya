@@ -2206,10 +2206,16 @@ export default {
           try { await ensureSchema(env); await env.DB.prepare("SELECT 1 AS ok").first(); return json({ok:true,db:true}); }
           catch(e) { console.error("D1 health check failed",e); return json({ok:false,db:false,error:"D1 binding/database is not available. Check the DB binding in Cloudflare."},503); }
         }
-        // Auth endpoints only initialize the small set of tables they need.
-        // Avoid blocking login/registration on unrelated AI, family, and subscription schema setup.
-        if(url.pathname.startsWith("/api/auth/")) await ensureAuthSchema(env);
-        else await ensureSchema(env);
+        // Login must stay on the shortest possible path: all auth tables are already
+        // provisioned by registration/normal app traffic. Running schema migrations,
+        // legacy phone backfills, and unrelated CREATE INDEX statements during every
+        // cold login request can make sign-in appear to hang.
+        // Other auth endpoints still initialize the auth schema when needed.
+        if(url.pathname.startsWith("/api/auth/") && url.pathname!=="/api/auth/login") {
+          await ensureAuthSchema(env);
+        } else if(!url.pathname.startsWith("/api/auth/")) {
+          await ensureSchema(env);
+        }
         if(url.pathname.startsWith("/api/bridge/")){
           await ensureBridgeTools(env);
           const u=await userFrom(request,env);
