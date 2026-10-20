@@ -827,6 +827,7 @@ async function ensureAdminTools(env:Env){
   await env.DB.prepare("CREATE TABLE IF NOT EXISTS admin_settings (key TEXT PRIMARY KEY,value TEXT NOT NULL,updated_at INTEGER NOT NULL)").run();
   await env.DB.prepare("CREATE TABLE IF NOT EXISTS admin_activity (id INTEGER PRIMARY KEY AUTOINCREMENT,chat_id TEXT NOT NULL,action TEXT NOT NULL,target TEXT,message TEXT,created_at INTEGER NOT NULL)").run();
   await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_admin_activity_created ON admin_activity(created_at)").run();
+  await env.DB.prepare("CREATE TABLE IF NOT EXISTS telegram_daily_missions (day TEXT NOT NULL,chat_id TEXT NOT NULL,mission_key TEXT NOT NULL,completed_at INTEGER,PRIMARY KEY(day,chat_id,mission_key))").run();
   await env.DB.prepare("CREATE TABLE IF NOT EXISTS user_activity (user_id TEXT PRIMARY KEY,last_seen INTEGER NOT NULL,last_path TEXT NOT NULL,last_method TEXT NOT NULL,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE)").run();
   await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_user_activity_seen ON user_activity(last_seen)").run();
 }
@@ -1283,6 +1284,7 @@ function telegramDashboardKeyboard(){
   return {inline_keyboard:[
     [{text:"🎫 بلاغات الطلاب",callback_data:"bridge_reports"},{text:"💬 رسائل الموقع",callback_data:"bridge_messages"}],
     [{text:"🧠 تحليل الأعطال",callback_data:"bridge_analysis"},{text:"📊 استطلاع جديد",callback_data:"bridge_poll_create"}],
+    [{text:"💡 اقتراحات تطوير",callback_data:"dash_improve"},{text:"🎯 مهمات اليوم",callback_data:"dash_missions"}],
     [{text:"⚡ مركز القيادة",callback_data:"dash_center"}],
     [{text:"🧪 تشخيص عميق للنظام",callback_data:"dash_diagnostics"}],
     [{text:"📊 الرئيسية والإحصائيات",callback_data:"dash_stats"},{text:"🩺 حالة النظام",callback_data:"dash_system"}],
@@ -1303,6 +1305,120 @@ const dashBack=()=>({inline_keyboard:[
   [{text:"⬅️ لوحة التحكم",callback_data:"dash_home"}]
 ]});
 
+async function sendTelegramImprovementIdeas(env:Env,chatId:string){
+  const ideas:string[]=[];
+  const metrics:string[]=[];
+  try{
+    const r=await env.DB.prepare("SELECT COUNT(*) AS n FROM verification_requests WHERE status='pending'").first<any>();
+    const n=Number(r?.n||0); metrics.push("⏳ طلبات توثيق معلقة: "+n);
+    if(n>0) ideas.push("🪪 <b>سرّع مراجعة التوثيق</b>\nعندك "+n+" طلب توثيق محتاج مراجعة. ابدأ بالأقدم لتقليل انتظار الطلاب.");
+  }catch{}
+  try{
+    await ensureBridgeTools(env);
+    const r=await env.DB.prepare("SELECT COUNT(*) AS n FROM student_reports WHERE status NOT IN ('resolved','closed')").first<any>();
+    const n=Number(r?.n||0); metrics.push("🎫 بلاغات غير مغلقة: "+n);
+    if(n>0) ideas.push("🛟 <b>تابع مشاكل الطلاب</b>\nفيه "+n+" بلاغ غير مغلق. راجع البلاغات وحدّث حالة كل بلاغ بعد التعامل معه.");
+  }catch{}
+  try{
+    await ensureWhatsAppLog(env);
+    const r=await env.DB.prepare("SELECT COUNT(*) AS n FROM whatsapp_messages WHERE status='failed' AND created_at>=?").bind(Date.now()-86400000).first<any>();
+    const n=Number(r?.n||0); metrics.push("📱 رسائل واتساب فاشلة آخر 24 ساعة: "+n);
+    if(n>0) ideas.push("📱 <b>راجع إرسال واتساب</b>\nاتسجل فشل "+n+" رسالة خلال آخر 24 ساعة. افتح قسم واتساب لمراجعة أسباب الفشل قبل إعادة الإرسال.");
+  }catch{}
+  try{
+    const r=await env.DB.prepare("SELECT COUNT(*) AS n FROM users WHERE email_verified_at IS NULL").first<any>();
+    const n=Number(r?.n||0); metrics.push("✉️ حسابات بريد غير مؤكدة: "+n);
+    if(n>=5) ideas.push("✉️ <b>راجع رحلة تأكيد الحساب</b>\nيوجد "+n+" حسابًا غير مؤكد. راجع إحصائيات الدخول والتحقق للتأكد من أن خطوات التسجيل واضحة.");
+  }catch{}
+  try{
+    await ensurePageViews(env);
+    const today=egyptDay();
+    const [todayRow,weekRow]=await Promise.all([
+      env.DB.prepare("SELECT COUNT(*) AS n FROM site_page_views WHERE day=?").bind(today).first<any>(),
+      env.DB.prepare("SELECT COUNT(*) AS n FROM site_page_views WHERE day>=date(?, '-6 day')").bind(today).first<any>()
+    ]);
+    const todayN=Number(todayRow?.n||0),weekN=Number(weekRow?.n||0);
+    metrics.push("👀 زيارات اليوم: "+todayN+" | آخر 7 أيام: "+weekN);
+    if(weekN===0) ideas.push("📈 <b>حسّن قياس الزيارات</b>\nلا توجد زيارات مسجلة في آخر 7 أيام. تأكد أن تسجيل زيارات الصفحات يعمل قبل استنتاج أي شيء عن نشاط الطلاب.");
+    else if(todayN===0) ideas.push("🔎 <b>تحقق من حركة اليوم</b>\nلم تُسجل زيارات اليوم حتى الآن. قارن ذلك بحركة الأيام السابقة وتأكد من أن عدّاد الزيارات يعمل.");
+  }catch{}
+  const text=[
+    "💡 اقتراحات تطوير ثانوية",
+    "",
+    "الاقتراحات التالية مبنية على السجلات المتاحة حاليًا، وليست تغييرات تلقائية في الموقع.",
+    "",
+    ...(ideas.length?ideas:["✅ لا توجد مشكلة واضحة وفق المؤشرات التي أمكن قراءتها. جرّب مراجعة التشخيص والبلاغات للحصول على صورة أوسع."]),
+    "",
+    "📊 المؤشرات التي تمت قراءتها:",
+    ...(metrics.length?metrics:["تعذرت قراءة بعض المؤشرات؛ قد تكون جداولها غير متاحة."])
+  ].join("\n\n");
+  await telegramCall(env,"sendMessage",{chat_id:chatId,text,parse_mode:"HTML",reply_markup:{inline_keyboard:[
+    [{text:"🎫 مراجعة البلاغات",callback_data:"bridge_reports"},{text:"🪪 طلبات التوثيق",callback_data:"dash_verifications"}],
+    [{text:"📱 تفاصيل واتساب",callback_data:"dash_wa"}],
+    [{text:"🧪 تشخيص النظام",callback_data:"dash_diagnostics"}],
+    [{text:"🔄 إعادة التحليل",callback_data:"dash_improve"}],
+    [{text:"⬅️ لوحة التحكم",callback_data:"dash_home"}]
+  ]}});
+}
+async function sendTelegramDailyMissions(env:Env,chatId:string){
+  await ensureAdminTools(env);
+  const day=egyptDay();
+  const missions=[
+    {key:"review_verifications",title:"راجع طلبات التوثيق المعلقة",desc:"افتح الطلبات واتخذ قرارًا في الطلبات التي تستطيع مراجعتها.",target:"dash_verifications"},
+    {key:"review_reports",title:"راجع بلاغات الطلاب",desc:"افتح البلاغات المفتوحة وحدّث حالة ما تعاملت معه.",target:"bridge_reports"},
+    {key:"check_system",title:"نفّذ فحصًا سريعًا للنظام",desc:"راجع حالة قاعدة البيانات والخدمات المسجلة.",target:"dash_system"},
+    {key:"review_activity",title:"راجع نشاط المنصة",desc:"اطّلع على حركة الزيارات والنشاط الأخير.",target:"dash_live"}
+  ];
+  const completedRows=await env.DB.prepare("SELECT mission_key FROM telegram_daily_missions WHERE day=? AND chat_id=? AND completed_at IS NOT NULL").bind(day,chatId).all<any>();
+  const completed=new Set((completedRows.results||[]).map((x:any)=>String(x.mission_key)));
+  const rows=missions.map((m,i)=>[
+    {text:(completed.has(m.key)?"✅ ":"⬜ ")+(i+1)+". "+m.title,callback_data:"mission_info:"+m.key}
+  ]);
+  const doneCount=missions.filter(m=>completed.has(m.key)).length;
+  const text=[
+    "🎯 مهمات الإدارة اليومية",
+    "📅 "+day,
+    "",
+    "أنجز المهمات المناسبة ليومك وعلّم عليها من هنا.",
+    "",
+    ...missions.map((m,i)=>(completed.has(m.key)?"✅":"⬜")+" "+(i+1)+". "+m.title+"\n   "+m.desc),
+    "",
+    "🏁 التقدم: "+doneCount+" / "+missions.length,
+    completed.size===missions.length?"🎉 خلصت كل مهمات اليوم!":"اختار مهمة من الأزرار لفتح القسم، وبعد ما تخلص علّمها كمكتملة."
+  ].join("\n");
+  await telegramCall(env,"sendMessage",{chat_id:chatId,text,reply_markup:{inline_keyboard:[
+    ...rows,
+    [{text:"🔄 تحديث المهمات",callback_data:"dash_missions"}],
+    [{text:"⬅️ لوحة التحكم",callback_data:"dash_home"}]
+  ]}});
+}
+async function sendTelegramMissionInfo(env:Env,chatId:string,key:string){
+  const map:Record<string,{title:string;desc:string;target:string}>={
+    review_verifications:{title:"راجع طلبات التوثيق المعلقة",desc:"افتح الطلبات وراجع الطلبات التي تنتظر قرارًا.",target:"dash_verifications"},
+    review_reports:{title:"راجع بلاغات الطلاب",desc:"افتح البلاغات المفتوحة وحدّث الحالات بعد التعامل معها.",target:"bridge_reports"},
+    check_system:{title:"نفّذ فحصًا سريعًا للنظام",desc:"راجع حالة قاعدة البيانات والخدمات التي يمكن فحصها.",target:"dash_system"},
+    review_activity:{title:"راجع نشاط المنصة",desc:"اطّلع على نشاط المستخدمين والزيارات المسجلة.",target:"dash_live"}
+  };
+  const m=map[key]; if(!m){await sendTelegramDailyMissions(env,chatId);return;}
+  const done=await env.DB.prepare("SELECT mission_key FROM telegram_daily_missions WHERE day=? AND chat_id=? AND mission_key=? AND completed_at IS NOT NULL").bind(egyptDay(),chatId,key).first<any>();
+  await telegramCall(env,"sendMessage",{chat_id:chatId,text:(done?"✅ المهمة مكتملة بالفعل":"🎯 تفاصيل المهمة") +"\n\n"+m.title+"\n\n"+m.desc,reply_markup:{inline_keyboard:[
+    [{text:"🚀 افتح القسم",callback_data:m.target}],
+    ...(done?[]:[[ {text:"✅ علّمها كمكتملة",callback_data:"mission_done:"+key} ]]),
+    [{text:"🎯 مهمات اليوم",callback_data:"dash_missions"}]
+  ]}});
+}
+async function completeTelegramMission(env:Env,chatId:string,key:string){
+  const valid=new Set(["review_verifications","review_reports","check_system","review_activity"]);
+  if(!valid.has(key)){await sendTelegramDailyMissions(env,chatId);return;}
+  await ensureAdminTools(env);
+  const day=egyptDay(),now=Date.now();
+  await env.DB.prepare("INSERT INTO telegram_daily_missions(day,chat_id,mission_key,completed_at) VALUES(?,?,?,?) ON CONFLICT(day,chat_id,mission_key) DO UPDATE SET completed_at=excluded.completed_at").bind(day,chatId,key,now).run();
+  await adminLog(env,chatId,"DAILY_MISSION_COMPLETE",key,day);
+  await telegramCall(env,"sendMessage",{chat_id:chatId,text:"✅ تم تسجيل إنجاز المهمة: "+key+"\n📅 "+day,reply_markup:{inline_keyboard:[
+    [{text:"🎯 عرض تقدم اليوم",callback_data:"dash_missions"}],
+    [{text:"🎛️ لوحة التحكم",callback_data:"dash_home"}]
+  ]}});
+}
 async function sendTelegramDashboard(env:Env,chatId:string){
   const stats=await getPageViewStats(env);
   const now=Date.now();
@@ -1599,6 +1715,10 @@ async function handleTelegramUpdate(env:Env,update:any){
       return;
     }
 
+    if(data==="dash_improve"){await clearTelegramAdminMode(env,chatId);await sendTelegramImprovementIdeas(env,chatId);return;}
+    if(data==="dash_missions"){await clearTelegramAdminMode(env,chatId);await sendTelegramDailyMissions(env,chatId);return;}
+    if(data.startsWith("mission_info:")){await sendTelegramMissionInfo(env,chatId,data.slice("mission_info:".length));return;}
+    if(data.startsWith("mission_done:")){await completeTelegramMission(env,chatId,data.slice("mission_done:".length));return;}
     if(data==="dash_center"){await clearTelegramAdminMode(env,chatId);await sendTelegramCommandCenter(env,chatId);return;}
     if(data==="dash_diagnostics"){await clearTelegramAdminMode(env,chatId);await sendTelegramDiagnostics(env,chatId);return;}
     if(data==="admin_nl_maintenance_on"||data==="admin_nl_maintenance_off"){
