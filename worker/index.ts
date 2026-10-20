@@ -1320,9 +1320,10 @@ async function sendTelegramDashboard(env:Env,chatId:string){
     activeSubscriptions=Number(r?.n||0);
   } catch {}
   try {
-    const start=new Date(new Date().toLocaleString("en-US",{timeZone:"Africa/Cairo"}));
-    start.setHours(0,0,0,0);
-    const startMs=start.getTime();
+    const cairoNow=new Date(new Date().toLocaleString("en-US",{timeZone:"Africa/Cairo"}));
+    const cairoOffset=Date.now()-cairoNow.getTime();
+    cairoNow.setHours(0,0,0,0);
+    const startMs=cairoNow.getTime()+cairoOffset;
     const r=await env.DB.prepare("SELECT COUNT(*) AS n FROM users WHERE created_at>=?").bind(startMs).first<any>();
     newToday=Number(r?.n||0);
   } catch {}
