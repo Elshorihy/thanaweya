@@ -153,8 +153,8 @@ async function userFrom(request:Request,env:Env) {
   const row=await env.DB.prepare("SELECT u.id,u.email,u.name,u.role,u.verified FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires_at>?").bind(tokenHash,Date.now()).first<{id:string;email:string;name:string;role?:string;verified?:number}>();
   return row||null;
 }
-const sessionCookie=(token:string)=>`${COOKIE}=${token}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${SESSION_DAYS*86400}`;
-const clearCookie=()=>`${COOKIE}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`;
+const sessionCookie=(token:string)=>`${COOKIE}=${token}; Path=/; HttpOnly; Secure; SameSite=None; Max-Age=${SESSION_DAYS*86400}`;
+const clearCookie=()=>`${COOKIE}=; Path=/; HttpOnly; Secure; SameSite=None; Max-Age=0`;
 async function createSession(userId:string,env:Env) {
   const token=randomHex(32), hash=await sha256(token), expires=Date.now()+SESSION_DAYS*86400000;
   await env.DB.prepare("INSERT INTO sessions(id,user_id,token_hash,expires_at,created_at) VALUES(?,?,?,?,?)").bind(randomHex(16),userId,hash,expires,Date.now()).run();
@@ -2588,7 +2588,7 @@ export default {
             const owner=await env.DB.prepare("SELECT id,email,name FROM users WHERE id='owner-hamza'").first<any>();
             if(owner){
               const token=await createSession(owner.id,env);
-              return json({user:{id:owner.id,email:owner.email,name:owner.name,phone:null,role:"owner",verified:true}},200,{"set-cookie":sessionCookie(token)});
+              return json({user:{id:owner.id,email:owner.email,name:owner.name,phone:null,role:"owner",verified:true}},200,{"set-cookie":sessionCookie(token)},request);
             }
           }
           const email=loginEmail, password=loginPassword, phone=cleanPhone(loginBody?.phone);
@@ -2603,7 +2603,7 @@ export default {
           const phoneRow=await env.DB.prepare("SELECT phone FROM user_phones WHERE user_id=?").bind(u.id).first<any>();
           // Expired sessions are already rejected by userFrom() via expires_at; avoid a table-wide cleanup on every login.
           const token=await createSession(u.id,env);
-          return json({user:{id:u.id,email:u.email,name:u.name,phone:phoneRow?.phone||null,role:u.role||"user",verified:Number(u.verified||0)===1}},200,{"set-cookie":sessionCookie(token)});
+          return json({user:{id:u.id,email:u.email,name:u.name,phone:phoneRow?.phone||null,role:u.role||"user",verified:Number(u.verified||0)===1}},200,{"set-cookie":sessionCookie(token)},request);
         }
         if(url.pathname==="/api/subscription/status" && request.method==="GET") {
           const u=await userFrom(request,env); if(!u) return json({error:"يجب تسجيل الدخول"},401);
