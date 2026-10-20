@@ -2211,7 +2211,7 @@ export default {
         // legacy phone backfills, and unrelated CREATE INDEX statements during every
         // cold login request can make sign-in appear to hang.
         // Other auth endpoints still initialize the auth schema when needed.
-        if(url.pathname.startsWith("/api/auth/") && url.pathname!=="/api/auth/login") {
+        if(url.pathname.startsWith("/api/auth/") && url.pathname!=="/api/auth/login" && url.pathname!=="/api/auth/me") {
           await ensureAuthSchema(env);
         } else if(!url.pathname.startsWith("/api/auth/")) {
           await ensureSchema(env);
