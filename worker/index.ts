@@ -1305,17 +1305,40 @@ const dashBack=()=>({inline_keyboard:[
 
 async function sendTelegramDashboard(env:Env,chatId:string){
   const stats=await getPageViewStats(env);
-  let linked=0;
-  try { const r=await env.DB.prepare("SELECT COUNT(*) AS n FROM user_phones WHERE phone IS NOT NULL AND phone<>''").first<any>(); linked=Number(r?.n||0); } catch {}
+  const now=Date.now();
+  let linked=0,pendingVerifications=0,activeSubscriptions=0,newToday=0;
+  try {
+    const r=await env.DB.prepare("SELECT COUNT(*) AS n FROM user_phones WHERE phone IS NOT NULL AND phone<>''").first<any>();
+    linked=Number(r?.n||0);
+  } catch {}
+  try {
+    const r=await env.DB.prepare("SELECT COUNT(*) AS n FROM verification_requests WHERE status='pending'").first<any>();
+    pendingVerifications=Number(r?.n||0);
+  } catch {}
+  try {
+    const r=await env.DB.prepare("SELECT COUNT(DISTINCT user_id) AS n FROM subscriptions WHERE status='active' AND expires_at>?").bind(now).first<any>();
+    activeSubscriptions=Number(r?.n||0);
+  } catch {}
+  try {
+    const start=new Date(new Date().toLocaleString("en-US",{timeZone:"Africa/Cairo"}));
+    start.setHours(0,0,0,0);
+    const startMs=start.getTime();
+    const r=await env.DB.prepare("SELECT COUNT(*) AS n FROM users WHERE created_at>=?").bind(startMs).first<any>();
+    newToday=Number(r?.n||0);
+  } catch {}
   const text=[
     "🎛️ لوحة تحكم ثانوية — الإدارة",
-    "",
-    "👥 الحسابات: "+stats.totalUsers.toLocaleString("ar-EG"),
+    "━━━━━━━━━━━━━━━━",
+    "👥 إجمالي الحسابات: "+stats.totalUsers.toLocaleString("ar-EG"),
+    "🆕 تسجيلات اليوم: "+newToday.toLocaleString("ar-EG"),
+    "💎 الاشتراكات النشطة: "+activeSubscriptions.toLocaleString("ar-EG"),
+    "⏳ طلبات التوثيق المعلقة: "+pendingVerifications.toLocaleString("ar-EG"),
     "📱 أرقام واتساب المرتبطة: "+linked.toLocaleString("ar-EG"),
+    "",
     "👀 إجمالي الزيارات: "+stats.totalVisits.toLocaleString("ar-EG"),
     "📅 زيارات اليوم: "+stats.todayVisits.toLocaleString("ar-EG"),
     "🗓️ زيارات آخر 7 أيام: "+stats.last7DaysVisits.toLocaleString("ar-EG"),
-    "",
+    "━━━━━━━━━━━━━━━━",
     "اختار القسم اللي عايز تديره 👇"
   ].join("\n");
   await telegramCall(env,"sendMessage",{chat_id:chatId,text,reply_markup:telegramDashboardKeyboard()});
