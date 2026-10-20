@@ -2660,7 +2660,7 @@ export default {
           return json({ok:true,phone});
         }
         if(url.pathname==="/api/community" && (request.method==="GET" || request.method==="POST")) {
-          await ensureSchema(env);
+          await ensureAuthSchema(env);
           const u=await userFrom(request,env); if(!u) return json({error:"يجب تسجيل الدخول"},401);
           await env.DB.prepare("CREATE TABLE IF NOT EXISTS community_posts (id TEXT PRIMARY KEY,user_id TEXT NOT NULL,subject TEXT NOT NULL,kind TEXT NOT NULL,title TEXT NOT NULL,content TEXT NOT NULL,created_at INTEGER NOT NULL,deleted_at INTEGER,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE)").run();
           await env.DB.prepare("CREATE TABLE IF NOT EXISTS community_comments (id TEXT PRIMARY KEY,post_id TEXT NOT NULL,user_id TEXT NOT NULL,content TEXT NOT NULL,created_at INTEGER NOT NULL,FOREIGN KEY(post_id) REFERENCES community_posts(id) ON DELETE CASCADE,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE)").run();
