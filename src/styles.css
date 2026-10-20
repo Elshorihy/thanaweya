@@ -1038,8 +1038,8 @@ body[data-layout="classic"] .search,body[data-layout="classic"] input,body[data-
 /* Simplified navigation: five permanent sections, optional pinned tools */
 .app>aside nav{overflow-y:auto;min-height:0;flex:1;align-content:start;gap:6px;padding:0 2px}
 .app>aside nav button{min-height:43px;border-radius:12px;font-size:13px}
-.allToolsButton{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;margin:10px 0 8px;padding:11px 12px;border:1px solid var(--border);border-radius:12px;background:var(--surface2);color:var(--text);font-weight:800;cursor:pointer}
-.allToolsButton span{display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:22px;border-radius:7px;background:rgba(139,124,255,.18);color:var(--accent);font-size:11px}
+.allToolsButton{display:flex;align-items:center;justify-content:center;gap:6px;width:100%;min-height:34px;margin:6px 0 4px;padding:6px 8px;border:1px solid var(--border);border-radius:10px;background:var(--surface2);color:var(--text);font-size:12px;line-height:1.2;font-weight:750;cursor:pointer;flex-shrink:0}
+.allToolsButton span{display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 3px;border-radius:6px;background:rgba(139,124,255,.18);color:var(--accent);font-size:10px}
 .pinSettingsList{display:grid;gap:8px}
 .pinSettingsRow{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 12px;border:1px solid var(--border);border-radius:12px;background:var(--surface2)}
 .pinSettingsLabel{display:flex;align-items:center;gap:10px;min-width:0}
@@ -1053,5 +1053,5 @@ body[data-layout="classic"] .search,body[data-layout="classic"] input,body[data-
 .mobileNavGrid .pinToolBtn.pinned{color:var(--accent2);border-color:color-mix(in srgb,var(--accent2) 45%,var(--border));background:color-mix(in srgb,var(--accent2) 8%,transparent)}
 .mobileNavGrid .coreToolBadge{display:flex;align-items:center;justify-content:center;padding:0 8px;border:1px solid var(--border);border-radius:10px;color:var(--muted);font-size:11px}
 .toolsModalFooter{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
-@media(max-width:820px){.app>aside nav button{justify-content:flex-start;padding:10px 9px;font-size:12px}.app>aside nav button span{display:inline}.app>aside nav button svg{width:17px}.app>aside .allToolsButton{padding:10px 6px;font-size:11px}}
+@media(max-width:820px){.app>aside nav button{justify-content:flex-start;padding:10px 9px;font-size:12px}.app>aside nav button span{display:inline}.app>aside nav button svg{width:17px}.app>aside .allToolsButton{min-height:30px;margin:4px 0 2px;padding:5px 4px;gap:4px;font-size:10px}.app>aside .allToolsButton span{min-width:16px;height:16px;font-size:9px}}
 @media(max-width:560px){.bottomNav{grid-template-columns:none;justify-content:flex-start}.bottomNav button{flex:0 0 68px}.bottomNav button span{font-size:10px}.pinSettingsRow{align-items:flex-start}.pinSettingsLabel b{font-size:12px}.mobileNavGrid .navToolRow{grid-template-columns:minmax(0,1fr) auto}}
