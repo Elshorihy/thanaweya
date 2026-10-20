@@ -2431,6 +2431,28 @@ export default {
           const token=await createSession(u.id,env);
           return json({user:{id:u.id,email:u.email,name:u.name,phone:phoneRow?.phone||null,role:u.role||"user",verified:Number(u.verified||0)===1}},200,{"set-cookie":sessionCookie(token)});
         }
+        if(url.pathname==="/api/admin/overview" && request.method==="GET") {
+          await ensureSchema(env);
+          await ensurePageViews(env);
+          const u=await userFrom(request,env);
+          if(!u) return json({error:"يجب تسجيل الدخول"},401);
+          if(u.role!=="owner") return json({error:"غير مسموح — لوحة الإدارة للمالك فقط."},403);
+          await env.DB.prepare("CREATE TABLE IF NOT EXISTS community_posts (id TEXT PRIMARY KEY,user_id TEXT NOT NULL,subject TEXT NOT NULL,kind TEXT NOT NULL,title TEXT NOT NULL,content TEXT NOT NULL,created_at INTEGER NOT NULL,deleted_at INTEGER)").run();
+          const now=Date.now(),day=egyptDay();
+          const [users,verified,activeSubscriptions,pendingVerification,pendingParents,posts,viewsToday,views7Days,recentUsers,recentRequests]=await Promise.all([
+            env.DB.prepare("SELECT COUNT(*) AS n FROM users WHERE role<>'owner'").first<any>(),
+            env.DB.prepare("SELECT COUNT(*) AS n FROM users WHERE role<>'owner' AND verified=1").first<any>(),
+            env.DB.prepare("SELECT COUNT(DISTINCT user_id) AS n FROM subscriptions WHERE status='active' AND expires_at>?").bind(now).first<any>(),
+            env.DB.prepare("SELECT COUNT(*) AS n FROM verification_requests WHERE status='pending'").first<any>(),
+            env.DB.prepare("SELECT COUNT(*) AS n FROM parent_link_requests WHERE status='pending'").first<any>(),
+            env.DB.prepare("SELECT COUNT(*) AS n FROM community_posts WHERE deleted_at IS NULL").first<any>(),
+            env.DB.prepare("SELECT COUNT(*) AS n FROM site_page_views WHERE day=?").bind(day).first<any>(),
+            env.DB.prepare("SELECT COUNT(*) AS n FROM site_page_views WHERE day>=date(?,'-6 day') AND day<=?").bind(day,day).first<any>(),
+            env.DB.prepare("SELECT id,name,email,role,verified,created_at FROM users WHERE role<>'owner' ORDER BY created_at DESC LIMIT 8").all<any>(),
+            env.DB.prepare("SELECT r.id,u.name,u.email,r.transfer_phone,r.created_at FROM verification_requests r JOIN users u ON u.id=r.user_id WHERE r.status='pending' ORDER BY r.created_at DESC LIMIT 8").all<any>()
+          ]);
+          return json({users:Number(users?.n||0),verified:Number(verified?.n||0),activeSubscriptions:Number(activeSubscriptions?.n||0),pendingVerification:Number(pendingVerification?.n||0),pendingParents:Number(pendingParents?.n||0),posts:Number(posts?.n||0),viewsToday:Number(viewsToday?.n||0),views7Days:Number(views7Days?.n||0),recentUsers:recentUsers.results||[],recentRequests:recentRequests.results||[]});
+        }
         if(url.pathname==="/api/subscription/status" && request.method==="GET") {
           const u=await userFrom(request,env); if(!u) return json({error:"يجب تسجيل الدخول"},401);
           const subscription=await getSubscription(env,u.id);
