@@ -844,13 +844,17 @@ async function sendTelegramBridgeAnalysis(env:Env,chatId:string){
   const txt=["🧠 تحليل تشغيلي لثانوية — آخر 24 ساعة","","🎫 البلاغات:",reportText,"","🧾 آخر إجراءات الإدارة:",activityText,"","📱 رسائل واتساب الفاشلة: "+(failed?Number(failed.n||0):"غير متاح"),"","⚠️ التحليل مبني على السجلات المتاحة فقط؛ لا يدّعي اختبار اتصال كل خدمات البريد والذكاء الاصطناعي. لا يتم تعديل الموقع تلقائيًا."].join("\n");
   await telegramCall(env,"sendMessage",{chat_id:chatId,text:txt,reply_markup:{inline_keyboard:[[ {text:"🎫 البلاغات المفتوحة",callback_data:"bridge_reports"} ],[ {text:"🩺 التشخيص العميق",callback_data:"dash_diagnostics"} ]] }});
 }
+let adminToolsReady:Promise<void>|null=null;
 async function ensureAdminTools(env:Env){
-  await env.DB.prepare("CREATE TABLE IF NOT EXISTS admin_settings (key TEXT PRIMARY KEY,value TEXT NOT NULL,updated_at INTEGER NOT NULL)").run();
-  await env.DB.prepare("CREATE TABLE IF NOT EXISTS admin_activity (id INTEGER PRIMARY KEY AUTOINCREMENT,chat_id TEXT NOT NULL,action TEXT NOT NULL,target TEXT,message TEXT,created_at INTEGER NOT NULL)").run();
-  await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_admin_activity_created ON admin_activity(created_at)").run();
-  await env.DB.prepare("CREATE TABLE IF NOT EXISTS telegram_daily_missions (day TEXT NOT NULL,chat_id TEXT NOT NULL,mission_key TEXT NOT NULL,completed_at INTEGER,PRIMARY KEY(day,chat_id,mission_key))").run();
-  await env.DB.prepare("CREATE TABLE IF NOT EXISTS user_activity (user_id TEXT PRIMARY KEY,last_seen INTEGER NOT NULL,last_path TEXT NOT NULL,last_method TEXT NOT NULL,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE)").run();
-  await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_user_activity_seen ON user_activity(last_seen)").run();
+  if(!adminToolsReady) adminToolsReady=(async()=>{
+    await env.DB.prepare("CREATE TABLE IF NOT EXISTS admin_settings (key TEXT PRIMARY KEY,value TEXT NOT NULL,updated_at INTEGER NOT NULL)").run();
+    await env.DB.prepare("CREATE TABLE IF NOT EXISTS admin_activity (id INTEGER PRIMARY KEY AUTOINCREMENT,chat_id TEXT NOT NULL,action TEXT NOT NULL,target TEXT,message TEXT,created_at INTEGER NOT NULL)").run();
+    await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_admin_activity_created ON admin_activity(created_at)").run();
+    await env.DB.prepare("CREATE TABLE IF NOT EXISTS telegram_daily_missions (day TEXT NOT NULL,chat_id TEXT NOT NULL,mission_key TEXT NOT NULL,completed_at INTEGER,PRIMARY KEY(day,chat_id,mission_key))").run();
+    await env.DB.prepare("CREATE TABLE IF NOT EXISTS user_activity (user_id TEXT PRIMARY KEY,last_seen INTEGER NOT NULL,last_path TEXT NOT NULL,last_method TEXT NOT NULL,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE)").run();
+    await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_user_activity_seen ON user_activity(last_seen)").run();
+  })().catch(e=>{adminToolsReady=null;throw e});
+  await adminToolsReady;
 }
 async function adminLog(env:Env,chatId:string,action:string,target="",message=""){
   await ensureAdminTools(env);
@@ -2213,7 +2217,9 @@ export default {
         // Other auth endpoints still initialize the auth schema when needed.
         if(url.pathname.startsWith("/api/auth/") && url.pathname!=="/api/auth/login" && url.pathname!=="/api/auth/me") {
           await ensureAuthSchema(env);
-        } else if(!url.pathname.startsWith("/api/auth/")) {
+        } else if(!url.pathname.startsWith("/api/auth/") && url.pathname!=="/api/community") {
+          // The community endpoint initializes only its own tables below. Avoid
+          // bootstrapping every unrelated app table before loading the feed.
           await ensureSchema(env);
         }
         if(url.pathname.startsWith("/api/bridge/")){
