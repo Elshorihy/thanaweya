@@ -942,6 +942,7 @@ function Dashboard(){const due=s.lessons.filter(l=>l.nextReviewAt&&l.nextReviewA
  const allLessons=s.lessons.map(l=>({...l,unit:s.units.find(u=>u.id===l.unitId),subject:s.subjects.find(sub=>sub.id===s.units.find(u=>u.id===l.unitId)?.subjectId)}));
  const subjectLessons=allLessons.filter(x=>x.subject?.id===quizSubject);
  const matchingBooks=books.filter(b=>!subjectFilter||b.subjectId===subjectFilter);
+ const resetBook=()=>{setBookTitle('');setBookSubject('');setBookFile(null);setBookUrl('');setBookNote('');setBookError('');setModal(null)};
  const addBook=()=>{
   setBookError('');
   if(!bookTitle.trim()||!bookSubject){setBookError('اكتب اسم الكتاب واختار المادة.');return}
@@ -952,7 +953,6 @@ function Dashboard(){const due=s.lessons.filter(l=>l.nextReviewAt&&l.nextReviewA
   if(bookFile){const reader=new FileReader();reader.onload=()=>{try{const data=String(reader.result||'');const record:BookRecord={id:id(),title:clean(bookTitle),subjectId:bookSubject,fileName:bookFile.name,url:data,note:clean(bookNote),addedAt:new Date().toISOString()};setBooks(old=>[record,...old]);resetBook();notify('اتضاف الكتاب للجهاز الحالي. احتفظ بالـPDF الأصلي كنسخة احتياطية.')}catch{setBookError('تعذر تجهيز الملف.')}};reader.onerror=()=>setBookError('تعذرت قراءة الملف.');reader.readAsDataURL(bookFile);return}
   setBooks(old=>[{id:id(),title:clean(bookTitle),subjectId:bookSubject,url:bookUrl.trim(),note:clean(bookNote),addedAt:new Date().toISOString()},...old]);resetBook();notify('تم حفظ رابط الكتاب.');
  };
- const resetBook=()=>{setBookTitle('');setBookSubject('');setBookFile(null);setBookUrl('');setBookNote('');setBookError('');setModal(null)};
  const makeQuiz=()=>{
   setQuizError('');
   const pool=s.questions.filter(q=>(!quizSubject||q.subjectId===quizSubject)&&(!quizLesson||q.lessonId===quizLesson));
