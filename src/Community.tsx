@@ -7,7 +7,28 @@ const subjects=['عام','اللغة العربية','اللغة الإنجلي�
 const kinds=[['discussion','نقاش عام'],['question','سؤال دراسي'],['resource','مشاركة مصدر']];
 export default function Community({auth,notify}:{auth:Person;notify:(s:string)=>void}){
  const [posts,setPosts]=useState<Post[]>([]),[loading,setLoading]=useState(true),[filter,setFilter]=useState('الكل'),[kindFilter,setKindFilter]=useState('الكل'),[showComposer,setShowComposer]=useState(false),[title,setTitle]=useState(''),[content,setContent]=useState(''),[subject,setSubject]=useState('عام'),[kind,setKind]=useState('discussion'),[commentDraft,setCommentDraft]=useState<Record<string,string>>({}),[busy,setBusy]=useState(false);
- const api=async(action:string,data:Record<string,unknown>={})=>{const r=await fetch('/api/community',{method:action==='list'?'GET':'POST',headers:{'content-type':'application/json'},body:action==='list'?undefined:JSON.stringify({action,...data})});const j=await r.json();if(!r.ok)throw new Error(j.error||'حصل خطأ');return j};
+ const api=async(action:string,data:Record<string,unknown>={})=>{
+  const controller=new AbortController();
+  const timeout=window.setTimeout(()=>controller.abort(),20000);
+  try{
+   const r=await fetch('/api/community',{
+    method:action==='list'?'GET':'POST',
+    credentials:'same-origin',
+    cache:'no-store',
+    headers:{'content-type':'application/json'},
+    body:action==='list'?undefined:JSON.stringify({action,...data}),
+    signal:controller.signal
+   });
+   const j=await r.json().catch(()=>({}));
+   if(!r.ok)throw new Error(j.error||'حصل خطأ');
+   return j;
+  }catch(e){
+   if(e instanceof DOMException&&e.name==='AbortError')throw new Error('الخادم اتأخر في تحميل المجتمع. اضغط تحديث وحاول تاني.');
+   throw e;
+  }finally{
+   window.clearTimeout(timeout);
+  }
+ };
  const load=useCallback(async()=>{setLoading(true);try{const j=await api('list');setPosts(j.posts||[])}catch(e){notify(e instanceof Error?e.message:'تعذر تحميل المجتمع')}finally{setLoading(false)}},[]);
  useEffect(()=>{void load()},[load]);
  const act=async(action:string,data:Record<string,unknown>={})=>{setBusy(true);try{await api(action,data);await load();return true}catch(e){notify(e instanceof Error?e.message:'حصل خطأ');return false}finally{setBusy(false)}};
