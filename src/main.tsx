@@ -963,10 +963,10 @@ function Dashboard(){const due=s.lessons.filter(l=>l.nextReviewAt&&l.nextReviewA
     {question:'ما عدد مولات المذاب في محلول حجمه 2 لتر وتركيزه 0.5 مول/لتر؟',answer:'1 مول؛ n = C × V = 0.5 × 2.',difficulty:'easy'},
     {question:'في تفاعل الأكسدة والاختزال، ماذا يحدث لعدد التأكسد عند الأكسدة؟',answer:'يزداد عدد التأكسد.',difficulty:'easy'},
     {question:'وازن المعادلة: H₂ + O₂ → H₂O',answer:'2H₂ + O₂ → 2H₂O.',difficulty:'medium'}]},
-   {keys:['رياضيات تطبيقية','تطبيقية','applied math'],items:[
+   {keys:['رياضيات تطبيقية','الرياضيات التطبيقية','رياضيات','الرياضيات','تطبيقية','applied math'],items:[
     {question:'جسم يتحرك بسرعة ثابتة 5 م/ث لمدة 8 ثوانٍ. ما المسافة التي يقطعها؟',answer:'40 مترًا؛ المسافة = السرعة × الزمن.',difficulty:'easy'},
     {question:'إذا كانت محصلة القوى المؤثرة على جسم تساوي صفرًا، فما قيمة العجلة؟',answer:'صفر؛ وفق قانون نيوتن الثاني.',difficulty:'easy'}]},
-   {keys:['رياضيات بحتة','بحتة','pure math'],items:[
+   {keys:['رياضيات بحتة','الرياضيات البحتة','رياضيات','الرياضيات','بحتة','pure math'],items:[
     {question:'إذا كانت f(x)=x²، فما مشتقتها بالنسبة إلى x؟',answer:'f′(x)=2x.',difficulty:'easy'},
     {question:'احسب ∫ 2x dx.',answer:'x² + C.',difficulty:'medium'}]},
    {keys:['إحصاء','احصاء','statistics'],items:[
