@@ -1018,8 +1018,13 @@ function Dashboard(){const due=s.lessons.filter(l=>l.nextReviewAt&&l.nextReviewA
     {keys:['إنجليزي','اللغة الإنجليزية','اللغة الانجليزية','english'],prompt:'Change to the past simple: “They play football.”',answer:'They played football.',subject:'اللغة الإنجليزية'}
    ];
    const selectedName=s.subjects.find(x=>x.id===quizSubject)?.name||'';
-   const eligible=starter.filter(item=>!quizSubject||item.keys.some(k=>selectedName.toLocaleLowerCase().includes(k.toLocaleLowerCase())));
-   const sourceItems=eligible.length?eligible:starter;
+   const normalizedName=selectedName.toLocaleLowerCase().replace(/[أإآ]/g,'ا').replace(/ة/g,'ه').trim();
+   const eligible=starter.filter(item=>!quizSubject||item.keys.some(k=>normalizedName.includes(k.toLocaleLowerCase().replace(/[أإآ]/g,'ا').replace(/ة/g,'ه'))));
+   const sourceItems=quizSubject?eligible:starter;
+   if(!sourceItems.length){
+    setQuizError('مفيش بنك أسئلة محفوظ ولا بنك تأسيسي جاهز للمادة دي لسه. عشان ما أديكش أسئلة من مادة غلط، أضف أسئلة المادة من بنك الأسئلة ثم ارجع أنشئ الاختبار.');
+    setQuizItems([]);setQuizAnswers([]);setQuizIndex(0);setQuizDone(false);return;
+   }
    picked=sourceItems.map(item=>({prompt:item.prompt,answer:item.answer,lesson:item.subject+' • تدريب تأسيسي',source:'سؤال تدريبي أصلي مولّد داخل الموقع — ليس سؤالًا وزاريًا'}));
    setQuizError(quizLesson?'مفيش أسئلة مضافة للدرس المحدد؛ جهزت لك اختبارًا تأسيسيًا للمادة بدل ما أوقفك. الأسئلة دي عامة وليست خاصة بالدرس.':'مفيش بنك أسئلة محفوظ؛ جهزت لك اختبارًا تأسيسيًا أصليًا بدل ما أوقفك.');
   }
