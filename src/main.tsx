@@ -997,9 +997,34 @@ function Dashboard(){const due=s.lessons.filter(l=>l.nextReviewAt&&l.nextReviewA
  const makeQuiz=()=>{
   setQuizError('');
   const pool=s.questions.filter(q=>(!quizSubject||q.subjectId===quizSubject)&&(!quizLesson||q.lessonId===quizLesson));
-  if(!pool.length){setQuizError('لسه مفيش أسئلة مرتبطة بالاختيار ده. مفيش أسئلة هتتخترع أو تتنسب للمنهج تلقائيًا من غير مصدر قابل للتحقق. أضف أسئلة من محتوى الدرس أو استورد بنك أسئلة موثوق.');return}
-  const picked=[...pool].sort(()=>Math.random()-.5).slice(0,Math.max(1,Math.min(quizCount,pool.length)));
-  setQuizItems(picked.map(q=>({prompt:q.question,answer:q.answer,lesson:allLessons.find(l=>l.id===q.lessonId)?.name||'سؤال عام',source:q.source||allLessons.find(l=>l.id===q.lessonId)?.name||'بنك أسئلة ثانوية'})));
+  let picked=pool.map(q=>({prompt:q.question,answer:q.answer,lesson:allLessons.find(l=>l.id===q.lessonId)?.name||'سؤال عام',source:q.source||allLessons.find(l=>l.id===q.lessonId)?.name||'بنك أسئلة ثانوية'}));
+  if(!picked.length){
+   const starter:Array<{keys:string[];prompt:string;answer:string;subject:string}>=[
+    {keys:['فيزياء','physics'],prompt:'مقاومة مقدارها 4 أوم يمر بها تيار شدته 3 أمبير. احسب فرق الجهد.',answer:'12 فولت',subject:'الفيزياء'},
+    {keys:['فيزياء','physics'],prompt:'ما وحدة قياس شدة التيار الكهربائي؟',answer:'الأمبير',subject:'الفيزياء'},
+    {keys:['فيزياء','physics'],prompt:'إذا تضاعفت المقاومة وثبت فرق الجهد، ماذا يحدث للتيار؟',answer:'يقل إلى النصف',subject:'الفيزياء'},
+    {keys:['كيمياء','chemistry'],prompt:'كم عدد مولات المذاب في 2 لتر من محلول تركيزه 0.5 مول/لتر؟',answer:'1 مول',subject:'الكيمياء'},
+    {keys:['كيمياء','chemistry'],prompt:'ماذا يحدث لعدد التأكسد في عملية الأكسدة؟',answer:'يزداد',subject:'الكيمياء'},
+    {keys:['كيمياء','chemistry'],prompt:'أكمل وزن المعادلة: H₂ + O₂ → H₂O',answer:'2H₂ + O₂ → 2H₂O',subject:'الكيمياء'},
+    {keys:['رياضيات تطبيقية','تطبيقية','applied math'],prompt:'جسم سرعته 5 م/ث تحرك 8 ثوانٍ. احسب المسافة.',answer:'40 مترًا',subject:'الرياضيات التطبيقية'},
+    {keys:['رياضيات تطبيقية','تطبيقية','applied math'],prompt:'إذا كانت محصلة القوى على جسم تساوي صفرًا، فما عجلته؟',answer:'صفر',subject:'الرياضيات التطبيقية'},
+    {keys:['رياضيات بحتة','بحتة','pure math'],prompt:'إذا كانت f(x)=x²، فما المشتقة؟',answer:'2x',subject:'الرياضيات البحتة'},
+    {keys:['رياضيات بحتة','بحتة','pure math'],prompt:'احسب التكامل غير المحدد لـ 2x.',answer:'x² + C',subject:'الرياضيات البحتة'},
+    {keys:['إحصاء','احصاء','statistics'],prompt:'احسب المتوسط الحسابي للأعداد 2، 4، 6، 8.',answer:'5',subject:'الإحصاء'},
+    {keys:['إحصاء','احصاء','statistics'],prompt:'ما احتمال ظهور صورة عند إلقاء قطعة نقود عادلة؟',answer:'1/2',subject:'الإحصاء'},
+    {keys:['عربي','اللغة العربية','لغة عربية','arabic'],prompt:'حدّد الفاعل في الجملة: «شرحَ المعلمُ الدرسَ».',answer:'المعلم',subject:'اللغة العربية'},
+    {keys:['عربي','اللغة العربية','لغة عربية','arabic'],prompt:'ما علامة رفع المثنى؟',answer:'الألف',subject:'اللغة العربية'},
+    {keys:['إنجليزي','اللغة الإنجليزية','اللغة الانجليزية','english'],prompt:'Choose the correct form: She ___ to school every day. (go / goes)',answer:'goes',subject:'اللغة الإنجليزية'},
+    {keys:['إنجليزي','اللغة الإنجليزية','اللغة الانجليزية','english'],prompt:'Change to the past simple: “They play football.”',answer:'They played football.',subject:'اللغة الإنجليزية'}
+   ];
+   const selectedName=s.subjects.find(x=>x.id===quizSubject)?.name||'';
+   const eligible=starter.filter(item=>!quizSubject||item.keys.some(k=>selectedName.toLocaleLowerCase().includes(k.toLocaleLowerCase())));
+   const sourceItems=eligible.length?eligible:starter;
+   picked=sourceItems.map(item=>({prompt:item.prompt,answer:item.answer,lesson:item.subject+' • تدريب تأسيسي',source:'سؤال تدريبي أصلي مولّد داخل الموقع — ليس سؤالًا وزاريًا'}));
+   setQuizError(quizLesson?'مفيش أسئلة مضافة للدرس المحدد؛ جهزت لك اختبارًا تأسيسيًا للمادة بدل ما أوقفك. الأسئلة دي عامة وليست خاصة بالدرس.':'مفيش بنك أسئلة محفوظ؛ جهزت لك اختبارًا تأسيسيًا أصليًا بدل ما أوقفك.');
+  }
+  const shuffled=[...picked].sort(()=>Math.random()-.5).slice(0,Math.max(1,Math.min(quizCount,picked.length)));
+  setQuizItems(shuffled);
   setQuizAnswers([]);setQuizIndex(0);setQuizDone(false);
  };
  const score=quizItems.reduce((n,q,i)=>n+(quizAnswers[i]?.trim().toLocaleLowerCase()===q.answer.trim().toLocaleLowerCase()?1:0),0);
