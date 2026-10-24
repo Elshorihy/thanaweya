@@ -850,6 +850,8 @@ async function ensureAdminTools(env:Env){
     await env.DB.prepare("CREATE TABLE IF NOT EXISTS admin_settings (key TEXT PRIMARY KEY,value TEXT NOT NULL,updated_at INTEGER NOT NULL)").run();
     await env.DB.prepare("CREATE TABLE IF NOT EXISTS admin_activity (id INTEGER PRIMARY KEY AUTOINCREMENT,chat_id TEXT NOT NULL,action TEXT NOT NULL,target TEXT,message TEXT,created_at INTEGER NOT NULL)").run();
     await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_admin_activity_created ON admin_activity(created_at)").run();
+    await env.DB.prepare("CREATE TABLE IF NOT EXISTS admin_undo (id TEXT PRIMARY KEY,chat_id TEXT NOT NULL,action TEXT NOT NULL,target TEXT NOT NULL,payload_json TEXT,created_at INTEGER NOT NULL,undone_at INTEGER)").run();
+    await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_admin_undo_chat_created ON admin_undo(chat_id,created_at)").run();
     await env.DB.prepare("CREATE TABLE IF NOT EXISTS telegram_daily_missions (day TEXT NOT NULL,chat_id TEXT NOT NULL,mission_key TEXT NOT NULL,completed_at INTEGER,PRIMARY KEY(day,chat_id,mission_key))").run();
     await env.DB.prepare("CREATE TABLE IF NOT EXISTS user_activity (user_id TEXT PRIMARY KEY,last_seen INTEGER NOT NULL,last_path TEXT NOT NULL,last_method TEXT NOT NULL,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE)").run();
     await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_user_activity_seen ON user_activity(last_seen)").run();
@@ -859,6 +861,62 @@ async function ensureAdminTools(env:Env){
 async function adminLog(env:Env,chatId:string,action:string,target="",message=""){
   await ensureAdminTools(env);
   await env.DB.prepare("INSERT INTO admin_activity(chat_id,action,target,message,created_at) VALUES(?,?,?,?,?)").bind(chatId,action,target,message.slice(0,1000),Date.now()).run();
+}
+async function recordAdminUndo(env:Env,chatId:string,action:string,target:string,payload:any={}){
+  await ensureAdminTools(env);
+  await env.DB.prepare("INSERT INTO admin_undo(id,chat_id,action,target,payload_json,created_at) VALUES(?,?,?,?,?,?)").bind(randomHex(16),chatId,action,target,JSON.stringify(payload||{}),Date.now()).run();
+}
+async function undoLastAdminOperation(env:Env,chatId:string){
+  await ensureAdminTools(env);
+  const row=await env.DB.prepare("SELECT id,action,target,payload_json FROM admin_undo WHERE chat_id=? AND undone_at IS NULL ORDER BY created_at DESC LIMIT 1").bind(chatId).first<any>();
+  if(!row){await telegramCall(env,"sendMessage",{chat_id:chatId,text:"↩️ مفيش عملية قابلة للتراجع مسجلة لسه. التراجع متاح حاليًا لعمليات إدارة منشورات المجتمع.",reply_markup:{inline_keyboard:[[{text:"🧹 مدير المجتمع",callback_data:"dash_community_manager"}],[{text:"🎛️ لوحة التحكم",callback_data:"dash_home"}]]}});return;}
+  let resultText="";
+  if(row.action==="DELETE_COMMUNITY_POST"){
+    const r=await env.DB.prepare("UPDATE community_posts SET deleted_at=? WHERE id=? AND deleted_at IS NULL").bind(Date.now(),String(row.target)).run();
+    if(!Number(r.meta?.changes||0)){await telegramCall(env,"sendMessage",{chat_id:chatId,text:"⚠️ المنشور لم يعد ظاهرًا أو لم يعد موجودًا؛ لم يتم تنفيذ التراجع."});return;}
+    resultText="تم إلغاء نشر المنشور وإخفاؤه من المجتمع.";
+  }else if(row.action==="RESTORE_COMMUNITY_POST"){
+    const r=await env.DB.prepare("UPDATE community_posts SET deleted_at=NULL WHERE id=? AND deleted_at IS NOT NULL").bind(String(row.target)).run();
+    if(!Number(r.meta?.changes||0)){await telegramCall(env,"sendMessage",{chat_id:chatId,text:"⚠️ المنشور مش محذوف حاليًا أو لم يعد موجودًا؛ لم يتم تنفيذ التراجع."});return;}
+    resultText="تمت استعادة المنشور إلى المجتمع.";
+  }else if(row.action==="DISABLE_GLOBAL_NOTIFICATION"){
+    const r=await env.DB.prepare("UPDATE global_notifications SET enabled=1 WHERE id=? AND enabled=0").bind(String(row.target)).run();
+    if(!Number(r.meta?.changes||0)){await telegramCall(env,"sendMessage",{chat_id:chatId,text:"⚠️ الإشعار غير موجود أو مفعّل بالفعل؛ لم يتم تنفيذ التراجع."});return;}
+    resultText="تمت إعادة تفعيل الإشعار.";
+  }else{await telegramCall(env,"sendMessage",{chat_id:chatId,text:"⚠️ نوع العملية دي مش مدعوم في التراجع الآمن."});return;}
+  await env.DB.prepare("UPDATE admin_undo SET undone_at=? WHERE id=? AND undone_at IS NULL").bind(Date.now(),String(row.id)).run();
+  await adminLog(env,chatId,"UNDO_"+String(row.action),String(row.target),resultText);
+  await telegramCall(env,"sendMessage",{chat_id:chatId,text:"✅ تم التراجع بنجاح\n\n"+resultText,reply_markup:{inline_keyboard:[[{text:"↩️ تراجع عن عملية أخرى",callback_data:"dash_undo_last"}],[{text:"🧹 مدير المجتمع",callback_data:"dash_community_manager"}],[{text:"🎛️ لوحة التحكم",callback_data:"dash_home"}]]}});
+}
+async function sendTelegramCommunityManager(env:Env,chatId:string){
+  await env.DB.prepare("CREATE TABLE IF NOT EXISTS community_posts (id TEXT PRIMARY KEY,user_id TEXT NOT NULL,subject TEXT NOT NULL,kind TEXT NOT NULL,title TEXT NOT NULL,content TEXT NOT NULL,created_at INTEGER NOT NULL,deleted_at INTEGER,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE)").run();
+  try{await env.DB.prepare("ALTER TABLE community_posts ADD COLUMN deleted_at INTEGER").run();}catch{}
+  const rows=await env.DB.prepare("SELECT p.id,p.title,p.created_at,p.deleted_at,p.kind,u.name,u.role FROM community_posts p LEFT JOIN users u ON u.id=p.user_id ORDER BY p.created_at DESC LIMIT 10").all<any>();
+  const items=rows.results||[];
+  const lines=items.map((p:any,i:number)=>(i+1)+". "+(p.deleted_at?"🙈 مخفي":"🟢 ظاهر")+" · "+String(p.title||"بدون عنوان").slice(0,90)+"\n   "+String(p.name||"مستخدم محذوف")+" · "+adminFormatDate(p.created_at));
+  const keyboard:any[]=[];
+  for(const p of items){keyboard.push([{text:(p.deleted_at?"♻️ استعادة: ":"🫥 إخفاء: ")+String(p.title||"منشور").slice(0,35),callback_data:(p.deleted_at?"community_post_restore:":"community_post_delete:")+String(p.id)}]);}
+  keyboard.push([{text:"✍️ إنشاء منشور رسمي",callback_data:"community_post_add"}],[{text:"↩️ تراجع عن آخر عملية",callback_data:"dash_undo_last"}],[{text:"🔄 تحديث القائمة",callback_data:"dash_community_manager"}],[{text:"⬅️ لوحة التحكم",callback_data:"dash_home"}]);
+  await telegramCall(env,"sendMessage",{chat_id:chatId,text:["🧹 مدير مجتمع ثانوية","إدارة منشورات الطلاب والإدارة من مكان واحد.","","🟢 ظاهر = منشور منشور بالموقع · 🙈 مخفي = مخفي ويمكن استعادته.","",...(lines.length?lines:["لا توجد منشورات حتى الآن."])].join("\n"),reply_markup:{inline_keyboard:keyboard}});
+}
+async function answerTelegramAdminAssistant(env:Env,chatId:string,query:string){
+  const q=query.trim().toLowerCase();
+  if(/^(إلغاء|الغاء|خروج|وقف|cancel|exit)$/.test(q)){await clearTelegramAdminMode(env,chatId);await telegramCall(env,"sendMessage",{chat_id:chatId,text:"تم إغلاق المساعد الإداري.",reply_markup:telegramDashboardKeyboard()});return;}
+  if(/(تراجع|ارجع|إلغاء آخر|الغاء اخر|undo)/i.test(q)){await undoLastAdminOperation(env,chatId);return;}
+  if(/(مجتمع|منشور|بوست|تعليقات|إدارة المحتوى|ادارة المحتوى)/i.test(q)){await sendTelegramCommunityManager(env,chatId);return;}
+  if(/(إحصائ|احصائ|ملخص|أرقام|ارقام|حالة المنصة|الوضع العام)/i.test(q)){
+    const out:string[]=["📊 ملخص ثانوية الإداري",""];
+    try{const r=await env.DB.prepare("SELECT COUNT(*) AS n FROM users").first<any>();out.push("👥 المستخدمون: "+Number(r?.n||0).toLocaleString("ar-EG"));}catch{out.push("👥 المستخدمون: غير متاح");}
+    try{const r=await env.DB.prepare("SELECT COUNT(*) AS n FROM community_posts WHERE deleted_at IS NULL").first<any>();out.push("📰 المنشورات الظاهرة: "+Number(r?.n||0).toLocaleString("ar-EG"));}catch{out.push("📰 المنشورات: غير متاح");}
+    try{const r=await env.DB.prepare("SELECT COUNT(*) AS n FROM verification_requests WHERE status='pending'").first<any>();out.push("⏳ طلبات التوثيق المعلقة: "+Number(r?.n||0).toLocaleString("ar-EG"));}catch{out.push("⏳ طلبات التوثيق: غير متاح");}
+    try{await ensurePageViews(env);const r=await env.DB.prepare("SELECT COUNT(*) AS n FROM site_page_views WHERE day>=?").bind(new Date(Date.now()-6*86400000).toISOString().slice(0,10)).first<any>();out.push("👀 زيارات آخر 7 أيام: "+Number(r?.n||0).toLocaleString("ar-EG"));}catch{out.push("👀 الزيارات: غير متاح");}
+    await telegramCall(env,"sendMessage",{chat_id:chatId,text:out.join("\n"),reply_markup:{inline_keyboard:[[{text:"🧹 إدارة المجتمع",callback_data:"dash_community_manager"}],[{text:"↩️ التراجع",callback_data:"dash_undo_last"}],[{text:"🎛️ لوحة التحكم",callback_data:"dash_home"}]]}});return;
+  }
+  if(/(آخر إجراء|اخر اجراء|سجل الإدارة|سجل الادارة|activity|log)/i.test(q)){
+    const r=await env.DB.prepare("SELECT action,target,message,created_at FROM admin_activity ORDER BY created_at DESC LIMIT 5").all<any>();
+    const rows=r.results||[];await telegramCall(env,"sendMessage",{chat_id:chatId,text:["🧾 آخر إجراءات الإدارة","",...(rows.length?rows.map((x:any)=>"• "+String(x.action)+" — "+String(x.message||x.target||"").slice(0,130)+"\n  "+adminFormatDate(x.created_at)):["لا توجد إجراءات مسجلة."])].join("\n"),reply_markup:{inline_keyboard:[[{text:"↩️ تراجع عن آخر عملية",callback_data:"dash_undo_last"}],[{text:"🎛️ لوحة التحكم",callback_data:"dash_home"}]]}});return;
+  }
+  await telegramCall(env,"sendMessage",{chat_id:chatId,text:"🧠 المساعد الإداري جاهز. جرّب تبعتلي واحدة من دول:\n\n• ملخص المنصة\n• افتح مدير المجتمع\n• تراجع عن آخر عملية\n• آخر إجراءات الإدارة\n\nملاحظة: المساعد بينفّذ أوامر الإدارة المحددة فقط، ومش بيغيّر إعدادات حساسة من تلقاء نفسه.",reply_markup:{inline_keyboard:[[{text:"📊 ملخص المنصة",callback_data:"admin_assistant_summary"}],[{text:"🧹 مدير المجتمع",callback_data:"dash_community_manager"}],[{text:"↩️ التراجع",callback_data:"dash_undo_last"}],[{text:"🎛️ لوحة التحكم",callback_data:"dash_home"}]]}});
 }
 async function touchUserActivity(env:Env,userId:string,path:string,method:string){
   try{
@@ -1325,6 +1383,7 @@ async function publishTelegramCommunityPost(env:Env,chatId:string,payload:any){
   if(!owner?.id){await telegramCall(env,"sendMessage",{chat_id:chatId,text:"❌ مش لاقي حساب مالك المنصة في قاعدة البيانات، فما نشرتش أي حاجة."});return;}
   const id=crypto.randomUUID(),now=Date.now();
   await env.DB.prepare("INSERT INTO community_posts(id,user_id,subject,kind,title,content,created_at) VALUES(?,?,?,?,?,?,?)").bind(id,String(owner.id),"عام","discussion",title,content,now).run();
+  await recordAdminUndo(env,chatId,"DELETE_COMMUNITY_POST",id,{title});
   await clearTelegramAdminMode(env,chatId);
   await adminLog(env,chatId,"COMMUNITY_ADMIN_POST",id,title);
   await telegramCall(env,"sendMessage",{chat_id:chatId,text:"✅ اتنشر منشور إدارة ثانوية بنجاح داخل مجتمع الموقع.\n\n📰 "+title+"\n\nهيظهر باسم «إدارة مجتمع ثانوية» وبشكل رسمي مميز.",reply_markup:{inline_keyboard:[
@@ -1347,6 +1406,9 @@ function telegramDashboardKeyboard(){
     [{text:"🔐 الدخول و OTP",callback_data:"dash_auth"},{text:"📱 واتساب",callback_data:"dash_wa"}],
     [{text:"🛠️ أدوات الإدارة",callback_data:"dash_tools"}],
     [{text:"📚 مصادر المحاضرات",callback_data:"dash_global_lectures"}],
+    [{text:"🧹 مدير مجتمع ثانوية",callback_data:"dash_community_manager"}],
+    [{text:"🧠 المساعد الإداري",callback_data:"dash_admin_assistant"}],
+    [{text:"↩️ تراجع عن آخر عملية",callback_data:"dash_undo_last"}],
     [{text:"📰 منشورات مجتمع ثانوية",callback_data:"dash_community_posts"}],
     [{text:"📢 مركز الإشعارات",callback_data:"dash_global_notifications"}],
     [{text:"📢 إرسال واتساب",callback_data:"dash_broadcast"},{text:"📧 إرسال Gmail",callback_data:"dash_email_broadcast"}],
@@ -1848,6 +1910,12 @@ async function handleTelegramUpdate(env:Env,update:any){
       return;
     }
     if(data==="dash_community_posts"){await clearTelegramAdminMode(env,chatId);await sendTelegramCommunityPosts(env,chatId);return;}
+    if(data==="dash_community_manager"){await clearTelegramAdminMode(env,chatId);await sendTelegramCommunityManager(env,chatId);return;}
+    if(data==="dash_undo_last"){await clearTelegramAdminMode(env,chatId);await undoLastAdminOperation(env,chatId);return;}
+    if(data==="dash_admin_assistant"){await setTelegramAdminMode(env,chatId,"admin_assistant",{});await telegramCall(env,"sendMessage",{chat_id:chatId,text:"🧠 المساعد الإداري لثانوية\n\nاكتب طلبك بالعربي، مثل: «ملخص المنصة» أو «افتح مدير المجتمع» أو «تراجع عن آخر عملية».\n\nللخروج اكتب «إلغاء». ",reply_markup:{inline_keyboard:[[{text:"📊 ملخص المنصة",callback_data:"admin_assistant_summary"}],[{text:"🧹 مدير المجتمع",callback_data:"dash_community_manager"}],[{text:"↩️ التراجع",callback_data:"dash_undo_last"}],[{text:"❌ إغلاق",callback_data:"dash_cancel"}]]}});return;}
+    if(data==="admin_assistant_summary"){await clearTelegramAdminMode(env,chatId);await answerTelegramAdminAssistant(env,chatId,"ملخص المنصة");return;}
+    if(data.startsWith("community_post_delete:")){const id=data.slice("community_post_delete:".length);const post=await env.DB.prepare("SELECT id,title,deleted_at FROM community_posts WHERE id=?").bind(id).first<any>();if(!post){await telegramCall(env,"sendMessage",{chat_id:chatId,text:"المنشور غير موجود."});return;}if(post.deleted_at){await telegramCall(env,"sendMessage",{chat_id:chatId,text:"المنشور مخفي بالفعل."});return;}await env.DB.prepare("UPDATE community_posts SET deleted_at=? WHERE id=?").bind(Date.now(),id).run();await recordAdminUndo(env,chatId,"RESTORE_COMMUNITY_POST",id,{title:post.title});await adminLog(env,chatId,"HIDE_COMMUNITY_POST",id,String(post.title||""));await sendTelegramCommunityManager(env,chatId);return;}
+    if(data.startsWith("community_post_restore:")){const id=data.slice("community_post_restore:".length);const post=await env.DB.prepare("SELECT id,title,deleted_at FROM community_posts WHERE id=?").bind(id).first<any>();if(!post){await telegramCall(env,"sendMessage",{chat_id:chatId,text:"المنشور غير موجود."});return;}if(!post.deleted_at){await telegramCall(env,"sendMessage",{chat_id:chatId,text:"المنشور ظاهر بالفعل."});return;}await env.DB.prepare("UPDATE community_posts SET deleted_at=NULL WHERE id=?").bind(id).run();await recordAdminUndo(env,chatId,"DELETE_COMMUNITY_POST",id,{title:post.title});await adminLog(env,chatId,"RESTORE_COMMUNITY_POST",id,String(post.title||""));await sendTelegramCommunityManager(env,chatId);return;}
     if(data==="community_post_add"){
       await setTelegramAdminMode(env,chatId,"community_post_title",{});
       await telegramCall(env,"sendMessage",{chat_id:chatId,text:"📰 إنشاء منشور رسمي لمجتمع ثانوية\n\nابعت عنوان المنشور (حد أقصى 120 حرف).",reply_markup:{inline_keyboard:[[{text:"❌ إلغاء",callback_data:"dash_cancel"}]]}});
@@ -1987,6 +2055,7 @@ async function handleTelegramUpdate(env:Env,update:any){
   const text=String(message?.text||"").trim();
   await ensureAdminTools(env);
   const state=await getTelegramAdminState(env,chatId);
+  if(state.mode==="admin_assistant" && text){await answerTelegramAdminAssistant(env,chatId,text);return;}
   if(state.mode==="community_post_title" && text){
     const title=text.trim().slice(0,120);
     if(title.length<2){await telegramCall(env,"sendMessage",{chat_id:chatId,text:"❌ العنوان قصير جدًا. ابعت عنوانًا أوضح."});return;}
