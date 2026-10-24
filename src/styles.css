@@ -1097,3 +1097,13 @@ body[data-layout="classic"] .search,body[data-layout="classic"] input,body[data-
 .ministryQuestionLinks>a small{font-size:11px;color:var(--muted,#aab2c5);margin-top:4px;line-height:1.5}
 .ministryQuestionLibraryNote{font-size:11px;line-height:1.8;color:var(--muted,#aab2c5);margin:14px 0 0}
 @media(max-width:520px){.ministryQuestionLibraryHead{display:grid}.ministryQuestionLibraryHead>.buttonlike{justify-self:start}.ministryQuestionLinks{grid-template-columns:1fr}.ministryQuestionLinks>a{padding:12px}}
+
+
+/* Official Thanaweya community management posts */
+.communityAdminPost{position:relative;overflow:hidden;border:1px solid rgba(139,92,246,.55)!important;background:linear-gradient(135deg,rgba(109,40,217,.13),rgba(17,24,39,.96) 48%,rgba(30,64,175,.12))!important;box-shadow:0 12px 36px rgba(76,29,149,.12),inset 0 1px 0 rgba(196,181,253,.12)}
+.communityAdminPost:before{content:"";position:absolute;inset:0 0 auto;height:3px;background:linear-gradient(90deg,#38bdf8,#8b5cf6,#c084fc)}
+.communityAdminPost .communityAvatar{background:linear-gradient(135deg,#7c3aed,#2563eb)!important;color:#fff!important;font-weight:900;box-shadow:0 0 0 3px rgba(139,92,246,.13),0 5px 18px rgba(79,70,229,.24)}
+.communityAdminBadge{display:inline-flex;align-items:center;gap:4px;margin-inline-start:8px;padding:3px 8px;border-radius:999px;font-size:10px;font-weight:800;color:#ddd6fe;background:rgba(124,58,237,.18);border:1px solid rgba(167,139,250,.4);vertical-align:middle}
+.communityAdminPost .communityPostMeta{color:#c4b5fd;font-weight:800}
+.communityAdminPost .communityPostBody h2{color:#f5f3ff}
+@media(prefers-reduced-motion:no-preference){.communityAdminPost{animation:communityAdminReveal .35s ease-out both}@keyframes communityAdminReveal{from{opacity:.75;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}}
