@@ -1305,6 +1305,33 @@ async function createGlobalNotification(env:Env,chatId:string,payload:any){
     ]}});
   }
 }
+async function sendTelegramCommunityPosts(env:Env,chatId:string){
+  await env.DB.prepare("CREATE TABLE IF NOT EXISTS community_posts (id TEXT PRIMARY KEY,user_id TEXT NOT NULL,subject TEXT NOT NULL,kind TEXT NOT NULL,title TEXT NOT NULL,content TEXT NOT NULL,created_at INTEGER NOT NULL,deleted_at INTEGER,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE)").run();
+  const rows=await env.DB.prepare("SELECT p.id,p.title,p.created_at FROM community_posts p JOIN users u ON u.id=p.user_id WHERE p.deleted_at IS NULL AND u.role='owner' ORDER BY p.created_at DESC LIMIT 8").all<any>();
+  const items=rows.results||[];
+  const text=["📰 منشورات إدارة مجتمع ثانوية","","انشر منشورًا رسميًا يظهر داخل مجتمع ثانوية على الموقع، باسم الإدارة وبتمييز بصري خاص.","","📌 آخر منشورات الإدارة:",...(items.length?items.map((p:any,i:number)=>(i+1)+". "+String(p.title).slice(0,100)+" · "+adminFormatDate(p.created_at)):["لسه مفيش منشورات رسمية."])].join("\n");
+  await telegramCall(env,"sendMessage",{chat_id:chatId,text,reply_markup:{inline_keyboard:[
+    [{text:"✍️ إنشاء منشور رسمي",callback_data:"community_post_add"}],
+    [{text:"🔄 تحديث",callback_data:"dash_community_posts"}],
+    [{text:"⬅️ لوحة التحكم",callback_data:"dash_home"}]
+  ]}});
+}
+async function publishTelegramCommunityPost(env:Env,chatId:string,payload:any){
+  const title=String(payload?.title||"").trim().slice(0,120);
+  const content=String(payload?.content||"").trim().slice(0,4000);
+  if(title.length<2||content.length<3){await clearTelegramAdminMode(env,chatId);await telegramCall(env,"sendMessage",{chat_id:chatId,text:"❌ العنوان أو المحتوى غير مكتمل. ابدأ من جديد.",reply_markup:{inline_keyboard:[[{text:"📰 منشورات المجتمع",callback_data:"dash_community_posts"}]]}});return;}
+  await env.DB.prepare("CREATE TABLE IF NOT EXISTS community_posts (id TEXT PRIMARY KEY,user_id TEXT NOT NULL,subject TEXT NOT NULL,kind TEXT NOT NULL,title TEXT NOT NULL,content TEXT NOT NULL,created_at INTEGER NOT NULL,deleted_at INTEGER,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE)").run();
+  const owner=await env.DB.prepare("SELECT id FROM users WHERE role='owner' ORDER BY created_at ASC LIMIT 1").first<any>();
+  if(!owner?.id){await telegramCall(env,"sendMessage",{chat_id:chatId,text:"❌ مش لاقي حساب مالك المنصة في قاعدة البيانات، فما نشرتش أي حاجة."});return;}
+  const id=crypto.randomUUID(),now=Date.now();
+  await env.DB.prepare("INSERT INTO community_posts(id,user_id,subject,kind,title,content,created_at) VALUES(?,?,?,?,?,?,?)").bind(id,String(owner.id),"عام","discussion",title,content,now).run();
+  await clearTelegramAdminMode(env,chatId);
+  await adminLog(env,chatId,"COMMUNITY_ADMIN_POST",id,title);
+  await telegramCall(env,"sendMessage",{chat_id:chatId,text:"✅ اتنشر منشور إدارة ثانوية بنجاح داخل مجتمع الموقع.\n\n📰 "+title+"\n\nهيظهر باسم «إدارة مجتمع ثانوية» وبشكل رسمي مميز.",reply_markup:{inline_keyboard:[
+    [{text:"📰 منشورات المجتمع",callback_data:"dash_community_posts"}],
+    [{text:"🎛️ لوحة التحكم",callback_data:"dash_home"}]
+  ]}});
+}
 function telegramDashboardKeyboard(){
   return {inline_keyboard:[
     [{text:"🎫 بلاغات الطلاب",callback_data:"bridge_reports"},{text:"💬 رسائل الموقع",callback_data:"bridge_messages"}],
@@ -1320,6 +1347,7 @@ function telegramDashboardKeyboard(){
     [{text:"🔐 الدخول و OTP",callback_data:"dash_auth"},{text:"📱 واتساب",callback_data:"dash_wa"}],
     [{text:"🛠️ أدوات الإدارة",callback_data:"dash_tools"}],
     [{text:"📚 مصادر المحاضرات",callback_data:"dash_global_lectures"}],
+    [{text:"📰 منشورات مجتمع ثانوية",callback_data:"dash_community_posts"}],
     [{text:"📢 مركز الإشعارات",callback_data:"dash_global_notifications"}],
     [{text:"📢 إرسال واتساب",callback_data:"dash_broadcast"},{text:"📧 إرسال Gmail",callback_data:"dash_email_broadcast"}],
     [{text:"🔄 تحديث اللوحة",callback_data:"dash_home"}]
@@ -1819,6 +1847,18 @@ async function handleTelegramUpdate(env:Env,update:any){
       await createGlobalNotification(env,chatId,state.payload);
       return;
     }
+    if(data==="dash_community_posts"){await clearTelegramAdminMode(env,chatId);await sendTelegramCommunityPosts(env,chatId);return;}
+    if(data==="community_post_add"){
+      await setTelegramAdminMode(env,chatId,"community_post_title",{});
+      await telegramCall(env,"sendMessage",{chat_id:chatId,text:"📰 إنشاء منشور رسمي لمجتمع ثانوية\n\nابعت عنوان المنشور (حد أقصى 120 حرف).",reply_markup:{inline_keyboard:[[{text:"❌ إلغاء",callback_data:"dash_cancel"}]]}});
+      return;
+    }
+    if(data==="community_post_publish"){
+      const state=await getTelegramAdminState(env,chatId);
+      if(state.mode!=="community_post_confirm"){await sendTelegramCommunityPosts(env,chatId);return;}
+      await publishTelegramCommunityPost(env,chatId,state.payload);
+      return;
+    }
     if(data==="dash_global_notifications"){await clearTelegramAdminMode(env,chatId);await sendTelegramGlobalNotifications(env,chatId);return;}
     if(data==="global_notification_add"){
       await setTelegramAdminMode(env,chatId,"global_notification_title",{});
@@ -1947,6 +1987,23 @@ async function handleTelegramUpdate(env:Env,update:any){
   const text=String(message?.text||"").trim();
   await ensureAdminTools(env);
   const state=await getTelegramAdminState(env,chatId);
+  if(state.mode==="community_post_title" && text){
+    const title=text.trim().slice(0,120);
+    if(title.length<2){await telegramCall(env,"sendMessage",{chat_id:chatId,text:"❌ العنوان قصير جدًا. ابعت عنوانًا أوضح."});return;}
+    await setTelegramAdminMode(env,chatId,"community_post_content",{title});
+    await telegramCall(env,"sendMessage",{chat_id:chatId,text:"📝 تمام، ابعت محتوى المنشور (حد أقصى 4000 حرف).",reply_markup:{inline_keyboard:[[{text:"❌ إلغاء",callback_data:"dash_cancel"}]]}});
+    return;
+  }
+  if(state.mode==="community_post_content" && text){
+    const content=text.trim().slice(0,4000);
+    if(content.length<3){await telegramCall(env,"sendMessage",{chat_id:chatId,text:"❌ المحتوى قصير جدًا. ابعت تفاصيل أكتر."});return;}
+    await setTelegramAdminMode(env,chatId,"community_post_confirm",{...state.payload,content});
+    await telegramCall(env,"sendMessage",{chat_id:chatId,text:"👀 معاينة المنشور الرسمي\n\n📰 "+String(state.payload?.title||"")+"\n\n"+content+"\n\nهيظهر في مجتمع ثانوية باسم الإدارة وبتمييز رسمي. تنشره؟",reply_markup:{inline_keyboard:[
+      [{text:"🚀 نشر في المجتمع",callback_data:"community_post_publish"}],
+      [{text:"❌ إلغاء",callback_data:"dash_cancel"}]
+    ]}});
+    return;
+  }
   if(state.mode==="global_notification_title" && text){
     await setTelegramAdminMode(env,chatId,"global_notification_message",{title:text.slice(0,140)});
     await telegramCall(env,"sendMessage",{chat_id:chatId,text:"📝 ابعت نص الإشعار.",reply_markup:{inline_keyboard:[[{text:"❌ إلغاء",callback_data:"dash_cancel"}]]}});
@@ -2675,8 +2732,8 @@ export default {
           await env.DB.prepare("CREATE TABLE IF NOT EXISTS community_best_answers (post_id TEXT PRIMARY KEY,comment_id TEXT NOT NULL,selected_by TEXT NOT NULL,created_at INTEGER NOT NULL,FOREIGN KEY(post_id) REFERENCES community_posts(id) ON DELETE CASCADE,FOREIGN KEY(comment_id) REFERENCES community_comments(id) ON DELETE CASCADE,FOREIGN KEY(selected_by) REFERENCES users(id) ON DELETE CASCADE)").run();
           await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_community_posts_created ON community_posts(deleted_at,created_at)").run();
           if(request.method==="GET"){
-            const rows=await env.DB.prepare("SELECT p.id,p.user_id AS userId,u.name,COALESCE(u.verified,0) AS verified,p.subject,p.kind,p.title,p.content,p.created_at AS createdAt,(SELECT COUNT(*) FROM community_likes l WHERE l.post_id=p.id) AS likes,EXISTS(SELECT 1 FROM community_likes l WHERE l.post_id=p.id AND l.user_id=?) AS liked,(SELECT c.id FROM community_best_answers b JOIN community_comments c ON c.id=b.comment_id WHERE b.post_id=p.id) AS bestCommentId FROM community_posts p JOIN users u ON u.id=p.user_id WHERE p.deleted_at IS NULL ORDER BY COALESCE(u.verified,0) DESC,p.created_at DESC LIMIT 100").bind(u.id).all<any>();
-            const posts=await Promise.all((rows.results||[]).map(async(p:any)=>{const cs=await env.DB.prepare("SELECT c.id,c.post_id AS postId,c.user_id AS userId,u.name,c.content,c.created_at AS createdAt FROM community_comments c JOIN users u ON u.id=c.user_id WHERE c.post_id=? ORDER BY c.created_at ASC LIMIT 100").bind(p.id).all<any>();return {...p,createdAt:Number(p.createdAt),likes:Number(p.likes||0),liked:!!p.liked,isMine:p.userId===u.id,comments:(cs.results||[]).map((c:any)=>({...c,createdAt:Number(c.createdAt)}))}}));
+            const rows=await env.DB.prepare("SELECT p.id,p.user_id AS userId,u.name,u.role AS authorRole,COALESCE(u.verified,0) AS verified,p.subject,p.kind,p.title,p.content,p.created_at AS createdAt,(SELECT COUNT(*) FROM community_likes l WHERE l.post_id=p.id) AS likes,EXISTS(SELECT 1 FROM community_likes l WHERE l.post_id=p.id AND l.user_id=?) AS liked,(SELECT c.id FROM community_best_answers b JOIN community_comments c ON c.id=b.comment_id WHERE b.post_id=p.id) AS bestCommentId FROM community_posts p JOIN users u ON u.id=p.user_id WHERE p.deleted_at IS NULL ORDER BY CASE WHEN u.role='owner' THEN 0 ELSE 1 END,COALESCE(u.verified,0) DESC,p.created_at DESC LIMIT 100").bind(u.id).all<any>();
+            const posts=await Promise.all((rows.results||[]).map(async(p:any)=>{const cs=await env.DB.prepare("SELECT c.id,c.post_id AS postId,c.user_id AS userId,u.name,c.content,c.created_at AS createdAt FROM community_comments c JOIN users u ON u.id=c.user_id WHERE c.post_id=? ORDER BY c.created_at ASC LIMIT 100").bind(p.id).all<any>();return {...p,isAdmin:p.authorRole==="owner",createdAt:Number(p.createdAt),likes:Number(p.likes||0),liked:!!p.liked,isMine:p.userId===u.id,comments:(cs.results||[]).map((c:any)=>({...c,createdAt:Number(c.createdAt)}))}}));
             return json({ok:true,posts});
           }
           const b=await body(request); const action=String(b?.action||""); const postId=String(b?.postId||"").slice(0,80); const now=Date.now();
