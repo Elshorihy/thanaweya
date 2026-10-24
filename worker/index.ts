@@ -1935,7 +1935,12 @@ async function handleTelegramUpdate(env:Env,update:any){
     }
     if(data.startsWith("global_notification_delete:")){
       const id=data.slice("global_notification_delete:".length);
-      await env.DB.prepare("UPDATE global_notifications SET enabled=0 WHERE id=?").bind(id).run();
+      const notification=await env.DB.prepare("SELECT id,title,enabled FROM global_notifications WHERE id=?").bind(id).first<any>();
+      if(notification&&Number(notification.enabled)!==0){
+        await env.DB.prepare("UPDATE global_notifications SET enabled=0 WHERE id=?").bind(id).run();
+        await recordAdminUndo(env,chatId,"DISABLE_GLOBAL_NOTIFICATION",id,{title:notification.title});
+        await adminLog(env,chatId,"DISABLE_GLOBAL_NOTIFICATION",id,String(notification.title||""));
+      }
       await sendTelegramGlobalNotifications(env,chatId);
       return;
     }
