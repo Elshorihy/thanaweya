@@ -1,5 +1,5 @@
 import React,{useEffect,useMemo,useState} from 'react';
-import {Trophy,Timer,Users,Shuffle,Play,CheckCircle2,Medal,RefreshCw,Sparkles,ArrowLeft,Clock3} from 'lucide-react';
+import {Trophy,Users,Shuffle,Play,CheckCircle2,Medal,RefreshCw,Sparkles,ArrowLeft,Clock3} from 'lucide-react';
 
 type Question={id:string;question:string;options:string[]};
 type Competition={id:string;title:string;description:string;kind:string;subject:string;durationSeconds:number;points:number;status:string;questionCount:number;participantCount:number;startsAt:number|null;endsAt:number|null;attempted?:boolean};
