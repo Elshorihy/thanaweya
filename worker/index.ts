@@ -1421,6 +1421,8 @@ async function ensureCompetitionTables(env:Env){
   await env.DB.prepare("CREATE TABLE IF NOT EXISTS site_competition_sessions (id TEXT PRIMARY KEY,competition_id TEXT NOT NULL,user_id TEXT NOT NULL,questions_json TEXT NOT NULL,expires_at INTEGER NOT NULL,created_at INTEGER NOT NULL,UNIQUE(competition_id,user_id))").run();
   await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_competitions_status ON site_competitions(status,created_at)").run();
   await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_competition_attempts_competition ON site_competition_attempts(competition_id,created_at)").run();
+  try { await env.DB.prepare("ALTER TABLE site_competitions ADD COLUMN winner_user_id TEXT").run(); } catch {}
+  try { await env.DB.prepare("ALTER TABLE site_competitions ADD COLUMN winner_drawn_at INTEGER").run(); } catch {}
 }
 async function sendTelegramCompetitions(env:Env,chatId:string){
   await ensureCompetitionTables(env);
@@ -1468,13 +1470,52 @@ async function addTelegramCompetitionQuestion(env:Env,chatId:string,id:string,li
 }
 async function drawTelegramCompetitionWinner(env:Env,chatId:string,id:string){
   await ensureCompetitionTables(env);
-  const rows=await env.DB.prepare("SELECT u.name,u.email,a.score,a.total,a.points,a.created_at FROM site_competition_attempts a JOIN users u ON u.id=a.user_id WHERE a.competition_id=? ORDER BY a.created_at").bind(id).all<any>();
+  const c=await env.DB.prepare("SELECT id,title,winner_user_id,winner_drawn_at FROM site_competitions WHERE id=?").bind(id).first<any>();
+  if(!c){await telegramCall(env,"sendMessage",{chat_id:chatId,text:"المسابقة مش موجودة."});return;}
+  let winner:any=null;
+  if(c.winner_user_id){
+    winner=await env.DB.prepare("SELECT u.id,u.name,u.email,a.score,a.total,a.points FROM users u JOIN site_competition_attempts a ON a.user_id=u.id WHERE a.competition_id=? AND u.id=?").bind(id,String(c.winner_user_id)).first<any>();
+    if(!winner){await telegramCall(env,"sendMessage",{chat_id:chatId,text:"⚠️ فيه فائز محفوظ للمسابقة لكن بيانات مشاركته مش متاحة. راجع قاعدة البيانات قبل أي سحب جديد."});return;}
+    const count=await env.DB.prepare("SELECT COUNT(*) AS n FROM site_competition_attempts WHERE competition_id=?").bind(id).first<any>();
+    await sendCompetitionWinnerResult(env,chatId,id,c,winner,Number(count?.n||0),true);
+    return;
+  }
+  const rows=await env.DB.prepare("SELECT u.id,u.name,u.email,a.score,a.total,a.points,a.created_at FROM site_competition_attempts a JOIN users u ON u.id=a.user_id WHERE a.competition_id=? ORDER BY a.created_at").bind(id).all<any>();
   const all=rows.results||[];
   if(!all.length){await telegramCall(env,"sendMessage",{chat_id:chatId,text:"لسه مفيش مشاركات مكتملة للسحب ده.",reply_markup:{inline_keyboard:[[{text:"⬅️ رجوع للمسابقة",callback_data:"competition_view:"+id}]]}});return;}
-  const winner=all[Math.floor(Math.random()*all.length)];
-  const c=await env.DB.prepare("SELECT title FROM site_competitions WHERE id=?").bind(id).first<any>();
+  winner=all[Math.floor(Math.random()*all.length)];
+  const now=Date.now();
+  await env.DB.prepare("UPDATE site_competitions SET winner_user_id=?,winner_drawn_at=? WHERE id=? AND winner_user_id IS NULL").bind(String(winner.id),now,id).run();
+  const saved=await env.DB.prepare("SELECT winner_user_id FROM site_competitions WHERE id=?").bind(id).first<any>();
+  if(String(saved?.winner_user_id||"")!==String(winner.id)){
+    winner=await env.DB.prepare("SELECT u.id,u.name,u.email,a.score,a.total,a.points FROM users u JOIN site_competition_attempts a ON a.user_id=u.id WHERE a.competition_id=? AND u.id=?").bind(id,String(saved?.winner_user_id||"")).first<any>();
+    if(!winner){await telegramCall(env,"sendMessage",{chat_id:chatId,text:"تعذر تأكيد الفائز المحفوظ. راجع المسابقة."});return;}
+  }
+  await env.DB.prepare("UPDATE users SET verified=1,updated_at=? WHERE id=?").bind(now,String(winner.id)).run();
+  await ensureBridgeTools(env);
+  await env.DB.prepare("INSERT INTO admin_messages(id,user_id,sender,message,created_at) VALUES(?,?,'admin',?,?)")
+    .bind(randomHex(10),String(winner.id),"🎉 مبروك! أنت الفائز في مسابقة «"+String(c.title||"ثانوية")+"» على منصة ثانوية. تم تفعيل علامة التوثيق لحسابك تلقائيًا كجائزة. تقدر تتواصل مع إدارة المنصة من قسم الدعم لو عندك أي استفسار.",now).run();
+  await env.DB.prepare("CREATE TABLE IF NOT EXISTS community_posts (id TEXT PRIMARY KEY,user_id TEXT NOT NULL,subject TEXT NOT NULL,kind TEXT NOT NULL,title TEXT NOT NULL,content TEXT NOT NULL,created_at INTEGER NOT NULL,deleted_at INTEGER,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE)").run();
+  const owner=await env.DB.prepare("SELECT id FROM users WHERE role='owner' ORDER BY created_at ASC LIMIT 1").first<any>();
+  if(owner?.id){
+    await env.DB.prepare("INSERT INTO community_posts(id,user_id,subject,kind,title,content,created_at) VALUES(?,?,?,'discussion',?,?,?)")
+      .bind(crypto.randomUUID(),String(owner.id),"عام","🏆 فائز مسابقة ثانوية: "+String(winner.name||"طالب"),"نبارك للطالب "+String(winner.name||"الفائز")+" فوزه في مسابقة «"+String(c.title||"ثانوية")+"»! 🎉 حصل الفائز على علامة التوثيق كجائزة. شكرًا لكل المشاركين، وانتظروا مسابقات وجوائز جديدة.",now).run();
+  }
   await adminLog(env,chatId,"COMPETITION_RANDOM_DRAW",id,String(winner.email||""));
-  await telegramCall(env,"sendMessage",{chat_id:chatId,text:"🎉 نتيجة السحب العشوائي\n\n🏆 المسابقة: "+String(c?.title||"مسابقة")+"\n👑 الفائز: "+String(winner.name||"طالب") +"\n📧 "+String(winner.email||"—")+"\n📊 نتيجته: "+Number(winner.score)+"/"+Number(winner.total)+"\n\nعدد المشاركين في السحب: "+all.length,reply_markup:{inline_keyboard:[[{text:"🔄 سحب جديد",callback_data:"competition_draw:"+id}],[{text:"⬅️ تفاصيل المسابقة",callback_data:"competition_view:"+id}]]}});
+  await sendCompetitionWinnerResult(env,chatId,id,c,winner,all.length,false);
+}
+async function sendCompetitionWinnerResult(env:Env,chatId:string,id:string,c:any,winner:any,participants:number,alreadyDrawn:boolean){
+  await telegramCall(env,"sendMessage",{chat_id:chatId,text:(alreadyDrawn?"🏆 الفائز المحفوظ — لن يتم إجراء سحب جديد تلقائيًا":"🎉 تم السحب وتفعيل الجائزة تلقائيًا")+
+    "\n\n🏆 المسابقة: "+String(c.title||"مسابقة")+
+    "\n👑 الفائز: "+String(winner.name||"طالب")+
+    "\n📧 البريد (للإدارة فقط): "+String(winner.email||"—")+
+    "\n📊 نتيجته: "+Number(winner.score||0)+"/"+Number(winner.total||0)+
+    "\n👥 عدد المشاركين: "+participants+
+    (alreadyDrawn?"":"\n\n✅ تم تفعيل علامة التوثيق للحساب.\n💬 تم إرسال رسالة داخل الموقع للفائز.\n📢 تم نشر إعلان باسم الفائز في مجتمع ثانوية."),
+    reply_markup:{inline_keyboard:[
+      [{text:"💬 مراسلة الفائز داخل الموقع",callback_data:"bridge_message_reply:"+String(winner.id)}],
+      [{text:"⬅️ تفاصيل المسابقة",callback_data:"competition_view:"+id}]
+    ]}});
 }
 
 function telegramDashboardKeyboard(){
