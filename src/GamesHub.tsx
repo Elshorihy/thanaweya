@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Gamepad2, Play, RotateCcw, Trophy, ArrowRight, ArrowLeft, Sparkles } from 'lucide-react';
+import './games.css';
 
 type Rock = { x: number; y: number; r: number; speed: number };
 export default function GamesHub() {
