@@ -1951,7 +1951,7 @@ async function handleTelegramUpdate(env:Env,update:any){
     if(data.startsWith("competition_view:")){await clearTelegramAdminMode(env,chatId);await sendTelegramCompetitionDetails(env,chatId,data.slice(17));return;}
     if(data.startsWith("competition_add_question:")){const id=data.slice(25);await setTelegramAdminMode(env,chatId,"competition_question",{competitionId:id});await telegramCall(env,"sendMessage",{chat_id:chatId,text:"✍️ ابعت السؤال بالشكل: السؤال | اختيار 1 | اختيار 2 | اختيار 3 | اختيار 4 | رقم الإجابة الصحيحة (1-4)."});return;}
     if(data.startsWith("competition_publish:")){
-      const id=data.slice(19);await ensureCompetitionTables(env);
+      const id=data.slice(20);await ensureCompetitionTables(env);
       const c=await env.DB.prepare("SELECT status,questions_json FROM site_competitions WHERE id=?").bind(id).first<any>();
       if(!c){await sendTelegramCompetitions(env,chatId);return;}
       let qs:any[]=[];try{qs=JSON.parse(c.questions_json||"[]")}catch{}
