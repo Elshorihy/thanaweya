@@ -1418,6 +1418,7 @@ async function publishTelegramCommunityPost(env:Env,chatId:string,payload:any){
 async function ensureCompetitionTables(env:Env){
   await env.DB.prepare("CREATE TABLE IF NOT EXISTS site_competitions (id TEXT PRIMARY KEY,title TEXT NOT NULL,description TEXT NOT NULL DEFAULT '',kind TEXT NOT NULL DEFAULT 'curriculum',subject TEXT NOT NULL DEFAULT '',status TEXT NOT NULL DEFAULT 'draft',duration_seconds INTEGER NOT NULL DEFAULT 0,points INTEGER NOT NULL DEFAULT 100,questions_json TEXT NOT NULL DEFAULT '[]',created_at INTEGER NOT NULL,starts_at INTEGER,ends_at INTEGER)").run();
   await env.DB.prepare("CREATE TABLE IF NOT EXISTS site_competition_attempts (id TEXT PRIMARY KEY,competition_id TEXT NOT NULL,user_id TEXT NOT NULL,score INTEGER NOT NULL,total INTEGER NOT NULL,points INTEGER NOT NULL DEFAULT 0,answers_json TEXT NOT NULL DEFAULT '{}',created_at INTEGER NOT NULL,UNIQUE(competition_id,user_id))").run();
+  await env.DB.prepare("CREATE TABLE IF NOT EXISTS site_competition_sessions (id TEXT PRIMARY KEY,competition_id TEXT NOT NULL,user_id TEXT NOT NULL,questions_json TEXT NOT NULL,expires_at INTEGER NOT NULL,created_at INTEGER NOT NULL,UNIQUE(competition_id,user_id))").run();
   await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_competitions_status ON site_competitions(status,created_at)").run();
   await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_competition_attempts_competition ON site_competition_attempts(competition_id,created_at)").run();
 }
@@ -2482,7 +2483,14 @@ export default {
           const now=Date.now();if(c.starts_at&&Number(c.starts_at)>now)return json({error:"المسابقة لم تبدأ بعد."},400);if(c.ends_at&&Number(c.ends_at)<now)return json({error:"انتهى موعد المسابقة."},400);
           const old=await env.DB.prepare("SELECT id FROM site_competition_attempts WHERE competition_id=? AND user_id=?").bind(id,u.id).first<any>();if(old)return json({error:"أنت شاركت في المسابقة دي بالفعل."},409);
           let qs:any[]=[];try{qs=JSON.parse(c.questions_json||"[]")}catch{};if(!qs.length)return json({error:"المسابقة لسه مفيهاش أسئلة."},400);
-          for(let i=qs.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[qs[i],qs[j]]=[qs[j],qs[i]];}qs=qs.slice(0,Math.min(10,qs.length));
+          const existing=await env.DB.prepare("SELECT questions_json,expires_at FROM site_competition_sessions WHERE competition_id=? AND user_id=?").bind(id,u.id).first<any>();
+          if(existing&&Number(existing.expires_at)>now){try{qs=JSON.parse(existing.questions_json||"[]")}catch{qs=[];}}
+          else{
+            await env.DB.prepare("DELETE FROM site_competition_sessions WHERE competition_id=? AND user_id=?").bind(id,u.id).run();
+            for(let i=qs.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[qs[i],qs[j]]=[qs[j],qs[i]];}qs=qs.slice(0,Math.min(10,qs.length));
+            const duration=Math.max(300,Math.min(7200,Number((await env.DB.prepare("SELECT duration_seconds FROM site_competitions WHERE id=?").bind(id).first<any>())?.duration_seconds||1800)));
+            await env.DB.prepare("INSERT INTO site_competition_sessions(id,competition_id,user_id,questions_json,expires_at,created_at) VALUES(?,?,?,?,?,?)").bind(randomHex(12),id,u.id,JSON.stringify(qs),now+duration*1000,now).run();
+          }
           return json({ok:true,questions:qs.map((q:any)=>({id:String(q.id),question:String(q.question),options:Array.isArray(q.options)?q.options.map(String):[]}))});
         }
         if(url.pathname==="/api/competitions/submit" && request.method==="POST"){
@@ -2493,14 +2501,16 @@ export default {
           if(!c||String(c.status)!=="published")return json({error:"المسابقة غير متاحة."},404);
           const now=Date.now();if(c.starts_at&&Number(c.starts_at)>now)return json({error:"المسابقة لم تبدأ بعد."},400);if(c.ends_at&&Number(c.ends_at)<now)return json({error:"انتهى موعد المسابقة."},400);
           const old=await env.DB.prepare("SELECT id FROM site_competition_attempts WHERE competition_id=? AND user_id=?").bind(id,u.id).first<any>();if(old)return json({error:"تم تسليم إجاباتك بالفعل."},409);
-          let qs:any[]=[];try{qs=JSON.parse(c.questions_json||"[]")}catch{};if(!qs.length)return json({error:"لا توجد أسئلة."},400);
-          // Match the supplied answer IDs only against questions belonging to this contest.
-          const submittedIds=Object.keys(answers);const valid=qs.filter((q:any)=>submittedIds.includes(String(q.id)));
-          if(!valid.length)return json({error:"لم يتم العثور على إجابات صالحة."},400);
-          const chosen=valid.slice(0,Math.min(10,valid.length));let score=0;for(const q of chosen){if(Number(answers[q.id])===Number(q.correctIndex))score++;}
-          const total=chosen.length,points=Math.round(Number(c.points||100)*score/Math.max(1,total));
+          const session=await env.DB.prepare("SELECT questions_json,expires_at FROM site_competition_sessions WHERE competition_id=? AND user_id=?").bind(id,u.id).first<any>();
+          if(!session||Number(session.expires_at)<=now)return json({error:"انتهى وقت المحاولة. ابدأ المسابقة من جديد."},400);
+          let qs:any[]=[];try{qs=JSON.parse(session.questions_json||"[]")}catch{};if(!qs.length)return json({error:"لا توجد أسئلة صالحة للمحاولة."},400);
+          const ids=qs.map((q:any)=>String(q.id));const submittedIds=Object.keys(answers);
+          if(submittedIds.length!==ids.length||ids.some((qid:string)=>!Object.prototype.hasOwnProperty.call(answers,qid)))return json({error:"جاوب على كل الأسئلة قبل التسليم."},400);
+          let score=0;for(const q of qs){const answer=Number(answers[q.id]);if(!Number.isInteger(answer)||answer<0||answer>=q.options.length)return json({error:"فيه اختيار غير صالح."},400);if(answer===Number(q.correctIndex))score++;}
+          const total=qs.length,points=Math.round(Number(c.points||100)*score/Math.max(1,total));
           try{await env.DB.prepare("INSERT INTO site_competition_attempts(id,competition_id,user_id,score,total,points,answers_json,created_at) VALUES(?,?,?,?,?,?,?,?)").bind(randomHex(12),id,u.id,score,total,points,JSON.stringify(answers),now).run();}
           catch{return json({error:"تم تسجيل مشاركتك بالفعل."},409);}
+          await env.DB.prepare("DELETE FROM site_competition_sessions WHERE competition_id=? AND user_id=?").bind(id,u.id).run();
           await adminLog(env,u.id,"COMPETITION_SUBMIT",id,score+"/"+total);
           return json({ok:true,score,total,points});
         }
