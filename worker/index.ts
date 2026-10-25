@@ -1446,10 +1446,10 @@ async function sendTelegramCompetitionDetails(env:Env,chatId:string,id:string){
     [{text:"⬅️ مسابقات الإدارة",callback_data:"dash_competitions"}]
   ]}});
 }
-async function createTelegramCompetition(env:Env,chatId:string,title:string){
+async function createTelegramCompetition(env:Env,chatId:string,title:string,kind="curriculum"){
   await ensureCompetitionTables(env);
   const id=randomHex(12),now=Date.now();
-  await env.DB.prepare("INSERT INTO site_competitions(id,title,description,kind,subject,status,duration_seconds,points,questions_json,created_at) VALUES(?,?,?,'curriculum','عام','draft',600,100,'[]',?)").bind(id,title.slice(0,100),"مسابقة جديدة من ثانوية",now).run();
+  await env.DB.prepare("INSERT INTO site_competitions(id,title,description,kind,subject,status,duration_seconds,points,questions_json,created_at) VALUES(?,?,?,?,'عام','draft',600,100,'[]',?)").bind(id,title.slice(0,100),"مسابقة جديدة من ثانوية",kind,now).run();
   await setTelegramAdminMode(env,chatId,"competition_question",{competitionId:id});
   await telegramCall(env,"sendMessage",{chat_id:chatId,text:"✅ اتعملت المسابقة: "+title+"\n\nأرسل السؤال بالشكل ده في رسالة واحدة:\nالسؤال | الاختيار الأول | الاختيار الثاني | الاختيار الثالث | الاختيار الرابع | رقم الإجابة الصحيحة\n\nمثال للتنسيق فقط: ما ناتج 2+2؟ | 3 | 4 | 5 | 6 | 2\n\nتقدر تبعت أكتر من سؤال، ولما تخلص افتح المسابقة من زر «مسابقات الإدارة» وانشرها." ,reply_markup:{inline_keyboard:[[{text:"🏆 مسابقات الإدارة",callback_data:"dash_competitions"}],[{text:"📌 تفاصيل المسابقة",callback_data:"competition_view:"+id}]]}});
 }
@@ -1845,7 +1845,7 @@ async function handleTelegramUpdate(env:Env,update:any){
       const title=String(message.text||"").trim();
       if(title.length<3){await telegramCall(env,"sendMessage",{chat_id:chatId,text:"اكتب اسم مسابقة من 3 أحرف على الأقل."});return;}
       await clearTelegramAdminMode(env,chatId);
-      await createTelegramCompetition(env,chatId,title);return;
+      await createTelegramCompetition(env,chatId,title,String(pending.payload?.kind||"curriculum"));return;
     }
     if(pending.mode==="competition_question"){
       const line=String(message.text||"").trim();
@@ -1948,7 +1948,8 @@ async function handleTelegramUpdate(env:Env,update:any){
     if(data==="dash_alerts"){await clearTelegramAdminMode(env,chatId);await sendTelegramAlerts(env,chatId);return;}
     if(data==="dash_campaigns"){await clearTelegramAdminMode(env,chatId);await sendTelegramCampaigns(env,chatId);return;}
     if(data==="dash_competitions"){await clearTelegramAdminMode(env,chatId);await sendTelegramCompetitions(env,chatId);return;}
-    if(data==="competition_create"){await setTelegramAdminMode(env,chatId,"competition_create_title");await telegramCall(env,"sendMessage",{chat_id:chatId,text:"✍️ اكتب اسم المسابقة الجديدة." ,reply_markup:{inline_keyboard:[[{text:"❌ إلغاء",callback_data:"dash_competitions"}]]}});return;}
+    if(data==="competition_create"){await clearTelegramAdminMode(env,chatId);await telegramCall(env,"sendMessage",{chat_id:chatId,text:"🏆 اختار نوع المسابقة الأول:",reply_markup:{inline_keyboard:[[{text:"📚 المنهج والدرجات",callback_data:"competition_kind:curriculum"}],[{text:"📅 تحدي يومي",callback_data:"competition_kind:daily"}],[{text:"🎉 ترفيه وجوائز",callback_data:"competition_kind:fun"}],[{text:"⚡ منافسة مباشرة",callback_data:"competition_kind:live"}],[{text:"❌ إلغاء",callback_data:"dash_competitions"}]]}});return;}
+    if(data.startsWith("competition_kind:")){const kind=data.slice(17);if(!["curriculum","daily","fun","live"].includes(kind))return;await setTelegramAdminMode(env,chatId,"competition_create_title",{kind});await telegramCall(env,"sendMessage",{chat_id:chatId,text:"✍️ اكتب اسم المسابقة الجديدة." ,reply_markup:{inline_keyboard:[[{text:"❌ إلغاء",callback_data:"dash_competitions"}]]}});return;}
     if(data.startsWith("competition_view:")){await clearTelegramAdminMode(env,chatId);await sendTelegramCompetitionDetails(env,chatId,data.slice(17));return;}
     if(data.startsWith("competition_add_question:")){const id=data.slice(25);await setTelegramAdminMode(env,chatId,"competition_question",{competitionId:id});await telegramCall(env,"sendMessage",{chat_id:chatId,text:"✍️ ابعت السؤال بالشكل: السؤال | اختيار 1 | اختيار 2 | اختيار 3 | اختيار 4 | رقم الإجابة الصحيحة (1-4)."});return;}
     if(data.startsWith("competition_publish:")){
