@@ -1491,27 +1491,38 @@ async function drawTelegramCompetitionWinner(env:Env,chatId:string,id:string){
     winner=await env.DB.prepare("SELECT u.id,u.name,u.email,a.score,a.total,a.points FROM users u JOIN site_competition_attempts a ON a.user_id=u.id WHERE a.competition_id=? AND u.id=?").bind(id,String(saved?.winner_user_id||"")).first<any>();
     if(!winner){await telegramCall(env,"sendMessage",{chat_id:chatId,text:"تعذر تأكيد الفائز المحفوظ. راجع المسابقة."});return;}
   }
-  await env.DB.prepare("UPDATE users SET verified=1,updated_at=? WHERE id=?").bind(now,String(winner.id)).run();
   await ensureBridgeTools(env);
+  const existingAward=await env.DB.prepare("SELECT id,status FROM verification_requests WHERE user_id=? AND receipt_file_id=? LIMIT 1").bind(String(winner.id),"competition_award:"+id).first<any>();
+  let requestId=String(existingAward?.id||"");
+  if(!requestId){
+    requestId=randomHex(12);
+    await env.DB.prepare("INSERT INTO verification_requests(id,user_id,status,transfer_phone,receipt_file_id,created_at) VALUES(?,?,'pending',?,?,?)").bind(requestId,String(winner.id),"جائزة مسابقة ثانوية","competition_award:"+id,now).run();
+  }
   await env.DB.prepare("INSERT INTO admin_messages(id,user_id,sender,message,created_at) VALUES(?,?,'admin',?,?)")
-    .bind(randomHex(10),String(winner.id),"🎉 مبروك! أنت الفائز في مسابقة «"+String(c.title||"ثانوية")+"» على منصة ثانوية. تم تفعيل علامة التوثيق لحسابك تلقائيًا كجائزة. تقدر تتواصل مع إدارة المنصة من قسم الدعم لو عندك أي استفسار.",now).run();
+    .bind(randomHex(10),String(winner.id),"🎉 مبروك! أنت الفائز في مسابقة «"+String(c.title||"ثانوية")+"» على منصة ثانوية. جائزة التوثيق المؤقتة محتاجة مراجعة الإدارة قبل تفعيلها. هيوصلك إشعار لما يتم اعتماد الطلب. تقدر تتواصل مع الإدارة من قسم الدعم.",now).run();
+  await telegramCall(env,"sendMessage",{chat_id:chatId,text:"🟡 طلب مراجعة جائزة التوثيق\n\n👤 الفائز: "+String(winner.name||"طالب")+"\n✉️ "+String(winner.email||"—")+"\n🏆 المسابقة: "+String(c.title||"مسابقة")+"\n🆔 طلب التوثيق: "+requestId+"\n\nراجع بيانات الفائز ثم اختر مدة التوثيق المؤقت أو ارفض الطلب.",reply_markup:{inline_keyboard:[
+    [{text:"✅ اعتماد توثيق 30 يوم",callback_data:"competition_award_approve:1:"+requestId}],
+    [{text:"✅ اعتماد توثيق 90 يوم",callback_data:"competition_award_approve:3:"+requestId}],
+    [{text:"❌ رفض طلب الجائزة",callback_data:"competition_award_reject:"+requestId}],
+    [{text:"💬 مراسلة الفائز",callback_data:"bridge_message_reply:"+String(winner.id)}]
+  ]}});
   await env.DB.prepare("CREATE TABLE IF NOT EXISTS community_posts (id TEXT PRIMARY KEY,user_id TEXT NOT NULL,subject TEXT NOT NULL,kind TEXT NOT NULL,title TEXT NOT NULL,content TEXT NOT NULL,created_at INTEGER NOT NULL,deleted_at INTEGER,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE)").run();
   const owner=await env.DB.prepare("SELECT id FROM users WHERE role='owner' ORDER BY created_at ASC LIMIT 1").first<any>();
   if(owner?.id){
     await env.DB.prepare("INSERT INTO community_posts(id,user_id,subject,kind,title,content,created_at) VALUES(?,?,?,'discussion',?,?,?)")
-      .bind(crypto.randomUUID(),String(owner.id),"عام","🏆 فائز مسابقة ثانوية: "+String(winner.name||"طالب"),"نبارك للطالب "+String(winner.name||"الفائز")+" فوزه في مسابقة «"+String(c.title||"ثانوية")+"»! 🎉 حصل الفائز على علامة التوثيق كجائزة. شكرًا لكل المشاركين، وانتظروا مسابقات وجوائز جديدة.",now).run();
+      .bind(crypto.randomUUID(),String(owner.id),"عام","🏆 فائز مسابقة ثانوية: "+String(winner.name||"طالب"),"نبارك للطالب "+String(winner.name||"الفائز")+" فوزه في مسابقة «"+String(c.title||"ثانوية")+"»! 🎉 جائزة التوثيق المؤقتة قيد مراجعة الإدارة. شكرًا لكل المشاركين، وانتظروا مسابقات وجوائز جديدة.",now).run();
   }
   await adminLog(env,chatId,"COMPETITION_RANDOM_DRAW",id,String(winner.email||""));
   await sendCompetitionWinnerResult(env,chatId,id,c,winner,all.length,false);
 }
 async function sendCompetitionWinnerResult(env:Env,chatId:string,id:string,c:any,winner:any,participants:number,alreadyDrawn:boolean){
-  await telegramCall(env,"sendMessage",{chat_id:chatId,text:(alreadyDrawn?"🏆 الفائز المحفوظ — لن يتم إجراء سحب جديد تلقائيًا":"🎉 تم السحب وتفعيل الجائزة تلقائيًا")+
+  await telegramCall(env,"sendMessage",{chat_id:chatId,text:(alreadyDrawn?"🏆 الفائز المحفوظ — لن يتم إجراء سحب جديد تلقائيًا":"🎉 تم السحب وإنشاء طلب مراجعة جائزة التوثيق")+
     "\n\n🏆 المسابقة: "+String(c.title||"مسابقة")+
     "\n👑 الفائز: "+String(winner.name||"طالب")+
     "\n📧 البريد (للإدارة فقط): "+String(winner.email||"—")+
     "\n📊 نتيجته: "+Number(winner.score||0)+"/"+Number(winner.total||0)+
     "\n👥 عدد المشاركين: "+participants+
-    (alreadyDrawn?"":"\n\n✅ تم تفعيل علامة التوثيق للحساب.\n💬 تم إرسال رسالة داخل الموقع للفائز.\n📢 تم نشر إعلان باسم الفائز في مجتمع ثانوية."),
+    (alreadyDrawn?"":"\n\n🟡 تم إرسال طلب جائزة التوثيق للمراجعة، ولم يتم تفعيل العلامة بعد.\n💬 تم إبلاغ الفائز داخل الموقع.\n📢 تم نشر إعلان عن الفوز في مجتمع ثانوية."),
     reply_markup:{inline_keyboard:[
       [{text:"💬 مراسلة الفائز داخل الموقع",callback_data:"bridge_message_reply:"+String(winner.id)}],
       [{text:"⬅️ تفاصيل المسابقة",callback_data:"competition_view:"+id}]
@@ -1946,6 +1957,37 @@ async function handleTelegramUpdate(env:Env,update:any){
       if(!report){await telegramCall(env,"sendMessage",{chat_id:chatId,text:"البلاغ مش موجود."});return;}
       await setTelegramAdminMode(env,chatId,"bridge_reply",{userId:String(report.user_id),reportId:id});
       await telegramCall(env,"sendMessage",{chat_id:chatId,text:"✍️ اكتب الرد اللي هيوصل للطالب داخل الموقع.\nبلاغ: "+id.slice(0,8),reply_markup:{inline_keyboard:[[ {text:"❌ إلغاء",callback_data:"dash_cancel"} ]] }});
+      return;
+    }
+    if(data.startsWith("competition_award_approve:")){
+      const p=data.split(":"); const months=Math.max(1,Math.min(3,Number(p[1])||1)); const requestId=p.slice(2).join(":");
+      const row=await env.DB.prepare("SELECT vr.id,vr.user_id,vr.status,vr.receipt_file_id,u.name,u.email FROM verification_requests vr JOIN users u ON u.id=vr.user_id WHERE vr.id=?").bind(requestId).first<any>();
+      if(!row||!String(row.receipt_file_id||"").startsWith("competition_award:")){await telegramCall(env,"sendMessage",{chat_id:chatId,text:"❌ طلب جائزة التوثيق غير موجود أو مش تابع لمسابقة."});return;}
+      if(String(row.status)!=="pending"){await telegramCall(env,"sendMessage",{chat_id:chatId,text:"⚠️ الطلب اتراجع فيه بالفعل: "+String(row.status)});return;}
+      const now=Date.now(); const current=await env.DB.prepare("SELECT expires_at FROM subscriptions WHERE user_id=? AND status='active' AND expires_at>? ORDER BY expires_at DESC LIMIT 1").bind(String(row.user_id),now).first<any>();
+      const start=Math.max(now,Number(current?.expires_at||0)),expires=start+months*30*86400000,subId=randomHex(16);
+      await env.DB.batch([
+        env.DB.prepare("INSERT INTO subscriptions(id,user_id,status,started_at,expires_at,created_at,updated_at) VALUES(?,?,'active',?,?,?,?)").bind(subId,String(row.user_id),start,expires,now,now),
+        env.DB.prepare("UPDATE verification_requests SET status='approved',reviewed_at=?,reviewed_by=?,subscription_id=? WHERE id=? AND status='pending'").bind(now,chatId,subId,requestId),
+        env.DB.prepare("UPDATE users SET verified=1,updated_at=? WHERE id=?").bind(now,String(row.user_id)),
+        env.DB.prepare("INSERT INTO admin_messages(id,user_id,sender,message,created_at) VALUES(?,?,'admin',?,?)").bind(randomHex(10),String(row.user_id),"✅ تم اعتماد جائزة التوثيق المؤقتة لحسابك لمدة "+months*30+" يومًا. تبدأ من "+adminFormatDate(start)+" وتنتهي في "+adminFormatDate(expires)+".",now)
+      ]);
+      await adminLog(env,chatId,"APPROVE_COMPETITION_VERIFICATION",String(row.user_id),months+" months");
+      await telegramCall(env,"sendMessage",{chat_id:chatId,text:"✅ تم اعتماد جائزة التوثيق المؤقتة\n\n👤 "+String(row.name||"—")+"\n✉️ "+String(row.email||"—")+"\n📅 المدة: "+(months*30)+" يوم\n⏳ تنتهي: "+adminFormatDate(expires),reply_markup:{inline_keyboard:[[ {text:"💳 طلبات التوثيق",callback_data:"dash_verifications"} ],[ {text:"🎛️ لوحة التحكم",callback_data:"dash_home"} ]] }});
+      return;
+    }
+    if(data.startsWith("competition_award_reject:")){
+      const requestId=data.slice("competition_award_reject:".length);
+      const row=await env.DB.prepare("SELECT vr.id,vr.user_id,vr.status,vr.receipt_file_id,u.name FROM verification_requests vr JOIN users u ON u.id=vr.user_id WHERE vr.id=?").bind(requestId).first<any>();
+      if(!row||!String(row.receipt_file_id||"").startsWith("competition_award:")){await telegramCall(env,"sendMessage",{chat_id:chatId,text:"❌ طلب جائزة التوثيق غير موجود أو مش تابع لمسابقة."});return;}
+      if(String(row.status)!=="pending"){await telegramCall(env,"sendMessage",{chat_id:chatId,text:"⚠️ الطلب اتراجع فيه بالفعل: "+String(row.status)});return;}
+      const now=Date.now();
+      await env.DB.batch([
+        env.DB.prepare("UPDATE verification_requests SET status='rejected',reviewed_at=?,reviewed_by=?,rejection_reason='Competition award request declined' WHERE id=? AND status='pending'").bind(now,chatId,requestId),
+        env.DB.prepare("INSERT INTO admin_messages(id,user_id,sender,message,created_at) VALUES(?,?,'admin',?,?)").bind(randomHex(10),String(row.user_id),"تمت مراجعة طلب جائزة التوثيق المرتبط بالمسابقة، ولم تتم الموافقة عليه حاليًا. لو محتاج توضيح تواصل مع الإدارة من قسم الدعم.",now)
+      ]);
+      await adminLog(env,chatId,"REJECT_COMPETITION_VERIFICATION",String(row.user_id),requestId);
+      await telegramCall(env,"sendMessage",{chat_id:chatId,text:"❌ تم رفض طلب جائزة التوثيق وإبلاغ الفائز."});
       return;
     }
     if(data.startsWith("bridge_message_reply:")){
