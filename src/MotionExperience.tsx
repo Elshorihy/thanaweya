@@ -41,7 +41,7 @@ export default function MotionExperience(){
       frame++;
       ctx.clearRect(0,0,width,height);
       const focus=!!document.querySelector('.focusLab,.focuspage');
-      const opacity=focus?.55:1;
+      const opacity=focus ? .55 : 1;
       for(const p of particles){
         p.x+=p.vx;p.y+=p.vy;
         if(p.y<-4){p.y=height+4;p.x=Math.random()*width}
