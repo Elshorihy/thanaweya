@@ -15,6 +15,7 @@ function shouldShowIntro(){
 export default function MotionExperience(){
   const canvasRef=useRef<HTMLCanvasElement|null>(null);
   const [intro,setIntro]=useState(false);
+  const [celebration,setCelebration]=useState(false);
 
   useEffect(()=>{setIntro(shouldShowIntro())},[]);
 
@@ -70,6 +71,12 @@ export default function MotionExperience(){
   },[]);
 
   useEffect(()=>{
+    const celebrate=()=>{setCelebration(true);window.setTimeout(()=>setCelebration(false),1450)};
+    window.addEventListener('thanaweya:achievement',celebrate);
+    return()=>window.removeEventListener('thanaweya:achievement',celebrate);
+  },[]);
+
+  useEffect(()=>{
     if(!intro)return;
     const timer=window.setTimeout(()=>setIntro(false),2300);
     const onKey=(e:KeyboardEvent)=>{if(e.key==='Escape')setIntro(false)};
@@ -79,6 +86,7 @@ export default function MotionExperience(){
 
   return <>
     <canvas id="thanaweya-particles" ref={canvasRef} aria-hidden="true"/>
+    {celebration&&<div className="motionCelebration" aria-live="polite"><div className="motionCelebrationBurst"/><strong>عاش! مهمة اتنجزت</strong><span>خطوة كمان ناحية هدفك</span></div>}
     {intro&&<div className="motionIntro" role="dialog" aria-label="مقدمة ثانوية" aria-modal="true">
       <div className="motionIntroGlow"/>
       <div className="motionIntroContent"><div className="motionIntroLogo"><GraduationCap size={43}/></div><span className="motionIntroEyebrow">YOUR NEXT CHAPTER</span><h1>ثانوية</h1><p>خطوة بخطوة، توصل</p><div className="motionIntroLine"><i/></div></div>
