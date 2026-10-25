@@ -568,7 +568,7 @@ useEffect(()=>{if(!auth)return;let cancelled=false;(async()=>{try{await syncPush
   }catch(e){setNotice(e instanceof Error?e.message:'تعذر تفعيل إشعارات الأجهزة.');setTimeout(()=>setNotice(''),5000)}
 }
  function addSession(minutes:number,type:'focus'|'review'='focus',subjectId=s.subjects[0]?.id||'',lessonId?:string){update({sessions:[...s.sessions,{id:id(),date:today(),subjectId,duration:minutes,type,lessonId,startedAt:new Date().toISOString()}],xp:s.xp+(type==='review'?15:10)})}
- function completeTask(t:Task){if(t.status==='completed')return;const l=lessonMap[t.lessonId];const sessions=[...s.sessions,{id:id(),date:today(),subjectId:s.units.find(u=>u.id===l?.unitId)?.subjectId||'',lessonId:t.lessonId,duration:t.estimatedMinutes,type:'focus' as const}];update({tasks:s.tasks.map(x=>x.id===t.id?{...x,status:'completed'}:x),lessons:s.lessons.map(x=>x.id===t.lessonId&&!x.nextReviewAt?{...x,nextReviewAt:addDays(today(),1)}:x),xp:s.xp+20,sessions})}
+ function completeTask(t:Task){if(t.status==='completed')return;const l=lessonMap[t.lessonId];const sessions=[...s.sessions,{id:id(),date:today(),subjectId:s.units.find(u=>u.id===l?.unitId)?.subjectId||'',lessonId:t.lessonId,duration:t.estimatedMinutes,type:'focus' as const}];update({tasks:s.tasks.map(x=>x.id===t.id?{...x,status:'completed'}:x),lessons:s.lessons.map(x=>x.id===t.lessonId&&!x.nextReviewAt?{...x,nextReviewAt:addDays(today(),1)}:x),xp:s.xp+20,sessions});window.dispatchEvent(new CustomEvent('thanaweya:achievement',{detail:{kind:'task'}}))}
  function addSubject(name:string,color:string,p:Priority){name=clean(name);if(!name)return;update({subjects:[...s.subjects,{id:id(),name,color,priority:p}]});setModal(null)}
  function addUnit(name:string,sid:string){
  name=clean(name);if(!name||!sid)return;
