@@ -1266,3 +1266,154 @@ body:has(.focusLab) #thanaweya-particles,body:has(.focuspage) #thanaweya-particl
 @keyframes motionCelebrateIn{from{opacity:0;transform:translate(-50%,-12px) scale(.94)}to{opacity:1;transform:translate(-50%,0) scale(1)}}
 @keyframes motionCelebrateBurst{from{transform:scale(.65);opacity:.25}to{transform:scale(1.15);opacity:1}}
 @media(prefers-reduced-motion:reduce){.appMain>section,.motionCelebration,.motionCelebrationBurst{animation:none!important;transform:none!important;transition:none!important}}
+
+
+/* ===== Thanaweya Premium Atmosphere ===== */
+@keyframes thanaweyaAurora {
+  0%,100% { transform:translate3d(0,0,0) scale(1); opacity:.52; }
+  50% { transform:translate3d(2.5%,-1.5%,0) scale(1.08); opacity:.82; }
+}
+@keyframes thanaweyaSheen {
+  0% { transform:translateX(140%) rotate(18deg); }
+  100% { transform:translateX(-180%) rotate(18deg); }
+}
+@keyframes thanaweyaGlowPulse {
+  0%,100% { opacity:.38; }
+  50% { opacity:.78; }
+}
+body:has(.app)::before {
+  content:"";
+  position:fixed;
+  inset:-18%;
+  z-index:0;
+  pointer-events:none;
+  background:
+    radial-gradient(ellipse at 76% 12%,rgba(80,95,255,.13),transparent 28%),
+    radial-gradient(ellipse at 20% 52%,rgba(36,207,201,.075),transparent 25%),
+    radial-gradient(ellipse at 72% 82%,rgba(139,124,255,.09),transparent 30%);
+  animation:thanaweyaAurora 18s ease-in-out infinite;
+}
+.app { isolation:isolate; background:transparent; }
+.app>aside {
+  background:linear-gradient(165deg,rgba(16,23,42,.97),rgba(9,14,27,.96) 68%,rgba(13,27,43,.97));
+  border-left-color:rgba(130,151,199,.17);
+  box-shadow:-18px 0 65px rgba(0,0,0,.24),inset 1px 0 0 rgba(255,255,255,.025);
+}
+.brand { position:relative; }
+.brandLogo {
+  border:1px solid rgba(137,130,255,.24);
+  box-shadow:0 0 0 5px rgba(139,124,255,.045),0 9px 30px rgba(99,102,241,.22);
+}
+.app nav button {
+  position:relative;
+  overflow:hidden;
+  border:1px solid transparent;
+  transition:background .22s,border-color .22s,transform .22s,box-shadow .22s;
+}
+.app nav button.active {
+  background:linear-gradient(105deg,rgba(139,124,255,.22),rgba(54,207,201,.09) 78%,rgba(54,207,201,.025));
+  border-color:rgba(139,124,255,.26);
+  box-shadow:inset -3px 0 0 var(--accent),0 7px 24px rgba(91,85,210,.08);
+}
+.appMain { position:relative; }
+.appMain>header {
+  position:sticky;
+  top:10px;
+  z-index:10;
+  background:linear-gradient(115deg,rgba(18,26,46,.88),rgba(13,25,39,.83));
+  border-color:rgba(137,154,197,.18);
+  box-shadow:0 14px 40px rgba(0,0,0,.16),inset 0 1px 0 rgba(255,255,255,.045);
+  backdrop-filter:blur(22px) saturate(145%);
+}
+.appMain>header .search:focus-within {
+  border-color:rgba(139,124,255,.55);
+  box-shadow:0 0 0 4px rgba(139,124,255,.09),0 0 28px rgba(91,110,255,.09);
+}
+.hero,.title { position:relative; }
+.hero h1,.title h1 {
+  background:linear-gradient(100deg,var(--text) 8%,#d9d5ff 54%,#8dece2 105%);
+  -webkit-background-clip:text;
+  background-clip:text;
+  color:transparent;
+  text-wrap:balance;
+}
+.eyebrow {
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  color:#b7afff;
+  letter-spacing:.13em;
+}
+.eyebrow::before {
+  content:"";
+  width:19px;
+  height:2px;
+  border-radius:9px;
+  background:linear-gradient(90deg,var(--accent),var(--accent2));
+  box-shadow:0 0 12px rgba(139,124,255,.65);
+}
+.primary {
+  position:relative;
+  overflow:hidden;
+  background:linear-gradient(112deg,#7766f5 0%,#6578ff 48%,#2fbfbe 120%);
+  box-shadow:0 9px 26px rgba(102,93,237,.23),inset 0 1px 0 rgba(255,255,255,.22);
+}
+.primary::after {
+  content:"";
+  position:absolute;
+  inset:-80% auto -80% -35%;
+  width:35%;
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,.2),transparent);
+  transform:translateX(140%) rotate(18deg);
+  pointer-events:none;
+}
+.card,.stat,.daycard {
+  position:relative;
+  isolation:isolate;
+  border-color:rgba(126,148,191,.17);
+  box-shadow:0 12px 34px rgba(0,0,0,.12),inset 0 1px 0 rgba(255,255,255,.035);
+}
+.card {
+  background:linear-gradient(145deg,rgba(21,30,50,.96),rgba(13,21,37,.96));
+}
+.stat {
+  background:linear-gradient(145deg,rgba(25,34,59,.98),rgba(14,22,39,.98));
+}
+.stat::before,.card::before,.daycard::before {
+  content:"";
+  position:absolute;
+  inset:0;
+  border-radius:inherit;
+  padding:1px;
+  background:linear-gradient(135deg,rgba(139,124,255,.20),transparent 34%,rgba(54,207,201,.12) 72%,transparent);
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
+  -webkit-mask-composite:xor;
+  mask-composite:exclude;
+  pointer-events:none;
+  opacity:.7;
+}
+.stat .iconbox {
+  background:linear-gradient(145deg,rgba(139,124,255,.22),rgba(54,207,201,.09));
+  border-color:rgba(157,147,255,.2);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.07),0 7px 22px rgba(97,91,224,.08);
+}
+.progress { background:rgba(115,132,169,.16); }
+.progress div { box-shadow:0 0 14px rgba(54,207,201,.28); }
+@media (hover:hover) and (prefers-reduced-motion:no-preference) {
+  .app .card,.app .stat,.app .daycard { transition:transform .28s cubic-bezier(.2,.8,.2,1),border-color .28s,box-shadow .28s,background .28s; }
+  .app .card:hover,.app .stat:hover,.app .daycard:hover {
+    transform:translateY(-3px);
+    border-color:rgba(111,190,226,.32);
+    box-shadow:0 20px 48px rgba(0,0,0,.2),0 0 28px rgba(99,102,241,.055),inset 0 1px 0 rgba(255,255,255,.055);
+  }
+  .app .primary:hover::after { animation:thanaweyaSheen .85s ease-out; }
+  .app nav button:hover { transform:translateX(-2px); }
+}
+@media(max-width:900px) {
+  .appMain>header { top:5px; }
+  body:has(.app)::before { inset:-8%; }
+}
+@media(prefers-reduced-motion:reduce) {
+  body:has(.app)::before { animation:none!important; }
+  .app .card,.app .stat,.app .daycard,.app nav button { transition:none!important; }
+}
