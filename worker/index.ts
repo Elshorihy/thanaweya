@@ -1414,6 +1414,69 @@ async function publishTelegramCommunityPost(env:Env,chatId:string,payload:any){
     [{text:"🎛️ لوحة التحكم",callback_data:"dash_home"}]
   ]}});
 }
+
+async function ensureCompetitionTables(env:Env){
+  await env.DB.prepare("CREATE TABLE IF NOT EXISTS site_competitions (id TEXT PRIMARY KEY,title TEXT NOT NULL,description TEXT NOT NULL DEFAULT '',kind TEXT NOT NULL DEFAULT 'curriculum',subject TEXT NOT NULL DEFAULT '',status TEXT NOT NULL DEFAULT 'draft',duration_seconds INTEGER NOT NULL DEFAULT 0,points INTEGER NOT NULL DEFAULT 100,questions_json TEXT NOT NULL DEFAULT '[]',created_at INTEGER NOT NULL,starts_at INTEGER,ends_at INTEGER)").run();
+  await env.DB.prepare("CREATE TABLE IF NOT EXISTS site_competition_attempts (id TEXT PRIMARY KEY,competition_id TEXT NOT NULL,user_id TEXT NOT NULL,score INTEGER NOT NULL,total INTEGER NOT NULL,points INTEGER NOT NULL DEFAULT 0,answers_json TEXT NOT NULL DEFAULT '{}',created_at INTEGER NOT NULL,UNIQUE(competition_id,user_id))").run();
+  await env.DB.prepare("CREATE TABLE IF NOT EXISTS site_competition_sessions (id TEXT PRIMARY KEY,competition_id TEXT NOT NULL,user_id TEXT NOT NULL,questions_json TEXT NOT NULL,expires_at INTEGER NOT NULL,created_at INTEGER NOT NULL,UNIQUE(competition_id,user_id))").run();
+  await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_competitions_status ON site_competitions(status,created_at)").run();
+  await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_competition_attempts_competition ON site_competition_attempts(competition_id,created_at)").run();
+}
+async function sendTelegramCompetitions(env:Env,chatId:string){
+  await ensureCompetitionTables(env);
+  const rows=await env.DB.prepare("SELECT c.id,c.title,c.status,c.kind,(SELECT COUNT(*) FROM site_competition_attempts a WHERE a.competition_id=c.id) AS participants,(SELECT COUNT(*) FROM json_each(c.questions_json)) AS questions FROM site_competitions c ORDER BY c.created_at DESC LIMIT 12").all<any>();
+  const list=rows.results||[];
+  const text=["🏆 إدارة مسابقات ثانوية","","المسابقات: "+list.length,...list.map((c:any)=>"• "+String(c.title)+" — "+String(c.status)+" | أسئلة: "+Number(c.questions||0)+" | مشاركون: "+Number(c.participants||0)),"","إنشاء مسابقة: اضغط الزر ثم اكتب اسمها. بعد ذلك أرسل الأسئلة بصيغة السؤال | اختيار 1 | اختيار 2 | اختيار 3 | اختيار 4 | رقم الإجابة الصحيحة (1-4)."].join("\n");
+  await telegramCall(env,"sendMessage",{chat_id:chatId,text,reply_markup:{inline_keyboard:[
+    [{text:"➕ إنشاء مسابقة",callback_data:"competition_create"}],
+    ...list.map((c:any)=>[{text:(c.status==="published"?"🟢 ":"📝 ")+String(c.title).slice(0,35),callback_data:"competition_view:"+String(c.id)}]),
+    [{text:"⬅️ لوحة التحكم",callback_data:"dash_home"}]
+  ]}});
+}
+async function sendTelegramCompetitionDetails(env:Env,chatId:string,id:string){
+  await ensureCompetitionTables(env);
+  const c=await env.DB.prepare("SELECT * FROM site_competitions WHERE id=?").bind(id).first<any>();
+  if(!c){await sendTelegramCompetitions(env,chatId);return;}
+  let qs:any[]=[];try{qs=JSON.parse(c.questions_json||"[]")}catch{}
+  const n=await env.DB.prepare("SELECT COUNT(*) AS n FROM site_competition_attempts WHERE competition_id=?").bind(id).first<any>();
+  await telegramCall(env,"sendMessage",{chat_id:chatId,text:"🏆 "+String(c.title)+"\n\nالحالة: "+String(c.status)+"\nالنوع: "+String(c.kind)+"\nالأسئلة: "+qs.length+"\nالمشاركات المكتملة: "+Number(n?.n||0)+"\nالنقاط: "+Number(c.points||100),reply_markup:{inline_keyboard:[
+    [{text:"➕ إضافة سؤال",callback_data:"competition_add_question:"+id}],
+    [{text:c.status==="published"?"⏸ إيقاف النشر":"🚀 نشر المسابقة",callback_data:"competition_publish:"+id}],
+    [{text:"🎲 سحب فائز عشوائي",callback_data:"competition_draw:"+id}],
+    [{text:"⬅️ مسابقات الإدارة",callback_data:"dash_competitions"}]
+  ]}});
+}
+async function createTelegramCompetition(env:Env,chatId:string,title:string,kind="curriculum"){
+  await ensureCompetitionTables(env);
+  const id=randomHex(12),now=Date.now();
+  await env.DB.prepare("INSERT INTO site_competitions(id,title,description,kind,subject,status,duration_seconds,points,questions_json,created_at) VALUES(?,?,?,?,'عام','draft',600,100,'[]',?)").bind(id,title.slice(0,100),"مسابقة جديدة من ثانوية",kind,now).run();
+  await setTelegramAdminMode(env,chatId,"competition_question",{competitionId:id});
+  await telegramCall(env,"sendMessage",{chat_id:chatId,text:"✅ اتعملت المسابقة: "+title+"\n\nأرسل السؤال بالشكل ده في رسالة واحدة:\nالسؤال | الاختيار الأول | الاختيار الثاني | الاختيار الثالث | الاختيار الرابع | رقم الإجابة الصحيحة\n\nمثال للتنسيق فقط: ما ناتج 2+2؟ | 3 | 4 | 5 | 6 | 2\n\nتقدر تبعت أكتر من سؤال، ولما تخلص افتح المسابقة من زر «مسابقات الإدارة» وانشرها." ,reply_markup:{inline_keyboard:[[{text:"🏆 مسابقات الإدارة",callback_data:"dash_competitions"}],[{text:"📌 تفاصيل المسابقة",callback_data:"competition_view:"+id}]]}});
+}
+async function addTelegramCompetitionQuestion(env:Env,chatId:string,id:string,line:string){
+  const parts=line.split("|").map((x:string)=>x.trim());
+  if(parts.length!==6||!parts[0]||parts.slice(1,5).some((x:string)=>!x)||!/^[1-4]$/.test(parts[5])){
+    await telegramCall(env,"sendMessage",{chat_id:chatId,text:"⚠️ التنسيق مش مضبوط. ابعت 6 أجزاء مفصولة بعلامة |، وآخر جزء رقم الإجابة الصحيحة من 1 إلى 4."});return;
+  }
+  const row=await env.DB.prepare("SELECT questions_json FROM site_competitions WHERE id=?").bind(id).first<any>();
+  if(!row){await clearTelegramAdminMode(env,chatId);await sendTelegramCompetitions(env,chatId);return;}
+  let qs:any[]=[];try{qs=JSON.parse(row.questions_json||"[]")}catch{}
+  if(qs.length>=100){await telegramCall(env,"sendMessage",{chat_id:chatId,text:"وصلت المسابقة للحد الأقصى: 100 سؤال."});return;}
+  qs.push({id:randomHex(8),question:parts[0].slice(0,500),options:parts.slice(1,5).map((x:string)=>x.slice(0,300)),correctIndex:Number(parts[5])-1});
+  await env.DB.prepare("UPDATE site_competitions SET questions_json=? WHERE id=?").bind(JSON.stringify(qs),id).run();
+  await telegramCall(env,"sendMessage",{chat_id:chatId,text:"✅ تم حفظ السؤال رقم "+qs.length+". ابعت السؤال التالي بنفس التنسيق أو اضغط «انتهيت» لفتح إدارة المسابقة.",reply_markup:{inline_keyboard:[[{text:"🏁 انتهيت من الأسئلة",callback_data:"competition_view:"+id}],[{text:"➕ سؤال آخر",callback_data:"competition_add_question:"+id}]]}});
+}
+async function drawTelegramCompetitionWinner(env:Env,chatId:string,id:string){
+  await ensureCompetitionTables(env);
+  const rows=await env.DB.prepare("SELECT u.name,u.email,a.score,a.total,a.points,a.created_at FROM site_competition_attempts a JOIN users u ON u.id=a.user_id WHERE a.competition_id=? ORDER BY a.created_at").bind(id).all<any>();
+  const all=rows.results||[];
+  if(!all.length){await telegramCall(env,"sendMessage",{chat_id:chatId,text:"لسه مفيش مشاركات مكتملة للسحب ده.",reply_markup:{inline_keyboard:[[{text:"⬅️ رجوع للمسابقة",callback_data:"competition_view:"+id}]]}});return;}
+  const winner=all[Math.floor(Math.random()*all.length)];
+  const c=await env.DB.prepare("SELECT title FROM site_competitions WHERE id=?").bind(id).first<any>();
+  await adminLog(env,chatId,"COMPETITION_RANDOM_DRAW",id,String(winner.email||""));
+  await telegramCall(env,"sendMessage",{chat_id:chatId,text:"🎉 نتيجة السحب العشوائي\n\n🏆 المسابقة: "+String(c?.title||"مسابقة")+"\n👑 الفائز: "+String(winner.name||"طالب") +"\n📧 "+String(winner.email||"—")+"\n📊 نتيجته: "+Number(winner.score)+"/"+Number(winner.total)+"\n\nعدد المشاركين في السحب: "+all.length,reply_markup:{inline_keyboard:[[{text:"🔄 سحب جديد",callback_data:"competition_draw:"+id}],[{text:"⬅️ تفاصيل المسابقة",callback_data:"competition_view:"+id}]]}});
+}
+
 function telegramDashboardKeyboard(){
   return {inline_keyboard:[
     [{text:"🎫 بلاغات الطلاب",callback_data:"bridge_reports"},{text:"💬 رسائل الموقع",callback_data:"bridge_messages"}],
@@ -1429,6 +1492,7 @@ function telegramDashboardKeyboard(){
     [{text:"🔐 الدخول و OTP",callback_data:"dash_auth"},{text:"📱 واتساب",callback_data:"dash_wa"}],
     [{text:"🛠️ أدوات الإدارة",callback_data:"dash_tools"}],
     [{text:"📚 مصادر المحاضرات",callback_data:"dash_global_lectures"}],
+    [{text:"🏆 مسابقات ثانوية",callback_data:"dash_competitions"}],
     [{text:"🧹 مدير مجتمع ثانوية",callback_data:"dash_community_manager"}],
     [{text:"🧠 المساعد الإداري",callback_data:"dash_admin_assistant"}],
     [{text:"↩️ تراجع عن آخر عملية",callback_data:"dash_undo_last"}],
@@ -1777,6 +1841,17 @@ async function handleTelegramUpdate(env:Env,update:any){
   // before dashboard/callback routing can consume the message.
   if(message?.text){
     const pending=await getTelegramAdminState(env,chatId);
+    if(pending.mode==="competition_create_title"){
+      const title=String(message.text||"").trim();
+      if(title.length<3){await telegramCall(env,"sendMessage",{chat_id:chatId,text:"اكتب اسم مسابقة من 3 أحرف على الأقل."});return;}
+      await clearTelegramAdminMode(env,chatId);
+      await createTelegramCompetition(env,chatId,title,String(pending.payload?.kind||"curriculum"));return;
+    }
+    if(pending.mode==="competition_question"){
+      const line=String(message.text||"").trim();
+      if(line==="/done"||line==="انتهيت"){await clearTelegramAdminMode(env,chatId);await sendTelegramCompetitionDetails(env,chatId,String(pending.payload?.competitionId||""));return;}
+      await addTelegramCompetitionQuestion(env,chatId,String(pending.payload?.competitionId||""),line);return;
+    }
     if(pending.mode==="bridge_reply"){
       const replyText=String(message.text).trim().slice(0,2000);
       const userId=String(pending.payload?.userId||"");
@@ -1872,6 +1947,22 @@ async function handleTelegramUpdate(env:Env,update:any){
     if(data==="dash_data"){await clearTelegramAdminMode(env,chatId);await sendTelegramDataCenter(env,chatId);return;}
     if(data==="dash_alerts"){await clearTelegramAdminMode(env,chatId);await sendTelegramAlerts(env,chatId);return;}
     if(data==="dash_campaigns"){await clearTelegramAdminMode(env,chatId);await sendTelegramCampaigns(env,chatId);return;}
+    if(data==="dash_competitions"){await clearTelegramAdminMode(env,chatId);await sendTelegramCompetitions(env,chatId);return;}
+    if(data==="competition_create"){await clearTelegramAdminMode(env,chatId);await telegramCall(env,"sendMessage",{chat_id:chatId,text:"🏆 اختار نوع المسابقة الأول:",reply_markup:{inline_keyboard:[[{text:"📚 المنهج والدرجات",callback_data:"competition_kind:curriculum"}],[{text:"📅 تحدي يومي",callback_data:"competition_kind:daily"}],[{text:"🎉 ترفيه وجوائز",callback_data:"competition_kind:fun"}],[{text:"⚡ منافسة مباشرة",callback_data:"competition_kind:live"}],[{text:"❌ إلغاء",callback_data:"dash_competitions"}]]}});return;}
+    if(data.startsWith("competition_kind:")){const kind=data.slice(17);if(!["curriculum","daily","fun","live"].includes(kind))return;await setTelegramAdminMode(env,chatId,"competition_create_title",{kind});await telegramCall(env,"sendMessage",{chat_id:chatId,text:"✍️ اكتب اسم المسابقة الجديدة." ,reply_markup:{inline_keyboard:[[{text:"❌ إلغاء",callback_data:"dash_competitions"}]]}});return;}
+    if(data.startsWith("competition_view:")){await clearTelegramAdminMode(env,chatId);await sendTelegramCompetitionDetails(env,chatId,data.slice(17));return;}
+    if(data.startsWith("competition_add_question:")){const id=data.slice(25);await setTelegramAdminMode(env,chatId,"competition_question",{competitionId:id});await telegramCall(env,"sendMessage",{chat_id:chatId,text:"✍️ ابعت السؤال بالشكل: السؤال | اختيار 1 | اختيار 2 | اختيار 3 | اختيار 4 | رقم الإجابة الصحيحة (1-4)."});return;}
+    if(data.startsWith("competition_publish:")){
+      const id=data.slice(20);await ensureCompetitionTables(env);
+      const c=await env.DB.prepare("SELECT status,questions_json FROM site_competitions WHERE id=?").bind(id).first<any>();
+      if(!c){await sendTelegramCompetitions(env,chatId);return;}
+      let qs:any[]=[];try{qs=JSON.parse(c.questions_json||"[]")}catch{}
+      if(String(c.status)!=="published"&&qs.length===0){await telegramCall(env,"sendMessage",{chat_id:chatId,text:"لازم تضيف سؤال واحد على الأقل قبل النشر."});return;}
+      const status=String(c.status)==="published"?"draft":"published";
+      await env.DB.prepare("UPDATE site_competitions SET status=? WHERE id=?").bind(status,id).run();
+      await adminLog(env,chatId,"COMPETITION_STATUS",id,status);await sendTelegramCompetitionDetails(env,chatId,id);return;
+    }
+    if(data.startsWith("competition_draw:")){await drawTelegramCompetitionWinner(env,chatId,data.slice(17));return;}
     if(data==="dash_home"){await clearTelegramAdminMode(env,chatId);await sendTelegramDashboard(env,chatId);return;}
     if(data==="dash_stats"){await sendTelegramDashboard(env,chatId);return;}
     if(data==="dash_payment"){await setTelegramAdminMode(env,chatId,"payment_phone");await sendTelegramPaymentSettings(env,chatId);return;}
@@ -2375,6 +2466,54 @@ export default {
           // The community endpoint initializes only its own tables below. Avoid
           // bootstrapping every unrelated app table before loading the feed.
           await ensureSchema(env);
+        }
+        if(url.pathname==="/api/competitions" && request.method==="GET"){
+          await ensureCompetitionTables(env);
+          const u=await userFrom(request,env);
+          const rows=await env.DB.prepare("SELECT c.id,c.title,c.description,c.kind,c.subject,c.status,c.duration_seconds,c.points,c.questions_json,c.starts_at,c.ends_at,c.created_at,(SELECT COUNT(*) FROM site_competition_attempts a WHERE a.competition_id=c.id) AS participant_count,EXISTS(SELECT 1 FROM site_competition_attempts a WHERE a.competition_id=c.id AND a.user_id=?) AS attempted FROM site_competitions c WHERE c.status IN ('published','scheduled') ORDER BY CASE c.status WHEN 'published' THEN 0 ELSE 1 END,c.created_at DESC").bind(String(u?.id||"")).all<any>();
+          const competitions=(rows.results||[]).map((c:any)=>{let qs:any[]=[];try{qs=JSON.parse(c.questions_json||"[]")}catch{};return {id:c.id,title:c.title,description:c.description,kind:c.kind,subject:c.subject,status:c.status,durationSeconds:Number(c.duration_seconds||0),points:Number(c.points||0),questionCount:qs.length,participantCount:Number(c.participant_count||0),startsAt:c.starts_at?Number(c.starts_at):null,endsAt:c.ends_at?Number(c.ends_at):null,attempted:Boolean(c.attempted)}});
+          let attempts:any[]=[];if(u){const a=await env.DB.prepare("SELECT competition_id AS competitionId,score,total,points,created_at AS createdAt FROM site_competition_attempts WHERE user_id=? ORDER BY created_at DESC LIMIT 30").bind(u.id).all<any>();attempts=a.results||[];}
+          return json({ok:true,competitions,attempts});
+        }
+        if(url.pathname==="/api/competitions/start" && request.method==="POST"){
+          await ensureCompetitionTables(env);
+          const u=await userFrom(request,env);if(!u)return json({error:"سجّل الدخول للمشاركة في المسابقات."},401);
+          const b=await body(request),id=String(b?.competitionId||"");
+          const c=await env.DB.prepare("SELECT id,title,status,questions_json,ends_at,starts_at FROM site_competitions WHERE id=?").bind(id).first<any>();
+          if(!c||String(c.status)!=="published")return json({error:"المسابقة غير متاحة حاليًا."},404);
+          const now=Date.now();if(c.starts_at&&Number(c.starts_at)>now)return json({error:"المسابقة لم تبدأ بعد."},400);if(c.ends_at&&Number(c.ends_at)<now)return json({error:"انتهى موعد المسابقة."},400);
+          const old=await env.DB.prepare("SELECT id FROM site_competition_attempts WHERE competition_id=? AND user_id=?").bind(id,u.id).first<any>();if(old)return json({error:"أنت شاركت في المسابقة دي بالفعل."},409);
+          let qs:any[]=[];try{qs=JSON.parse(c.questions_json||"[]")}catch{};if(!qs.length)return json({error:"المسابقة لسه مفيهاش أسئلة."},400);
+          const existing=await env.DB.prepare("SELECT questions_json,expires_at FROM site_competition_sessions WHERE competition_id=? AND user_id=?").bind(id,u.id).first<any>();
+          if(existing&&Number(existing.expires_at)>now){try{qs=JSON.parse(existing.questions_json||"[]")}catch{qs=[];}}
+          else{
+            await env.DB.prepare("DELETE FROM site_competition_sessions WHERE competition_id=? AND user_id=?").bind(id,u.id).run();
+            for(let i=qs.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[qs[i],qs[j]]=[qs[j],qs[i]];}qs=qs.slice(0,Math.min(10,qs.length));
+            const duration=Math.max(300,Math.min(7200,Number((await env.DB.prepare("SELECT duration_seconds FROM site_competitions WHERE id=?").bind(id).first<any>())?.duration_seconds||1800)));
+            await env.DB.prepare("INSERT INTO site_competition_sessions(id,competition_id,user_id,questions_json,expires_at,created_at) VALUES(?,?,?,?,?,?)").bind(randomHex(12),id,u.id,JSON.stringify(qs),now+duration*1000,now).run();
+          }
+          return json({ok:true,questions:qs.map((q:any)=>({id:String(q.id),question:String(q.question),options:Array.isArray(q.options)?q.options.map(String):[]}))});
+        }
+        if(url.pathname==="/api/competitions/submit" && request.method==="POST"){
+          await ensureCompetitionTables(env);
+          const u=await userFrom(request,env);if(!u)return json({error:"سجّل الدخول للمشاركة في المسابقات."},401);
+          const b=await body(request),id=String(b?.competitionId||""),answers=b?.answers&&typeof b.answers==="object"?b.answers:{};
+          const c=await env.DB.prepare("SELECT id,status,questions_json,points,ends_at,starts_at FROM site_competitions WHERE id=?").bind(id).first<any>();
+          if(!c||String(c.status)!=="published")return json({error:"المسابقة غير متاحة."},404);
+          const now=Date.now();if(c.starts_at&&Number(c.starts_at)>now)return json({error:"المسابقة لم تبدأ بعد."},400);if(c.ends_at&&Number(c.ends_at)<now)return json({error:"انتهى موعد المسابقة."},400);
+          const old=await env.DB.prepare("SELECT id FROM site_competition_attempts WHERE competition_id=? AND user_id=?").bind(id,u.id).first<any>();if(old)return json({error:"تم تسليم إجاباتك بالفعل."},409);
+          const session=await env.DB.prepare("SELECT questions_json,expires_at FROM site_competition_sessions WHERE competition_id=? AND user_id=?").bind(id,u.id).first<any>();
+          if(!session||Number(session.expires_at)<=now)return json({error:"انتهى وقت المحاولة. ابدأ المسابقة من جديد."},400);
+          let qs:any[]=[];try{qs=JSON.parse(session.questions_json||"[]")}catch{};if(!qs.length)return json({error:"لا توجد أسئلة صالحة للمحاولة."},400);
+          const ids=qs.map((q:any)=>String(q.id));const submittedIds=Object.keys(answers);
+          if(submittedIds.length!==ids.length||ids.some((qid:string)=>!Object.prototype.hasOwnProperty.call(answers,qid)))return json({error:"جاوب على كل الأسئلة قبل التسليم."},400);
+          let score=0;for(const q of qs){const answer=Number(answers[q.id]);if(!Number.isInteger(answer)||answer<0||answer>=q.options.length)return json({error:"فيه اختيار غير صالح."},400);if(answer===Number(q.correctIndex))score++;}
+          const total=qs.length,points=Math.round(Number(c.points||100)*score/Math.max(1,total));
+          try{await env.DB.prepare("INSERT INTO site_competition_attempts(id,competition_id,user_id,score,total,points,answers_json,created_at) VALUES(?,?,?,?,?,?,?,?)").bind(randomHex(12),id,u.id,score,total,points,JSON.stringify(answers),now).run();}
+          catch{return json({error:"تم تسجيل مشاركتك بالفعل."},409);}
+          await env.DB.prepare("DELETE FROM site_competition_sessions WHERE competition_id=? AND user_id=?").bind(id,u.id).run();
+          await adminLog(env,u.id,"COMPETITION_SUBMIT",id,score+"/"+total);
+          return json({ok:true,score,total,points});
         }
         if(url.pathname.startsWith("/api/bridge/")){
           await ensureBridgeTools(env);
