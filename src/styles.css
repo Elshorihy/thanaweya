@@ -1219,3 +1219,39 @@ input:focus,select:focus,textarea:focus{border-color:#27c5d9;box-shadow:0 0 0 3p
  .card{padding:16px;border-radius:18px}
  .quick{padding-bottom:3px}
 }
+
+
+/* ===== Thanaweya motion system ===== */
+#thanaweya-particles{position:fixed;inset:0;z-index:1;pointer-events:none;opacity:.26}
+body:has(.focusLab) #thanaweya-particles,body:has(.focuspage) #thanaweya-particles{opacity:.10}
+.app,.newLanding,.authGate{position:relative;z-index:2}
+.motionIntro{position:fixed;inset:0;z-index:9999;display:grid;place-items:center;overflow:hidden;background:radial-gradient(ellipse at 50% 45%,rgba(12,63,82,.68),transparent 42%),#04101b;color:#eefaff;animation:motionIntroOut .65s cubic-bezier(.2,.75,.2,1) 1.65s forwards}
+.motionIntro:before,.motionIntro:after{content:"";position:absolute;width:min(78vw,620px);height:min(78vw,620px);border:1px solid rgba(78,217,228,.17);border-radius:50%;animation:motionIntroOrbit 5s linear infinite}
+.motionIntro:after{width:min(58vw,450px);height:min(58vw,450px);border-color:rgba(89,190,220,.12);animation-duration:8s;animation-direction:reverse}
+.motionIntroGlow{position:absolute;width:min(75vw,520px);height:min(75vw,520px);border-radius:50%;background:radial-gradient(circle,rgba(27,183,205,.16),transparent 68%);filter:blur(12px);animation:motionIntroPulse 2.2s ease-in-out infinite alternate}
+.motionIntroContent{position:relative;z-index:1;text-align:center;display:grid;justify-items:center;animation:motionIntroRise .8s cubic-bezier(.2,.75,.2,1) both}
+.motionIntroLogo{width:84px;height:84px;display:grid;place-items:center;border-radius:27px;color:#05202a;background:linear-gradient(145deg,#c1fff0,#2ac7d6);box-shadow:0 0 70px rgba(39,197,217,.24);animation:motionIntroLogo .85s cubic-bezier(.2,.8,.2,1) both}
+.motionIntroEyebrow{font-size:10px;font-weight:800;letter-spacing:.24em;color:#70dedf;margin-top:27px}
+.motionIntroContent h1{font-size:clamp(42px,8vw,70px);letter-spacing:-2px;margin:8px 0 0;font-weight:950}
+.motionIntroContent p{margin:8px 0 0;color:#a3c0ce;font-size:14px}
+.motionIntroLine{height:2px;width:150px;margin-top:26px;background:rgba(111,200,218,.15);overflow:hidden;border-radius:10px}
+.motionIntroLine i{display:block;width:35%;height:100%;background:linear-gradient(90deg,#24bcd4,#8df4dd);box-shadow:0 0 16px #35d2dc;animation:motionIntroProgress 1.45s ease-in-out both}
+.motionIntroSkip{position:absolute;z-index:2;bottom:max(22px,env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:7px;padding:10px 15px;border-radius:999px;border:1px solid rgba(126,207,223,.23);background:rgba(4,23,36,.72);color:#c5e0e8;font:inherit;font-size:12px;cursor:pointer}
+.motionIntroSkip:hover{border-color:rgba(73,219,224,.55);background:rgba(11,48,61,.9)}
+@keyframes motionIntroRise{from{opacity:0;transform:translateY(18px) scale(.97)}to{opacity:1;transform:translateY(0) scale(1)}}
+@keyframes motionIntroLogo{from{opacity:0;transform:scale(.75) rotate(-8deg)}to{opacity:1;transform:scale(1) rotate(0)}}
+@keyframes motionIntroOrbit{to{transform:rotate(360deg)}}
+@keyframes motionIntroPulse{from{transform:scale(.88);opacity:.55}to{transform:scale(1.08);opacity:1}}
+@keyframes motionIntroProgress{from{transform:translateX(320%)}to{transform:translateX(-20%)}}
+@keyframes motionIntroOut{to{opacity:0;visibility:hidden;pointer-events:none}}
+@media(hover:hover) and (prefers-reduced-motion:no-preference){
+ .app button,.newLanding button,.app .card,.app .stat,.app .daycard{transition:transform .22s cubic-bezier(.2,.75,.2,1),border-color .22s,box-shadow .22s,background-color .22s}
+ .app button:active,.newLanding button:active{transform:scale(.975)}
+ .app .card:hover,.app .stat:hover,.app .daycard:hover{border-color:rgba(68,210,224,.3)}
+}
+@media(prefers-reduced-motion:reduce){
+ #thanaweya-particles{display:none!important}
+ .motionIntro{animation:none!important;background:#06111c;display:none!important}
+ .motionIntro:before,.motionIntro:after,.motionIntroGlow,.motionIntroContent,.motionIntroLogo,.motionIntroLine i{animation:none!important}
+ .app button,.newLanding button,.app .card,.app .stat,.app .daycard{transition:none!important;scroll-behavior:auto!important}
+}
