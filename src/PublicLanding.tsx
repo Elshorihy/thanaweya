@@ -1,5 +1,5 @@
 import React from 'react';
-import {ArrowLeft,ArrowUpLeft,BookOpen,CalendarDays,CheckCircle2,Clock3,GraduationCap,HeartHandshake,LockKeyhole,MessageCircleHeart,Target,Users,Brain,ChartNoAxesCombined,Play,Timer,Flame,Sparkles,ArrowDownLeft} from 'lucide-react';
+import {ArrowLeft,ArrowUpLeft,BookOpen,CalendarDays,CheckCircle2,Clock3,GraduationCap,HeartHandshake,LockKeyhole,MessageCircleHeart,Target,Users,Brain,ChartNoAxesCombined,Timer,Sparkles,ArrowDownLeft} from 'lucide-react';
 
 type Props={onLogin:()=>void;onRegister:()=>void;onRequireAuth:()=>void};
 export default function PublicLanding({onLogin,onRegister,onRequireAuth}:Props){
@@ -55,7 +55,7 @@ export default function PublicLanding({onLogin,onRegister,onRequireAuth}:Props){
     </div>
     <div className="nl-scene" aria-label="تصميم بصري لمساحة مذاكرة مستقبلية">
      <div className="nl-art"><div className="nl-orbit one"/><div className="nl-orbit two"/><div className="nl-orbit three"/><div className="nl-core"><div className="nl-core-inner"><div className="nl-cap"><GraduationCap size={43}/></div><strong>ثانوية</strong><small>خطوة بخطوة، توصل</small></div></div>
-      <div className="nl-float progress"><ChartNoAxesCombined size={22}/><div><b>تقدمك واضح</b><small>تابع اللي أنجزته</small></div></div>
+      <div className="nl-float nl-float-progress"><ChartNoAxesCombined size={22}/><div><b>تقدمك واضح</b><small>تابع اللي أنجزته</small></div></div>
       <div className="nl-float focus"><Timer size={22}/><div><b>جلسة تركيز</b><small>وقتك في إيدك</small></div></div>
       <div className="nl-float tasks"><CheckCircle2 size={22}/><div><b>مهمة ورا مهمة</b><small>إنجازات صغيرة، فرق كبير</small></div></div>
      </div>
