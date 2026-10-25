@@ -833,7 +833,7 @@ async function exportData(){try{const files:any[]=[];for(const v of [...s.lectur
  const coreNavKeys=['home','curriculum','schedule','plan','settings'];
  const orderedAllNav=Array.from(new Set(s.settings.navOrder||[])).map(k=>visibleNavItems.find(x=>x[0]===k)).filter(Boolean) as Array<[string,string,LucideIcon]>;
  visibleNavItems.forEach(x=>{if(!orderedAllNav.some(y=>y[0]===x[0]))orderedAllNav.push(x)});
- const nav=[...coreNavKeys.map(k=>visibleNavItems.find(x=>x[0]===k)).filter(Boolean),...(Array.isArray(s.settings.pinnedNav)?s.settings.pinnedNav:[]).filter(k=>!coreNavKeys.includes(k)).map(k=>orderedAllNav.find(x=>x[0]===k)).filter(Boolean)] as Array<[string,string,LucideIcon]>;
+ const nav=[...coreNavKeys.map(k=>visibleNavItems.find(x=>x[0]===k)).filter(Boolean),...(Array.isArray(s.settings.pinnedNav)?s.settings.pinnedNav:[]).filter(k=>!coreNavKeys.includes(k)&&k!=='games').map(k=>orderedAllNav.find(x=>x[0]===k)).filter(Boolean),...(!s.settings.pinnedNav?.includes('games')?[orderedAllNav.find(x=>x[0]==='games')].filter(Boolean):orderedAllNav.filter(x=>x[0]==='games'))] as Array<[string,string,LucideIcon]>;
  const isPinnedNav=(key:string)=>Array.isArray(s.settings.pinnedNav)&&s.settings.pinnedNav.includes(key);
  const togglePinnedNav=(key:string)=>{const current=Array.isArray(s.settings.pinnedNav)?s.settings.pinnedNav:[];const removing=current.includes(key);const next=removing?current.filter(x=>x!==key):[...current,key];update({settings:{...s.settings,pinnedNav:next}});notify(removing?'تم إلغاء تثبيت الأداة':'تم تثبيت الأداة في القائمة السفلية والجانبية')};
  const go=(p:string)=>setPage(p);
