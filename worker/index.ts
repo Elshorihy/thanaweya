@@ -262,6 +262,13 @@ async function hasActiveSubscription(env:Env,userId:string){
   return s.status==="active";
 }
 
+async function hasAIAccess(env:Env,userId:string,role?:string){
+  if(String(role||"")==="owner") return true;
+  const user=await env.DB.prepare("SELECT verified FROM users WHERE id=?").bind(userId).first<any>();
+  if(Number(user?.verified||0)===1) return true;
+  return hasActiveSubscription(env,userId);
+}
+
 function verificationKeyboard(id:string){
   return {inline_keyboard:[
     [{text:"✅ قبول",callback_data:"verification_approve:"+id},{text:"❌ رفض",callback_data:"verification_reject:"+id}]
@@ -2429,7 +2436,7 @@ export default {
         }
         if(url.pathname==="/api/ai/usage" && request.method==="GET") {
           const u=await userFrom(request,env); if(!u)return json({error:"يجب تسجيل الدخول"},401);
-          if(String(u.role||"")!=="owner" && !(await hasActiveSubscription(env,u.id)))return json({error:"ثانوية AI متاحة للاشتراكات المفعّلة فقط."},403);
+          if(!(await hasAIAccess(env,u.id,u.role)))return json({error:"ثانوية AI متاحة للحسابات الموثقة أو ذات الاشتراك المفعّل فقط."},403);
           const day=egyptDay(),limit=40;
           const row=await env.DB.prepare("SELECT count FROM ai_usage WHERE user_id=? AND day=?").bind(u.id,day).first<any>();
           const used=Math.min(Number(row?.count||0),limit);
@@ -2437,13 +2444,13 @@ export default {
         }
         if(url.pathname==="/api/ai/chats" && request.method==="GET") {
           const u=await userFrom(request,env); if(!u)return json({error:"يجب تسجيل الدخول"},401);
-          if(String(u.role||"")!=="owner" && !(await hasActiveSubscription(env,u.id)))return json({error:"ثانوية AI متاحة للاشتراكات المفعّلة فقط."},403);
+          if(!(await hasAIAccess(env,u.id,u.role)))return json({error:"ثانوية AI متاحة للحسابات الموثقة أو ذات الاشتراك المفعّل فقط."},403);
           const rows=await env.DB.prepare("SELECT id,title,created_at,updated_at FROM ai_chats WHERE user_id=? ORDER BY updated_at DESC").bind(u.id).all<any>();
           return json({ok:true,chats:rows.results||[]});
         }
         if(url.pathname.startsWith("/api/ai/chats/") && request.method==="GET") {
           const u=await userFrom(request,env); if(!u)return json({error:"يجب تسجيل الدخول"},401);
-          if(String(u.role||"")!=="owner" && !(await hasActiveSubscription(env,u.id)))return json({error:"ثانوية AI متاحة للاشتراكات المفعّلة فقط."},403);
+          if(!(await hasAIAccess(env,u.id,u.role)))return json({error:"ثانوية AI متاحة للحسابات الموثقة أو ذات الاشتراك المفعّل فقط."},403);
           const chatId=decodeURIComponent(url.pathname.slice("/api/ai/chats/".length)).trim();
           const chat=await env.DB.prepare("SELECT id,title,created_at,updated_at FROM ai_chats WHERE id=? AND user_id=?").bind(chatId,u.id).first<any>();
           if(!chat)return json({error:"المحادثة غير موجودة"},404);
@@ -2461,7 +2468,7 @@ export default {
         }
         if(url.pathname==="/api/ai/advice" && request.method==="POST") {
           const u=await userFrom(request,env); if(!u)return json({error:"يجب تسجيل الدخول"},401);
-          if(String(u.role||"")!=="owner" && !(await hasActiveSubscription(env,u.id)))return json({error:"ثانوية AI متاحة بالتوثيق فقط."},403);
+          if(!(await hasAIAccess(env,u.id,u.role)))return json({error:"ثانوية AI متاحة للحسابات الموثقة أو ذات الاشتراك المفعّل فقط."},403);
           const b=await body(request),question=String(b?.question||"").trim().slice(0,4000);
           if(!question)return json({error:"اكتب سؤالك أولًا."},400);
           const day=egyptDay(),limit=40;
