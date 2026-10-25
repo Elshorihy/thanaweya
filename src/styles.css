@@ -1255,3 +1255,14 @@ body:has(.focusLab) #thanaweya-particles,body:has(.focuspage) #thanaweya-particl
  .motionIntro:before,.motionIntro:after,.motionIntroGlow,.motionIntroContent,.motionIntroLogo,.motionIntroLine i{animation:none!important}
  .app button,.newLanding button,.app .card,.app .stat,.app .daycard{transition:none!important;scroll-behavior:auto!important}
 }
+
+/* Page entrances and earned achievement moment */
+@keyframes motionPageEnter{from{opacity:0;transform:translateY(9px)}to{opacity:1;transform:translateY(0)}}
+.appMain>section{animation:motionPageEnter .32s cubic-bezier(.2,.75,.2,1) both}
+.motionCelebration{position:fixed;z-index:9990;top:18px;left:50%;transform:translateX(-50%);width:min(340px,calc(100vw - 28px));padding:17px 20px;border-radius:18px;border:1px solid rgba(89,226,212,.35);background:linear-gradient(135deg,rgba(7,51,61,.97),rgba(5,23,39,.97));box-shadow:0 18px 60px rgba(0,0,0,.32),0 0 32px rgba(39,197,217,.12);text-align:center;color:#edfffc;animation:motionCelebrateIn .32s cubic-bezier(.2,.8,.2,1) both;overflow:hidden}
+.motionCelebration strong,.motionCelebration span{position:relative;z-index:1;display:block}
+.motionCelebration strong{font-size:16px}.motionCelebration span{font-size:12px;color:#a4d9d9;margin-top:5px}
+.motionCelebrationBurst{position:absolute;inset:-35px;background:radial-gradient(circle at 22% 32%,rgba(70,228,218,.23) 0 2px,transparent 3px),radial-gradient(circle at 75% 25%,rgba(255,205,119,.35) 0 2px,transparent 3px),radial-gradient(circle at 85% 75%,rgba(70,228,218,.24) 0 2px,transparent 3px),radial-gradient(circle at 15% 80%,rgba(255,205,119,.22) 0 2px,transparent 3px);animation:motionCelebrateBurst 1.4s ease-out both}
+@keyframes motionCelebrateIn{from{opacity:0;transform:translate(-50%,-12px) scale(.94)}to{opacity:1;transform:translate(-50%,0) scale(1)}}
+@keyframes motionCelebrateBurst{from{transform:scale(.65);opacity:.25}to{transform:scale(1.15);opacity:1}}
+@media(prefers-reduced-motion:reduce){.appMain>section,.motionCelebration,.motionCelebrationBurst{animation:none!important;transform:none!important;transition:none!important}}
