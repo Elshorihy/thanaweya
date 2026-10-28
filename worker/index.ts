@@ -14,6 +14,7 @@ interface Env {
   VAPID_PRIVATE_KEY?: string;
   VAPID_SUBJECT?: string;
   GEMINI_API_KEY?: string;
+  GEMINI_ADMIN_API_KEY?: string;
   GEMINI_MODEL?: string;
 }
 
@@ -163,8 +164,8 @@ async function createSession(userId:string,env:Env) {
 function egyptDay(){const p=new Intl.DateTimeFormat("en",{timeZone:"Africa/Cairo",year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(new Date());const v=Object.fromEntries(p.filter(x=>x.type!=="literal").map(x=>[x.type,x.value]));return `${v.year}-${v.month}-${v.day}`;}
 async function body(request:Request){try{return await request.json() as any}catch{return null}}
 
-async function callGemini(env:Env, contents:any[], systemInstruction:string, generationConfigExtra:any={}) {
-  const apiKey=String(env.GEMINI_API_KEY||"").trim();
+async function callGemini(env:Env, contents:any[], systemInstruction:string, generationConfigExtra:any={}, apiKeyOverride?:string) {
+  const apiKey=String(apiKeyOverride ?? env.GEMINI_API_KEY ?? "").trim();
   if(!apiKey) throw new Error("NO_AI");
   const configured=String(env.GEMINI_MODEL||"").trim();
   const models=[...new Set([configured,"gemini-3.5-flash-lite","gemini-flash-lite-latest"].filter(Boolean))].slice(0,2);
@@ -955,11 +956,13 @@ async function answerTelegramAdminAssistant(env:Env,chatId:string,query:string){
     const recent=(activity.results||[]).map((x:any)=>({action:String(x.action||""),target:String(x.target||""),details:String(x.message||"").slice(0,180),at:adminFormatDate(x.created_at)}));
     const context={platform:"ثانوية",users:users?.n??"غير متاح",visibleCommunityPosts:posts?.n??"غير متاح",pendingVerifications:pending?.n??"غير متاح",recentAdminActivity:recent};
     const system="أنت المساعد الإداري الذكي لمنصة ثانوية، منصة مذاكرة لطلاب الثانوية في مصر. تتحدث بالعربية المصرية الواضحة وباختصار مفيد. أجب بذكاء عن أسئلة المالك واقترح خطوات عملية اعتمادًا على بيانات السياق فقط. بيانات السياق قد تكون ناقصة؛ صرّح بذلك ولا تخترع أرقامًا أو معلومات. أنت مساعد داخل بوت الإدارة ولا تملك صلاحية تنفيذ أي إجراء لم يتم تنفيذه عبر أدوات صريحة. لا تدّعِ أنك حذفت أو نشرت أو غيّرت إعدادًا. إذا طلب المستخدم تنفيذ عملية غير مدعومة، وضح ذلك واقترح القسم المناسب. لا تكشف الأسرار أو مفاتيح API أو بيانات حساسة للمستخدمين. سياق المنصة الحالي (JSON): "+JSON.stringify(context);
-    const answer=await callGemini(env,[{role:"user",parts:[{text:query}]}],system,{maxOutputTokens:900,temperature:0.55});
+    const adminApiKey=String(env.GEMINI_ADMIN_API_KEY||"").trim();
+    if(!adminApiKey) throw new Error("NO_ADMIN_AI");
+    const answer=await callGemini(env,[{role:"user",parts:[{text:query}]}],system,{maxOutputTokens:900,temperature:0.55},adminApiKey);
     await telegramCall(env,"sendMessage",{chat_id:chatId,text:"🧠 "+answer.slice(0,3900),reply_markup:{inline_keyboard:[[{text:"📊 ملخص المنصة",callback_data:"admin_assistant_summary"}],[{text:"🧹 مدير المجتمع",callback_data:"dash_community_manager"}],[{text:"↩️ التراجع",callback_data:"dash_undo_last"}],[{text:"🎛️ لوحة التحكم",callback_data:"dash_home"}]]}});
   }catch(e){
     const reason=String(e instanceof Error?e.message:e);
-    const message=reason==="NO_AI"?"⚠️ المساعد الذكي محتاج إعداد GEMINI_API_KEY في أسرار Cloudflare. مفيش رد بديل مزيف؛ باقي أدوات الإدارة ما زالت متاحة.":"⚠️ تعذر الوصول للذكاء الاصطناعي حاليًا. جرّب تاني بعد قليل.\n\nالتفاصيل: "+reason.replace(/^AI_UNAVAILABLE:/,"").slice(0,220);
+    const message=reason==="NO_ADMIN_AI"?"⚠️ المساعد الإداري محتاج مفتاح Gemini منفصل باسم GEMINI_ADMIN_API_KEY في أسرار Cloudflare. مفتاح ثانوية AI بالموقع يظل مستقلًا، وباقي أدوات الإدارة ما زالت متاحة.":reason==="NO_AI"?"⚠️ المساعد الذكي محتاج إعداد GEMINI_API_KEY في أسرار Cloudflare. مفيش رد بديل مزيف؛ باقي أدوات الإدارة ما زالت متاحة.":"⚠️ تعذر الوصول للذكاء الاصطناعي حاليًا. جرّب تاني بعد قليل.\n\nالتفاصيل: "+reason.replace(/^AI_UNAVAILABLE:/,"").slice(0,220);
     await telegramCall(env,"sendMessage",{chat_id:chatId,text:message,reply_markup:{inline_keyboard:[[{text:"🔄 جرّب تاني",callback_data:"dash_admin_assistant"}],[{text:"🎛️ لوحة التحكم",callback_data:"dash_home"}]]}});
   }
 }
