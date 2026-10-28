@@ -167,34 +167,41 @@ async function callGemini(env:Env, contents:any[], systemInstruction:string, gen
   const apiKey=String(env.GEMINI_API_KEY||"").trim();
   if(!apiKey) throw new Error("NO_AI");
   const configured=String(env.GEMINI_MODEL||"").trim();
-  const models=[...new Set([configured,"gemini-2.5-flash-lite","gemini-2.0-flash"].filter(Boolean))].slice(0,2);
+  const models=[...new Set([configured,"gemini-3.5-flash-lite","gemini-flash-lite-latest"].filter(Boolean))].slice(0,2);
+  const input=contents.map((item:any)=>({
+    role:item?.role==="model"?"assistant":"user",
+    content:(item?.parts||[]).map((part:any)=>String(part?.text||"")).filter(Boolean).join("\n")
+  })).filter((item:any)=>item.content);
+  if(!input.length) throw new Error("AI_UNAVAILABLE:EMPTY_INPUT");
   let lastError="";
   for(const model of models){
-    const endpoint="https://generativelanguage.googleapis.com/v1beta/models/"+encodeURIComponent(model)+":generateContent";
     const controller=new AbortController();
-    const timeout=setTimeout(()=>controller.abort(),9000);
+    const timeout=setTimeout(()=>controller.abort(),15000);
     try{
-      const response=await fetch(endpoint,{
+      const response=await fetch("https://generativelanguage.googleapis.com/v1beta/interactions",{
         method:"POST",
         headers:{"content-type":"application/json","x-goog-api-key":apiKey},
         body:JSON.stringify({
-          systemInstruction:{parts:[{text:systemInstruction}]},
-          contents,
-          generationConfig:{maxOutputTokens:1200,temperature:0.45,...(generationConfigExtra||{})}
+          model,
+          input,
+          system_instruction:systemInstruction,
+          store:false,
+          generation_config:{max_output_tokens:1200,temperature:0.45,...(generationConfigExtra||{})}
         }),
         signal:controller.signal
       });
       const raw=await response.text();
       let data:any=null; try{data=JSON.parse(raw)}catch{}
       if(response.ok){
-        const answer=(data?.candidates||[]).flatMap((x:any)=>x?.content?.parts||[]).map((x:any)=>String(x?.text||"")).filter(Boolean).join("\n").trim();
+        const answer=String(data?.output_text||"").trim() ||
+          (Array.isArray(data?.outputs)?data.outputs.filter((x:any)=>x?.type==="text"||x?.type==="message").map((x:any)=>String(x?.text||x?.content||"")).join("\n").trim():"") ||
+          (Array.isArray(data?.steps)?data.steps.filter((x:any)=>x?.type==="model_output").flatMap((x:any)=>x?.content||[]).map((x:any)=>String(x?.text||"")).filter(Boolean).join("\n").trim():"");
         if(answer)return answer;
         lastError="EMPTY";
         continue;
       }
       lastError=String(data?.error?.message||response.status);
-      if(response.status===404)continue;
-      if(response.status===429||response.status===500||response.status===502||response.status===503)continue;
+      if(response.status===404||response.status===400||response.status===429||response.status===500||response.status===502||response.status===503)continue;
       break;
     }catch(e){lastError=e instanceof Error?(e.name==="AbortError"?"TIMEOUT":e.message):"NETWORK";continue}
     finally{clearTimeout(timeout)}
