@@ -909,16 +909,16 @@ async function sendTelegramCommunityManager(env:Env,chatId:string){
 async function answerTelegramAdminAssistant(env:Env,chatId:string,query:string){
   const q=query.trim().toLowerCase();
   // Natural-language action: draft an official community post, then require explicit confirmation.
-  const postMatch=query.match(/^(?:من فضلك\\s*)?(?:انشر|نشر|اعمل|اكتب)\\s+(?:منشور(?:ا| رسمي)?|بوست)(?:\\s+بعنوان)?\\s*[:：]?\\s*(.+?)\\s*(?:\\||؛|\\n)\\s*(?:المحتوى\\s*[:：]?\\s*)?([\\s\\S]+)$/i);
+  const postMatch=query.match(/^(?:من فضلك\s*)?(?:انشر|نشر|اعمل|اكتب)\s+(?:منشور(?:ا| رسمي)?|بوست)(?:\s+بعنوان)?\s*[:：]?\s*(.+?)\s*(?:\||؛|\n)\s*(?:المحتوى\s*[:：]?\s*)?([\s\S]+)$/i);
   if(postMatch){
-    const title=String(postMatch[1]||"").replace(/^العنوان\\s*[:：]?\\s*/i,"").trim().slice(0,120);
-    const body=String(postMatch[2]||"").replace(/^المحتوى\\s*[:：]?\\s*/i,"").trim().slice(0,4000);
+    const title=String(postMatch[1]||"").replace(/^العنوان\s*[:：]?\s*/i,"").trim().slice(0,120);
+    const body=String(postMatch[2]||"").replace(/^المحتوى\s*[:：]?\s*/i,"").trim().slice(0,4000);
     if(title.length<2||body.length<3){
-      await telegramCall(env,"sendMessage",{chat_id:chatId,text:"اكتب الطلب بالشكل ده:\\n\\nانشر منشور: عنوان المنشور | محتوى المنشور\\n\\nمش هيتنشر أي شيء قبل ما تضغط تأكيد."});
+      await telegramCall(env,"sendMessage",{chat_id:chatId,text:"اكتب الطلب بالشكل ده:\n\nانشر منشور: عنوان المنشور | محتوى المنشور\n\nمش هيتنشر أي شيء قبل ما تضغط تأكيد."});
       return;
     }
     await setTelegramAdminMode(env,chatId,"assistant_post_confirm",{title,content:body});
-    await telegramCall(env,"sendMessage",{chat_id:chatId,text:"📝 معاينة منشور إدارة ثانوية\\n\\n📌 العنوان: "+title+"\\n\\n"+body+"\\n\\n⚠️ المنشور هيظهر رسميًا داخل مجتمع الموقع. أكّد النشر؟",reply_markup:{inline_keyboard:[
+    await telegramCall(env,"sendMessage",{chat_id:chatId,text:"📝 معاينة منشور إدارة ثانوية\n\n📌 العنوان: "+title+"\n\n"+body+"\n\n⚠️ المنشور هيظهر رسميًا داخل مجتمع الموقع. أكّد النشر؟",reply_markup:{inline_keyboard:[
       [{text:"✅ تأكيد النشر",callback_data:"assistant_post_confirm"}],
       [{text:"❌ إلغاء",callback_data:"dash_cancel"}]
     ]}});
