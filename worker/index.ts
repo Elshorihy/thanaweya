@@ -175,6 +175,17 @@ async function callGemini(env:Env, contents:any[], systemInstruction:string, gen
     return message?role+": "+message:"";
   }).filter(Boolean).join("\n\n");
   const input="تعليمات النظام:\n"+systemInstruction+"\n\nالمحادثة:\n"+conversation;
+  const extra=generationConfigExtra||{};
+  const generationConfig:any={
+    max_output_tokens:Number(extra.max_output_tokens ?? extra.maxOutputTokens ?? 1200)
+  };
+  if(extra.responseMimeType||extra.responseSchema){
+    generationConfig.response_format={
+      type:"text",
+      mime_type:String(extra.responseMimeType||"application/json"),
+      ...(extra.responseSchema?{schema:extra.responseSchema}:{})
+    };
+  }
   let lastError="";
   for(const model of models){
     const controller=new AbortController();
@@ -187,7 +198,7 @@ async function callGemini(env:Env, contents:any[], systemInstruction:string, gen
           model,
           input,
           store:false,
-          generation_config:{max_output_tokens:1200,...(generationConfigExtra||{})}
+          generation_config:generationConfig
         }),
         signal:controller.signal
       });
