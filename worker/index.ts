@@ -194,7 +194,7 @@ async function callGemini(env:Env, contents:any[], systemInstruction:string, gen
     try{
       const payload:any={model,input,store:false,generation_config:generationConfig};
       if(responseFormat)payload.response_format=responseFormat;
-      const response=await fetch("https://generativelanguage.googleapis.com/v1/interactions",{
+      const response=await fetch("https://generativelanguage.googleapis.com/v1beta/interactions",{
         method:"POST",
         headers:{"content-type":"application/json","x-goog-api-key":apiKey},
         body:JSON.stringify(payload),
@@ -2494,7 +2494,8 @@ export default {
       try {
         if(request.method==="OPTIONS") return new Response(null,{status:204,headers:{"access-control-allow-origin":"*","access-control-allow-methods":"GET,POST,PUT,DELETE,OPTIONS","access-control-allow-headers":"content-type, accept","cache-control":"no-store"}});
         if(url.pathname!=="/api/pageview" && url.pathname!=="/api/telegram/webhook" && url.pathname!=="/api/health" && !url.pathname.startsWith("/api/auth/")){
-          const maintenance=await getAdminSetting(env,"maintenance","0");
+          const maintenanceRead=env.DB.prepare("SELECT value FROM admin_settings WHERE key=?").bind("maintenance").first<any>().then((row:any)=>String(row?.value||"0")).catch(()=>"0");
+          const maintenance=await Promise.race([maintenanceRead,new Promise<string>(resolve=>setTimeout(()=>resolve("0"),1500))]);
           const token=cookieValue(request);
           let ownerBypass=false;
           if(token){
