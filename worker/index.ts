@@ -908,6 +908,22 @@ async function sendTelegramCommunityManager(env:Env,chatId:string){
 }
 async function answerTelegramAdminAssistant(env:Env,chatId:string,query:string){
   const q=query.trim().toLowerCase();
+  // Natural-language action: draft an official community post, then require explicit confirmation.
+  const postMatch=query.match(/^(?:من فضلك\\s*)?(?:انشر|نشر|اعمل|اكتب)\\s+(?:منشور(?:ا| رسمي)?|بوست)(?:\\s+بعنوان)?\\s*[:：]?\\s*(.+?)\\s*(?:\\||؛|\\n)\\s*(?:المحتوى\\s*[:：]?\\s*)?([\\s\\S]+)$/i);
+  if(postMatch){
+    const title=String(postMatch[1]||"").replace(/^العنوان\\s*[:：]?\\s*/i,"").trim().slice(0,120);
+    const body=String(postMatch[2]||"").replace(/^المحتوى\\s*[:：]?\\s*/i,"").trim().slice(0,4000);
+    if(title.length<2||body.length<3){
+      await telegramCall(env,"sendMessage",{chat_id:chatId,text:"اكتب الطلب بالشكل ده:\\n\\nانشر منشور: عنوان المنشور | محتوى المنشور\\n\\nمش هيتنشر أي شيء قبل ما تضغط تأكيد."});
+      return;
+    }
+    await setTelegramAdminMode(env,chatId,"assistant_post_confirm",{title,content:body});
+    await telegramCall(env,"sendMessage",{chat_id:chatId,text:"📝 معاينة منشور إدارة ثانوية\\n\\n📌 العنوان: "+title+"\\n\\n"+body+"\\n\\n⚠️ المنشور هيظهر رسميًا داخل مجتمع الموقع. أكّد النشر؟",reply_markup:{inline_keyboard:[
+      [{text:"✅ تأكيد النشر",callback_data:"assistant_post_confirm"}],
+      [{text:"❌ إلغاء",callback_data:"dash_cancel"}]
+    ]}});
+    return;
+  }
   if(/^(إلغاء|الغاء|خروج|وقف|cancel|exit)$/.test(q)){await clearTelegramAdminMode(env,chatId);await telegramCall(env,"sendMessage",{chat_id:chatId,text:"تم إغلاق المساعد الإداري.",reply_markup:telegramDashboardKeyboard()});return;}
   if(/(تراجع|ارجع|إلغاء آخر|الغاء اخر|undo)/i.test(q)){await undoLastAdminOperation(env,chatId);return;}
   if(/(مجتمع|منشور|بوست|تعليقات|إدارة المحتوى|ادارة المحتوى)/i.test(q)){await sendTelegramCommunityManager(env,chatId);return;}
@@ -2109,6 +2125,15 @@ async function handleTelegramUpdate(env:Env,update:any){
     if(data==="dash_community_posts"){await clearTelegramAdminMode(env,chatId);await sendTelegramCommunityPosts(env,chatId);return;}
     if(data==="dash_community_manager"){await clearTelegramAdminMode(env,chatId);await sendTelegramCommunityManager(env,chatId);return;}
     if(data==="dash_undo_last"){await clearTelegramAdminMode(env,chatId);await undoLastAdminOperation(env,chatId);return;}
+    if(data==="assistant_post_confirm"){
+      const pending=await getTelegramAdminState(env,chatId);
+      if(pending.mode!=="assistant_post_confirm"||!pending.payload?.title||!pending.payload?.content){
+        await telegramCall(env,"sendMessage",{chat_id:chatId,text:"⚠️ انتهت معاينة المنشور أو لم تعد موجودة. افتح المساعد وابدأ من جديد."});
+        return;
+      }
+      await publishTelegramCommunityPost(env,chatId,pending.payload);
+      return;
+    }
     if(data==="dash_admin_assistant"){await setTelegramAdminMode(env,chatId,"admin_assistant",{});await telegramCall(env,"sendMessage",{chat_id:chatId,text:"🤖 المساعد الإداري الذكي لثانوية\n\nاكتب سؤالك أو اطلب تحليلًا أو اقتراحًا بالعربي، وسيجيبك الذكاء الاصطناعي اعتمادًا على سياق المنصة. يقدر كمان يفتح لك أدوات الإدارة المدعومة.\n\nأمثلة: «إزاي أزود تفاعل الطلاب؟» أو «حلل آخر مشاكل المنصة» أو «ملخص المنصة».\n\nللخروج اكتب «إلغاء». ",reply_markup:{inline_keyboard:[[{text:"📊 ملخص المنصة",callback_data:"admin_assistant_summary"}],[{text:"🧹 مدير المجتمع",callback_data:"dash_community_manager"}],[{text:"↩️ التراجع",callback_data:"dash_undo_last"}],[{text:"❌ إغلاق",callback_data:"dash_cancel"}]]}});return;}
     if(data==="admin_assistant_summary"){await clearTelegramAdminMode(env,chatId);await answerTelegramAdminAssistant(env,chatId,"ملخص المنصة");return;}
     if(data.startsWith("community_post_delete:")){const id=data.slice("community_post_delete:".length);const post=await env.DB.prepare("SELECT id,title,deleted_at FROM community_posts WHERE id=?").bind(id).first<any>();if(!post){await telegramCall(env,"sendMessage",{chat_id:chatId,text:"المنشور غير موجود."});return;}if(post.deleted_at){await telegramCall(env,"sendMessage",{chat_id:chatId,text:"المنشور مخفي بالفعل."});return;}await env.DB.prepare("UPDATE community_posts SET deleted_at=? WHERE id=?").bind(Date.now(),id).run();await recordAdminUndo(env,chatId,"RESTORE_COMMUNITY_POST",id,{title:post.title});await adminLog(env,chatId,"HIDE_COMMUNITY_POST",id,String(post.title||""));await sendTelegramCommunityManager(env,chatId);return;}
