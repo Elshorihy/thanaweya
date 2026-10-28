@@ -179,27 +179,24 @@ async function callGemini(env:Env, contents:any[], systemInstruction:string, gen
   const generationConfig:any={
     max_output_tokens:Number(extra.max_output_tokens ?? extra.maxOutputTokens ?? 1200)
   };
-  if(extra.responseMimeType||extra.responseSchema){
-    generationConfig.response_format={
-      type:"text",
-      mime_type:String(extra.responseMimeType||"application/json"),
-      ...(extra.responseSchema?{schema:extra.responseSchema}:{})
-    };
-  }
+  if(Number.isFinite(Number(extra.temperature)))generationConfig.temperature=Number(extra.temperature);
+  if(Number.isFinite(Number(extra.topP)))generationConfig.top_p=Number(extra.topP);
+  const responseFormat=(extra.responseMimeType||extra.responseSchema)?{
+    type:"text",
+    mime_type:String(extra.responseMimeType||"application/json"),
+    ...(extra.responseSchema?{schema:extra.responseSchema}:{})
+  }:undefined;
   let lastError="";
   for(const model of models){
     const controller=new AbortController();
     const timeout=setTimeout(()=>controller.abort(),15000);
     try{
+      const payload:any={model,input,store:false,generation_config:generationConfig};
+      if(responseFormat)payload.response_format=responseFormat;
       const response=await fetch("https://generativelanguage.googleapis.com/v1beta/interactions",{
         method:"POST",
         headers:{"content-type":"application/json","x-goog-api-key":apiKey},
-        body:JSON.stringify({
-          model,
-          input,
-          store:false,
-          generation_config:generationConfig
-        }),
+        body:JSON.stringify(payload),
         signal:controller.signal
       });
       const raw=await response.text();
@@ -2791,24 +2788,24 @@ export default {
             "بيانات الطالب الحالية:\n"+JSON.stringify(safeData)
           ].join("\n");
 
-          const itemSchema={type:"OBJECT",properties:{
-            id:{type:"STRING"},name:{type:"STRING"},title:{type:"STRING"},subjectId:{type:"STRING"},unitId:{type:"STRING"},lessonId:{type:"STRING"},
-            question:{type:"STRING"},answer:{type:"STRING"},correctAnswer:{type:"STRING"},reason:{type:"STRING"},notes:{type:"STRING"},content:{type:"STRING"},
-            date:{type:"STRING"},duration:{type:"INTEGER"},estimatedMinutes:{type:"INTEGER"},status:{type:"STRING"},priority:{type:"STRING"},startTime:{type:"STRING"},
-            dayOfWeek:{type:"INTEGER"},endTime:{type:"STRING"},type:{type:"STRING"},difficulty:{type:"STRING"},kind:{type:"STRING"},description:{type:"STRING"},
-            url:{type:"STRING"},fileName:{type:"STRING"},size:{type:"INTEGER"},favorite:{type:"BOOLEAN"},color:{type:"STRING"},goal:{type:"STRING"},
-            grade:{type:"STRING"},section:{type:"STRING"},school:{type:"STRING"},whatsapp:{type:"STRING"}
+          const itemSchema={type:"object",properties:{
+            id:{type:"string"},name:{type:"string"},title:{type:"string"},subjectId:{type:"string"},unitId:{type:"string"},lessonId:{type:"string"},
+            question:{type:"string"},answer:{type:"string"},correctAnswer:{type:"string"},reason:{type:"string"},notes:{type:"string"},content:{type:"string"},
+            date:{type:"string"},duration:{type:"integer"},estimatedMinutes:{type:"integer"},status:{type:"string"},priority:{type:"string"},startTime:{type:"string"},
+            dayOfWeek:{type:"integer"},endTime:{type:"string"},type:{type:"string"},difficulty:{type:"string"},kind:{type:"string"},description:{type:"string"},
+            url:{type:"string"},fileName:{type:"string"},size:{type:"integer"},favorite:{type:"boolean"},color:{type:"string"},goal:{type:"string"},
+            grade:{type:"string"},section:{type:"string"},school:{type:"string"},whatsapp:{type:"string"}
           }};
-          const operationSchema={type:"OBJECT",properties:{
-            op:{type:"STRING",enum:["add","update","delete","replace"]},
-            collection:{type:"STRING",enum:["studySchedule","classSchedule","subjects","units","lessons","tasks","questions","mistakes","notes","lectures","profile"]},
+          const operationSchema={type:"object",properties:{
+            op:{type:"string",enum:["add","update","delete","replace"]},
+            collection:{type:"string",enum:["studySchedule","classSchedule","subjects","units","lessons","tasks","questions","mistakes","notes","lectures","profile"]},
             item:itemSchema,
-            ids:{type:"ARRAY",items:{type:"STRING"}},
-            items:{type:"ARRAY",items:itemSchema}
+            ids:{type:"array",items:{type:"string"}},
+            items:{type:"array",items:itemSchema}
           },required:["op","collection"]};
-          const responseSchema={type:"OBJECT",properties:{
-            answer:{type:"STRING"},
-            operations:{type:"ARRAY",items:operationSchema}
+          const responseSchema={type:"object",properties:{
+            answer:{type:"string"},
+            operations:{type:"array",items:operationSchema}
           },required:["answer","operations"]};
 
           const contents=[...history,{role:"user",parts:[{text:question}]}];
