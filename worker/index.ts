@@ -168,11 +168,12 @@ async function callGemini(env:Env, contents:any[], systemInstruction:string, gen
   if(!apiKey) throw new Error("NO_AI");
   const configured=String(env.GEMINI_MODEL||"").trim();
   const models=[...new Set([configured,"gemini-3.5-flash-lite","gemini-flash-lite-latest"].filter(Boolean))].slice(0,2);
-  const input=contents.map((item:any)=>({
-    role:item?.role==="model"?"assistant":"user",
-    content:(item?.parts||[]).map((part:any)=>String(part?.text||"")).filter(Boolean).join("\n")
-  })).filter((item:any)=>item.content);
-  if(!input.length) throw new Error("AI_UNAVAILABLE:EMPTY_INPUT");
+  const conversation=(contents||[]).map((item:any)=>{
+    const role=item?.role==="model"?"المساعد":"المستخدم";
+    const message=(item?.parts||[]).map((part:any)=>String(part?.text||"")).filter(Boolean).join("\n").trim();
+    return message?role+": "+message:"";
+  }).filter(Boolean).join("\n\n");
+  const input="تعليمات النظام:\n"+systemInstruction+"\n\nالمحادثة:\n"+conversation;
   let lastError="";
   for(const model of models){
     const controller=new AbortController();
@@ -184,9 +185,8 @@ async function callGemini(env:Env, contents:any[], systemInstruction:string, gen
         body:JSON.stringify({
           model,
           input,
-          system_instruction:systemInstruction,
           store:false,
-          generation_config:{max_output_tokens:1200,temperature:0.45,...(generationConfigExtra||{})}
+          generation_config:{max_output_tokens:1200,...(generationConfigExtra||{})}
         }),
         signal:controller.signal
       });
@@ -194,7 +194,6 @@ async function callGemini(env:Env, contents:any[], systemInstruction:string, gen
       let data:any=null; try{data=JSON.parse(raw)}catch{}
       if(response.ok){
         const answer=String(data?.output_text||"").trim() ||
-          (Array.isArray(data?.outputs)?data.outputs.filter((x:any)=>x?.type==="text"||x?.type==="message").map((x:any)=>String(x?.text||x?.content||"")).join("\n").trim():"") ||
           (Array.isArray(data?.steps)?data.steps.filter((x:any)=>x?.type==="model_output").flatMap((x:any)=>x?.content||[]).map((x:any)=>String(x?.text||"")).filter(Boolean).join("\n").trim():"");
         if(answer)return answer;
         lastError="EMPTY";
