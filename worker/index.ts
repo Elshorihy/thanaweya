@@ -176,9 +176,8 @@ async function callGemini(env:Env, contents:any[], systemInstruction:string, gen
   }).filter(Boolean).join("\n\n");
   const input="تعليمات النظام:\n"+systemInstruction+"\n\nالمحادثة:\n"+conversation;
   const extra=generationConfigExtra||{};
-  const generationConfig:any={
-    max_output_tokens:Number(extra.max_output_tokens ?? extra.maxOutputTokens ?? 1200)
-  };
+  const maxOutputTokens=Math.max(256,Math.min(4096,Number(extra.max_output_tokens ?? extra.maxOutputTokens ?? 1200)||1200));
+  const generationConfig:any={max_output_tokens:maxOutputTokens};
   if(Number.isFinite(Number(extra.temperature)))generationConfig.temperature=Number(extra.temperature);
   if(Number.isFinite(Number(extra.topP)))generationConfig.top_p=Number(extra.topP);
   const responseFormat=(extra.responseMimeType||extra.responseSchema)?{
@@ -187,13 +186,15 @@ async function callGemini(env:Env, contents:any[], systemInstruction:string, gen
     ...(extra.responseSchema?{schema:extra.responseSchema}:{})
   }:undefined;
   let lastError="";
+  // Try the Interactions API first. Fall back to the widely supported generateContent
+  // endpoint if the Interactions endpoint rejects the model or structured-output schema.
   for(const model of models){
     const controller=new AbortController();
-    const timeout=setTimeout(()=>controller.abort(),15000);
+    const timeout=setTimeout(()=>controller.abort(),12000);
     try{
       const payload:any={model,input,store:false,generation_config:generationConfig};
       if(responseFormat)payload.response_format=responseFormat;
-      const response=await fetch("https://generativelanguage.googleapis.com/v1beta/interactions",{
+      const response=await fetch("https://generativelanguage.googleapis.com/v1/interactions",{
         method:"POST",
         headers:{"content-type":"application/json","x-goog-api-key":apiKey},
         body:JSON.stringify(payload),
@@ -205,15 +206,43 @@ async function callGemini(env:Env, contents:any[], systemInstruction:string, gen
         const answer=String(data?.output_text||"").trim() ||
           (Array.isArray(data?.steps)?data.steps.filter((x:any)=>x?.type==="model_output").flatMap((x:any)=>x?.content||[]).map((x:any)=>String(x?.text||"")).filter(Boolean).join("\n").trim():"");
         if(answer)return answer;
-        lastError="EMPTY";
-        continue;
+        lastError="INTERACTIONS_EMPTY";
+      }else{
+        lastError=String(data?.error?.message||response.status);
       }
-      lastError=String(data?.error?.message||response.status);
-      if(response.status===404||response.status===400||response.status===429||response.status===500||response.status===502||response.status===503)continue;
-      break;
-    }catch(e){lastError=e instanceof Error?(e.name==="AbortError"?"TIMEOUT":e.message):"NETWORK";continue}
+    }catch(e){lastError=e instanceof Error?(e.name==="AbortError"?"INTERACTIONS_TIMEOUT":e.message):"INTERACTIONS_NETWORK"}
     finally{clearTimeout(timeout)}
   }
+  for(const model of models){
+    const controller=new AbortController();
+    const timeout=setTimeout(()=>controller.abort(),12000);
+    try{
+      const generation:any={maxOutputTokens};
+      if(Number.isFinite(Number(extra.temperature)))generation.temperature=Number(extra.temperature);
+      if(Number.isFinite(Number(extra.topP)))generation.topP=Number(extra.topP);
+      if(responseFormat?.mime_type==="application/json"){
+        generation.responseMimeType="application/json";
+        if(responseFormat.schema)generation.responseSchema=responseFormat.schema;
+      }
+      const response=await fetch("https://generativelanguage.googleapis.com/v1beta/models/"+encodeURIComponent(model)+":generateContent",{
+        method:"POST",
+        headers:{"content-type":"application/json","x-goog-api-key":apiKey},
+        body:JSON.stringify({systemInstruction:{parts:[{text:systemInstruction}]},contents:(contents||[]).map((item:any)=>({role:item?.role==="model"?"model":"user",parts:(item?.parts||[]).map((part:any)=>({text:String(part?.text||"")}))})),generationConfig:generation}),
+        signal:controller.signal
+      });
+      const raw=await response.text();
+      let data:any=null; try{data=JSON.parse(raw)}catch{}
+      if(response.ok){
+        const answer=(Array.isArray(data?.candidates)?data.candidates:[]).flatMap((candidate:any)=>candidate?.content?.parts||[]).map((part:any)=>String(part?.text||"")).filter(Boolean).join("\n").trim();
+        if(answer)return answer;
+        lastError="GENERATE_CONTENT_EMPTY";
+      }else{
+        lastError=String(data?.error?.message||response.status);
+      }
+    }catch(e){lastError=e instanceof Error?(e.name==="AbortError"?"GENERATE_CONTENT_TIMEOUT":e.message):"GENERATE_CONTENT_NETWORK"}
+    finally{clearTimeout(timeout)}
+  }
+  console.error("Gemini providers failed",lastError);
   throw new Error("AI_UNAVAILABLE:"+lastError);
 }
 async function getPageViewStats(env:Env){
@@ -1080,7 +1109,8 @@ async function createSiteAnnouncement(env:Env,chatId:string,payload:any){
   await sendTelegramAnnouncements(env,chatId);
 }
 async function sendTelegramAdminTools(env:Env,chatId:string){
-  const maintenance=await getAdminSetting(env,"maintenance","0");
+  const maintenanceRead=env.DB.prepare("SELECT value FROM admin_settings WHERE key=?").bind("maintenance").first<any>().then((row:any)=>String(row?.value||"0")).catch(()=>"0");
+          const maintenance=await Promise.race([maintenanceRead,new Promise<string>(resolve=>setTimeout(()=>resolve("0"),2500))]);
   const activity=await env.DB.prepare("SELECT action,target,created_at FROM admin_activity ORDER BY created_at DESC LIMIT 8").all<any>();
   const lines=(activity.results||[]).map((x:any)=>"• "+String(x.action)+" "+(x.target?"— "+String(x.target).slice(0,30):"")+" · "+adminFormatDate(x.created_at));
   const text=["🛠️ مركز تحكم الأدمن","",
