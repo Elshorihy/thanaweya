@@ -57,6 +57,52 @@ main>section:not([hidden]){animation:dashEnter .22s ease-out}
 @media(max-width:900px){.layout{display:flex!important;flex-direction:column;gap:12px;padding:12px}.side{width:100%;max-height:none;position:static;padding:13px;border-radius:18px}.brand{margin-bottom:12px;padding-bottom:12px}.side nav{display:flex;overflow-x:auto;gap:7px;padding:2px 0 8px;scrollbar-width:thin}.side nav button{flex:0 0 auto;white-space:nowrap;min-height:40px;padding:10px 12px}.side nav button#refresh{margin-top:0;border-top:1px solid transparent;padding-top:10px}.top{padding:20px;border-radius:19px;margin-bottom:14px}.stats{gap:10px}.stat{border-radius:17px}.columns{grid-template-columns:1fr}}
 @media(max-width:560px){.layout{padding:9px;gap:10px}.top{padding:17px}.top h1{font-size:25px}.top p{font-size:13px}.stats{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.stat{padding:14px}.stat .label{font-size:12px}.stat .value{font-size:27px}.panel{padding:15px;border-radius:17px}.panel h2{font-size:16px}.side nav button{font-size:12px;padding:9px 10px}.report .row{align-items:flex-start}.report small{line-height:1.7}}
 @media(prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
+
+/* THANAWEYA ADMIN — cinematic polish */
+:root{--admin-glow:rgba(139,124,255,.18);--admin-glass:rgba(13,21,36,.84)}
+html{background:#070b14;scroll-behavior:smooth}
+body{position:relative;isolation:isolate;background-color:#070b14;background-image:radial-gradient(ellipse at 88% 0%,rgba(108,77,220,.18),transparent 31%),radial-gradient(ellipse at 2% 58%,rgba(23,137,166,.12),transparent 29%),linear-gradient(rgba(255,255,255,.014) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.014) 1px,transparent 1px);background-size:auto,auto,38px 38px,38px 38px;background-attachment:fixed}
+body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;background:radial-gradient(circle at 50% 0%,transparent 0,rgba(2,6,15,.3) 72%);opacity:.8}
+.layout{position:relative;gap:24px;padding:28px;max-width:1660px}
+.side{background:linear-gradient(165deg,rgba(18,28,47,.96),rgba(8,14,25,.96));border:1px solid rgba(143,163,199,.17);box-shadow:0 24px 70px rgba(0,0,0,.25),inset 0 1px 0 rgba(255,255,255,.035);backdrop-filter:blur(16px);border-radius:25px}
+.brand .logo{position:relative;isolation:isolate;box-shadow:0 0 0 5px rgba(139,124,255,.07),0 8px 30px rgba(139,124,255,.22)}
+.brand .logo:after{content:"";position:absolute;inset:-5px;border:1px solid rgba(139,124,255,.22);border-radius:19px;pointer-events:none}
+.brand small{display:inline-flex;align-items:center;gap:6px;margin-top:4px}
+.brand small:before{content:"";width:6px;height:6px;border-radius:50%;background:#6ee7b7;box-shadow:0 0 12px rgba(110,231,183,.8)}
+.side nav button{position:relative;overflow:hidden;min-height:46px}
+.side nav button.active{background:linear-gradient(100deg,rgba(139,124,255,.19),rgba(84,215,232,.055));border-color:rgba(167,139,250,.33);box-shadow:inset -3px 0 0 #a78bfa,0 6px 18px rgba(0,0,0,.12)}
+.top{isolation:isolate;border-color:rgba(143,163,199,.2);background:linear-gradient(112deg,rgba(22,31,52,.97),rgba(13,22,37,.94) 62%,rgba(18,40,54,.82));box-shadow:0 20px 55px rgba(0,0,0,.19),inset 0 1px 0 rgba(255,255,255,.045)}
+.top:before{content:"";position:absolute;inset:0 0 auto;height:2px;background:linear-gradient(90deg,transparent,#67e8f9 28%,#a78bfa 70%,transparent);opacity:.8;z-index:-1}
+.top:after{width:260px;height:260px;left:-80px;top:-115px;background:radial-gradient(circle,rgba(139,124,255,.2),transparent 68%);filter:none}
+.top h1{letter-spacing:-.8px}
+.stats{grid-template-columns:repeat(3,minmax(0,1fr))}
+.stat{background:linear-gradient(145deg,rgba(18,29,49,.96),rgba(10,17,29,.96));border-color:rgba(143,163,199,.17);box-shadow:0 12px 34px rgba(0,0,0,.13),inset 0 1px 0 rgba(255,255,255,.025)}
+.stat:nth-child(1){--stat-accent:#a78bfa}.stat:nth-child(2){--stat-accent:#67e8f9}.stat:nth-child(3){--stat-accent:#6ee7b7}
+.stat:before{content:"";position:absolute;inset:0 0 auto;height:2px;background:linear-gradient(90deg,transparent,var(--stat-accent,#a78bfa),transparent);opacity:.8}
+.stat .value{position:relative;z-index:1;font-variant-numeric:tabular-nums}
+.panel{background:linear-gradient(145deg,rgba(16,26,44,.96),rgba(9,16,28,.96));border-color:rgba(143,163,199,.16);box-shadow:0 14px 40px rgba(0,0,0,.14),inset 0 1px 0 rgba(255,255,255,.025)}
+.panel h2{display:flex;align-items:center;gap:9px}
+.panel h2:before{content:"";display:inline-block;width:4px;height:18px;border-radius:9px;background:linear-gradient(#67e8f9,#a78bfa);box-shadow:0 0 12px rgba(139,124,255,.2)}
+.activity,.report{border-color:rgba(143,163,199,.13)}
+.report{border-radius:12px}
+.report:hover{background:rgba(255,255,255,.012)}
+button{border-color:rgba(143,163,199,.2);background:linear-gradient(180deg,rgba(32,45,68,.92),rgba(22,33,52,.92))}
+button.primary{background:linear-gradient(115deg,#8b7cff,#397f9b);box-shadow:0 8px 24px rgba(102,88,219,.2)}
+#loginGate{position:relative;overflow:hidden;margin:10vh auto;padding:34px;border-radius:28px;border-color:rgba(167,139,250,.26);background:linear-gradient(145deg,rgba(19,29,49,.98),rgba(9,15,27,.98));box-shadow:0 30px 100px rgba(0,0,0,.48),0 0 70px rgba(139,124,255,.08),inset 0 1px 0 rgba(255,255,255,.06)}
+#loginGate:before{content:"";position:absolute;inset:0 0 auto;height:3px;background:linear-gradient(90deg,#67e8f9,#a78bfa,#67e8f9)}
+#loginGate:after{content:"ث";position:absolute;left:-18px;bottom:-70px;font-size:220px;line-height:1;font-weight:1000;color:rgba(167,139,250,.035);pointer-events:none}
+#loginGate h1{font-size:31px;letter-spacing:-.7px}
+#loginGate p{position:relative;z-index:1}
+#loginGate input{min-height:48px;background:rgba(3,8,17,.72);border-color:#33445f}
+#loginGate button{min-height:48px;position:relative;z-index:1}
+#loginError{position:relative;z-index:1}
+.toast{backdrop-filter:blur(16px);box-shadow:0 15px 50px rgba(0,0,0,.35);border-color:rgba(103,232,249,.22)}
+::selection{background:rgba(139,124,255,.35);color:#fff}
+:focus-visible{outline:2px solid #67e8f9!important;outline-offset:3px}
+@media(max-width:900px){.layout{gap:14px;padding:14px}.side{border-radius:20px}.top{padding:20px;border-radius:19px}}
+@media(max-width:560px){#loginGate{margin:7vh 14px;padding:25px 20px}.stats{gap:10px}.stat{border-radius:16px}.panel{padding:16px;border-radius:17px}.top{padding:17px}.layout{padding:10px}}
+@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*,*:before,*:after{transition:none!important;animation:none!important;scroll-behavior:auto!important}}
+
 </style></head>
 <body><section id="loginGate"><div class="brand"><div class="logo"><img src="/icons/thanaweya-palestine-192.jpg" alt="شعار ثانوية"></div><div><strong>ثانوية <span style="color:#54d7e8">OS</span></strong><small style="display:block;color:#9aa8bf">دخول المالك منفصل عن حساب الطالب</small></div></div><h1>لوحة الإدارة</h1><p>سجّل الدخول بحساب المالك. جلسة الإدارة مستقلة، ومش هتسجّلك خروج من حسابك العادي في الموقع.</p><form id="adminLoginForm"><label for="adminEmail">البريد الإلكتروني</label><input id="adminEmail" type="email" autocomplete="username" value="hamza@thanaweya.dev" required><label for="adminPassword">كلمة مرور المالك</label><input id="adminPassword" type="password" autocomplete="current-password" required><button id="adminLoginButton" class="primary" type="submit">دخول لوحة الإدارة</button></form><div id="loginError" role="alert"></div></section><div class="layout">
 <aside class="side"><div class="brand"><div class="logo"><img src="/icons/thanaweya-palestine-192.jpg" alt="شعار ثانوية"></div><div><strong>ثانوية <span style="color:var(--cyan)">OS</span></strong><small>لوحة إدارة المالك</small></div></div>
