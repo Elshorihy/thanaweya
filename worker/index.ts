@@ -2872,6 +2872,71 @@ export default {
             const users=await env.DB.prepare("SELECT COUNT(*) n FROM users").first<any>();
             return json({ok:true,days:rows.results||[],users:Number(users?.n||0)});
           }
+          if(url.pathname==="/api/admin/messages" && request.method==="GET"){
+            await ensureBridgeTools(env);
+            const rows=await env.DB.prepare("SELECT m.user_id,m.message,m.created_at,u.name,u.email,COUNT(*) OVER(PARTITION BY m.user_id) AS message_count FROM admin_messages m JOIN users u ON u.id=m.user_id WHERE m.sender='user' AND m.read_at IS NULL ORDER BY m.created_at DESC LIMIT 100").all<any>();
+            return json({ok:true,messages:rows.results||[]});
+          }
+          if(url.pathname==="/api/admin/messages" && request.method==="POST"){
+            await ensureBridgeTools(env);
+            const b=await body(request),userId=String(b?.userId||""),message=String(b?.message||"").trim().slice(0,2000);
+            if(!userId||!message)return json({error:"حدد الطالب واكتب الرد."},400);
+            const user=await env.DB.prepare("SELECT id FROM users WHERE id=?").bind(userId).first<any>();
+            if(!user)return json({error:"حساب الطالب غير موجود."},404);
+            const now=Date.now();
+            await env.DB.prepare("INSERT INTO admin_messages(id,user_id,sender,message,created_at) VALUES(?,?,'admin',?,?)").bind(randomHex(10),userId,message,now).run();
+            await env.DB.prepare("UPDATE admin_messages SET read_at=? WHERE user_id=? AND sender='user' AND read_at IS NULL").bind(now,userId).run();
+            await adminLog(env,String(env.TELEGRAM_CHAT_ID||admin.id),"WEB_ADMIN_REPLY_MESSAGE",userId,message.slice(0,300));
+            return json({ok:true});
+          }
+          if(url.pathname==="/api/admin/activity" && request.method==="GET"){
+            const rows=await env.DB.prepare("SELECT action,target,message,created_at FROM admin_activity ORDER BY created_at DESC LIMIT 100").all<any>();
+            return json({ok:true,activity:rows.results||[]});
+          }
+          if(url.pathname==="/api/admin/payment-phone" && (request.method==="GET"||request.method==="POST")){
+            if(request.method==="GET")return json({ok:true,phone:await getPaymentPhone(env)});
+            const b=await body(request),phone=cleanPhone(b?.phone||"");
+            if(phone&&!validPhone(phone))return json({error:"رقم التحويل غير صالح."},400);
+            await setAdminSetting(env,"payment_phone",phone);
+            await adminLog(env,String(env.TELEGRAM_CHAT_ID||admin.id),"WEB_ADMIN_SET_PAYMENT_PHONE","payment_phone",phone);
+            return json({ok:true,phone});
+          }
+          if(url.pathname==="/api/admin/broadcast" && request.method==="POST"){
+            const b=await body(request),channel=String(b?.channel||""),message=String(b?.message||"").trim().slice(0,4000),subject=String(b?.subject||"").trim().slice(0,180);
+            if(!message)return json({error:"نص الرسالة مطلوب."},400);
+            if(channel==="whatsapp"){
+              const result=await broadcastWhatsApp(env,message);
+              await adminLog(env,String(env.TELEGRAM_CHAT_ID||admin.id),"WEB_ADMIN_WHATSAPP_BROADCAST","all",message.slice(0,250)+" sent="+result.sent+" failed="+result.failed);
+              return json({ok:true,result});
+            }
+            if(channel==="email"){
+              if(!subject)return json({error:"عنوان البريد مطلوب."},400);
+              const pending=await env.DB.prepare("SELECT email FROM users WHERE email_verified_at IS NOT NULL ORDER BY created_at ASC").all<any>();
+              const emails=(pending.results||[]).map((x:any)=>String(x.email||"")).filter(Boolean);
+              const result=await broadcastEmail(env,subject,emails,message);
+              await adminLog(env,String(env.TELEGRAM_CHAT_ID||admin.id),"WEB_ADMIN_EMAIL_BROADCAST","all",subject+" sent="+result.sent+" failed="+result.failed);
+              return json({ok:true,result});
+            }
+            return json({error:"قناة إرسال غير معروفة."},400);
+          }
+          if(url.pathname==="/api/admin/competitions" && request.method==="GET"){
+            await ensureCompetitionTables(env);
+            const rows=await env.DB.prepare("SELECT c.id,c.title,c.description,c.kind,c.subject,c.status,c.duration_seconds,c.points,c.questions_json,c.created_at,c.starts_at,c.ends_at,(SELECT COUNT(*) FROM site_competition_attempts a WHERE a.competition_id=c.id) AS participants FROM site_competitions c ORDER BY c.created_at DESC LIMIT 100").all<any>();
+            return json({ok:true,competitions:(rows.results||[]).map((c:any)=>{let questions:any[]=[];try{questions=JSON.parse(c.questions_json||"[]")}catch{}return {...c,questions,participants:Number(c.participants||0)}})});
+          }
+          if(url.pathname==="/api/admin/competitions" && request.method==="POST"){
+            await ensureCompetitionTables(env);
+            const b=await body(request),action=String(b?.action||"create"),id=String(b?.id||"");
+            if(action==="delete"){await env.DB.prepare("DELETE FROM site_competition_sessions WHERE competition_id=?").bind(id).run();await env.DB.prepare("DELETE FROM site_competition_attempts WHERE competition_id=?").bind(id).run();await env.DB.prepare("DELETE FROM site_competitions WHERE id=?").bind(id).run();await adminLog(env,String(env.TELEGRAM_CHAT_ID||admin.id),"WEB_ADMIN_DELETE_COMPETITION",id);return json({ok:true});}
+            if(action==="toggle"){const row=await env.DB.prepare("SELECT status FROM site_competitions WHERE id=?").bind(id).first<any>();if(!row)return json({error:"المسابقة غير موجودة."},404);const next=String(row.status)==="published"?"draft":"published";await env.DB.prepare("UPDATE site_competitions SET status=? WHERE id=?").bind(next,id).run();await adminLog(env,String(env.TELEGRAM_CHAT_ID||admin.id),"WEB_ADMIN_TOGGLE_COMPETITION",id,next);return json({ok:true,status:next});}
+            const title=String(b?.title||"").trim().slice(0,160),description=String(b?.description||"").trim().slice(0,1000),kind=["curriculum","daily","fun","live"].includes(String(b?.kind))?String(b.kind):"curriculum",subject=String(b?.subject||"").trim().slice(0,100),questions=Array.isArray(b?.questions)?b.questions.slice(0,100):[];
+            if(!title)return json({error:"اسم المسابقة مطلوب."},400);
+            if(questions.some((q:any)=>!q.question||!Array.isArray(q.options)||q.options.length<2||!Number.isInteger(Number(q.correctIndex))||Number(q.correctIndex)<0||Number(q.correctIndex)>=q.options.length))return json({error:"راجع الأسئلة: كل سؤال يحتاج نصًا واختيارين على الأقل ورقم إجابة صحيحة يبدأ من صفر."},400);
+            const now=Date.now(),duration=Math.max(300,Math.min(7200,Number(b?.durationSeconds)||1800)),points=Math.max(1,Math.min(10000,Number(b?.points)||100));
+            if(action==="update"&&id){await env.DB.prepare("UPDATE site_competitions SET title=?,description=?,kind=?,subject=?,questions_json=?,duration_seconds=?,points=? WHERE id=?").bind(title,description,kind,subject,JSON.stringify(questions),duration,points,id).run();await adminLog(env,String(env.TELEGRAM_CHAT_ID||admin.id),"WEB_ADMIN_UPDATE_COMPETITION",id,title);}
+            else{await env.DB.prepare("INSERT INTO site_competitions(id,title,description,kind,subject,status,duration_seconds,points,questions_json,created_at) VALUES(?,?,?,?,?,'draft',?,?,?,?)").bind(randomHex(12),title,description,kind,subject,duration,points,JSON.stringify(questions),now).run();await adminLog(env,String(env.TELEGRAM_CHAT_ID||admin.id),"WEB_ADMIN_CREATE_COMPETITION","",title);}
+            return json({ok:true});
+          }
           if(url.pathname==="/api/admin/overview" && request.method==="GET"){
             const [users,verified,pending,posts,reports,messages,activity,maintenance,announcement]=await Promise.all([
               env.DB.prepare("SELECT COUNT(*) n FROM users").first<any>(),
