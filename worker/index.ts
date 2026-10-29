@@ -2715,7 +2715,7 @@ export default {
         // Other auth endpoints still initialize the auth schema when needed.
         if(url.pathname.startsWith("/api/auth/") && url.pathname!=="/api/auth/login" && url.pathname!=="/api/auth/me") {
           await ensureAuthSchema(env);
-        } else if(!url.pathname.startsWith("/api/auth/") && url.pathname!=="/api/community" && !url.pathname.startsWith("/api/competitions")) {
+        } else if(!url.pathname.startsWith("/api/auth/") && !url.pathname.startsWith("/api/admin/") && url.pathname!=="/api/community" && !url.pathname.startsWith("/api/competitions")) {
           // The community endpoint initializes only its own tables below. Avoid
           // bootstrapping every unrelated app table before loading the feed.
           await ensureSchema(env);
