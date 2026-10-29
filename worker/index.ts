@@ -168,7 +168,8 @@ async function callGemini(env:Env, contents:any[], systemInstruction:string, gen
   const apiKey=String(apiKeyOverride ?? env.GEMINI_API_KEY ?? "").trim();
   if(!apiKey) throw new Error("NO_AI");
   const configured=String(env.GEMINI_MODEL||"").trim();
-  const models=[...new Set([configured,"gemini-3.5-flash-lite","gemini-flash-lite-latest"].filter(Boolean))].slice(0,2);
+  // Prefer the current stable Flash-Lite model, then configured and previous stable fallback.
+  const models=[...new Set(["gemini-3.5-flash-lite",configured,"gemini-3.1-flash-lite"].filter(Boolean))];
   const conversation=(contents||[]).map((item:any)=>{
     const role=item?.role==="model"?"المساعد":"المستخدم";
     const message=(item?.parts||[]).map((part:any)=>String(part?.text||"")).filter(Boolean).join("\n").trim();
@@ -186,11 +187,11 @@ async function callGemini(env:Env, contents:any[], systemInstruction:string, gen
     ...(extra.responseSchema?{schema:extra.responseSchema}:{})
   }:undefined;
   let lastError="";
-  // Try the Interactions API first. Fall back to the widely supported generateContent
-  // endpoint if the Interactions endpoint rejects the model or structured-output schema.
+  // Use the stable generateContent REST API directly. The Interactions endpoint can
+  // be unavailable for a project/model and was delaying every request before fallback.
   for(const model of models){
     const controller=new AbortController();
-    const timeout=setTimeout(()=>controller.abort(),12000);
+    const timeout=setTimeout(()=>controller.abort(),25000);
     try{
       const payload:any={model,input,store:false,generation_config:generationConfig};
       if(responseFormat)payload.response_format=responseFormat;
@@ -215,7 +216,7 @@ async function callGemini(env:Env, contents:any[], systemInstruction:string, gen
   }
   for(const model of models){
     const controller=new AbortController();
-    const timeout=setTimeout(()=>controller.abort(),12000);
+    const timeout=setTimeout(()=>controller.abort(),25000);
     try{
       const generation:any={maxOutputTokens};
       if(Number.isFinite(Number(extra.temperature)))generation.temperature=Number(extra.temperature);
@@ -540,7 +541,7 @@ async function sendEmailOtp(env:Env,email:string,code:string,type:"register"|"re
       u.searchParams.set("requestId",randomHex(20));
       u.searchParams.set("_ts",String(Date.now()));
       const controller=new AbortController();
-      const timeout=setTimeout(()=>controller.abort(),12000);
+      const timeout=setTimeout(()=>controller.abort(),25000);
       try{
         const response=await fetch(u.toString(),{
           method:"GET",
@@ -3002,7 +3003,7 @@ export default {
             return json({ok:true,answer,conversationId:chatId,action:{executed:executed>0,count:executed},used:reservedCount,remaining:Math.max(0,limit-reservedCount),limit,model:String(env.GEMINI_MODEL||"gemini-2.5-flash")});
           }catch(e){
             if(usageReserved){try{await env.DB.prepare("UPDATE ai_usage SET count=MAX(0,count-1) WHERE user_id=? AND day=?").bind(u.id,day).run();}catch(rollbackError){console.error("AI quota rollback failed",rollbackError);}}
-            console.error("AI request failed",e);return json({ok:false,retry:true,error:"تعذر تنفيذ الطلب حاليًا. جرّب تاني."},503)
+            console.error("AI request failed",e);const detail=String(e instanceof Error?e.message:e||"").slice(0,180);const userMessage=detail==="NO_AI"?"خدمة الذكاء الاصطناعي غير مهيأة على الخادم. لازم يتضبط مفتاح Gemini في Cloudflare.":"خدمة الذكاء الاصطناعي لم تستجب بعد محاولات الاتصال. جرّب بعد قليل، ولو استمرت المشكلة فالإدارة تحتاج مراجعة إعدادات Gemini.";return json({ok:false,retry:true,error:userMessage},503)
           }
         }
         if(url.pathname==="/api/auth/register/start" && request.method==="POST") {
