@@ -36,6 +36,12 @@ export default function MotionExperience(){
       if(document.querySelector('.appMain'))return {density:.62,opacity:.62,links:true};
       return {density:.55,opacity:.5,links:false};
     };
+    const applyScene=()=>{
+      // React updates classes during normal renders. Update only the overlay strength:
+      // resizing the canvas on every mutation clears it and causes a visible blink.
+      sceneOpacity=getScene().opacity;
+      canvas.style.opacity=String(sceneOpacity);
+    };
     const resize=()=>{
       dpr=Math.min(window.devicePixelRatio||1,1.5);
       width=window.innerWidth;height=window.innerHeight;
@@ -76,7 +82,7 @@ export default function MotionExperience(){
     const onMotion=(e:MediaQueryListEvent)=>{if(e.matches){cancelAnimationFrame(raf);raf=0;ctx.clearRect(0,0,width,height)}else if(visible&&!raf){resize();raf=requestAnimationFrame(draw)}};
     let resizeTimer=0;
     const onResize=()=>{window.clearTimeout(resizeTimer);resizeTimer=window.setTimeout(resize,100)};
-    const observer=new MutationObserver(()=>{resize()});
+    const observer=new MutationObserver(()=>{applyScene()});
     observer.observe(document.getElementById('root')||document.body,{childList:true,subtree:true,attributes:true,attributeFilter:['class']});
     resize();raf=requestAnimationFrame(draw);
     window.addEventListener('resize',onResize,{passive:true});
