@@ -167,57 +167,61 @@ async function body(request:Request){try{return await request.json() as any}catc
 async function callGemini(env:Env, contents:any[], systemInstruction:string, generationConfigExtra:any={}, apiKeyOverride?:string) {
   const apiKey=String(apiKeyOverride ?? env.GEMINI_API_KEY ?? "").trim();
   if(!apiKey) throw new Error("NO_AI");
-  const configured=String(env.GEMINI_MODEL||"").trim();
-  // Prefer the current stable Flash-Lite model, then configured and previous stable fallback.
-  const models=[...new Set(["gemini-3.5-flash-lite",configured,"gemini-3.1-flash-lite"].filter(Boolean))];
-  const conversation=(contents||[]).map((item:any)=>{
-    const role=item?.role==="model"?"المساعد":"المستخدم";
-    const message=(item?.parts||[]).map((part:any)=>String(part?.text||"")).filter(Boolean).join("\n").trim();
-    return message?role+": "+message:"";
-  }).filter(Boolean).join("\n\n");
-  const input="تعليمات النظام:\n"+systemInstruction+"\n\nالمحادثة:\n"+conversation;
+  // Keep to currently supported stable Flash-Lite models; do not retry retired configured model IDs.
+  const models=["gemini-3.5-flash-lite","gemini-3.1-flash-lite"];
   const extra=generationConfigExtra||{};
   const maxOutputTokens=Math.max(256,Math.min(4096,Number(extra.max_output_tokens ?? extra.maxOutputTokens ?? 1200)||1200));
-  const generationConfig:any={max_output_tokens:maxOutputTokens};
-  if(Number.isFinite(Number(extra.temperature)))generationConfig.temperature=Number(extra.temperature);
-  if(Number.isFinite(Number(extra.topP)))generationConfig.top_p=Number(extra.topP);
-  const responseFormat=(extra.responseMimeType||extra.responseSchema)?{
-    type:"text",
-    mime_type:String(extra.responseMimeType||"application/json"),
-    ...(extra.responseSchema?{schema:extra.responseSchema}:{})
-  }:undefined;
-  let lastError="";
-  // Use the stable generateContent REST API directly. The Interactions endpoint can
-  // be unavailable for a project/model and was delaying every request before fallback.
-  // Use the stable generateContent REST API directly to avoid slow unsupported Interactions attempts.
+  const wantsJson=Boolean(extra.responseMimeType||extra.responseSchema);
+  let lastError="AI_UNAVAILABLE";
   for(const model of models){
-    const controller=new AbortController();
-    const timeout=setTimeout(()=>controller.abort(),25000);
-    try{
-      const generation:any={maxOutputTokens};
-      if(Number.isFinite(Number(extra.temperature)))generation.temperature=Number(extra.temperature);
-      if(Number.isFinite(Number(extra.topP)))generation.topP=Number(extra.topP);
-      if(responseFormat?.mime_type==="application/json"){
-        generation.responseMimeType="application/json";
-        if(responseFormat.schema)generation.responseSchema=responseFormat.schema;
-      }
-      const response=await fetch("https://generativelanguage.googleapis.com/v1beta/models/"+encodeURIComponent(model)+":generateContent",{
-        method:"POST",
-        headers:{"content-type":"application/json","x-goog-api-key":apiKey},
-        body:JSON.stringify({systemInstruction:{parts:[{text:systemInstruction}]},contents:(contents||[]).map((item:any)=>({role:item?.role==="model"?"model":"user",parts:(item?.parts||[]).map((part:any)=>({text:String(part?.text||"")}))})),generationConfig:generation}),
-        signal:controller.signal
-      });
-      const raw=await response.text();
-      let data:any=null; try{data=JSON.parse(raw)}catch{}
-      if(response.ok){
-        const answer=(Array.isArray(data?.candidates)?data.candidates:[]).flatMap((candidate:any)=>candidate?.content?.parts||[]).map((part:any)=>String(part?.text||"")).filter(Boolean).join("\n").trim();
-        if(answer)return answer;
-        lastError="GENERATE_CONTENT_EMPTY";
-      }else{
-        lastError=String(data?.error?.message||response.status);
-      }
-    }catch(e){lastError=e instanceof Error?(e.name==="AbortError"?"GENERATE_CONTENT_TIMEOUT":e.message):"GENERATE_CONTENT_NETWORK"}
-    finally{clearTimeout(timeout)}
+    // Some API projects/model rollouts reject a complex response schema. Retry once
+    // without structured-output settings and require JSON in the instruction instead.
+    for(const plainJsonFallback of [false,true]){
+      if(plainJsonFallback&&!wantsJson) break;
+      const controller=new AbortController();
+      const timeout=setTimeout(()=>controller.abort(),15000);
+      try{
+        const generation:any={maxOutputTokens};
+        if(wantsJson&&!plainJsonFallback){
+          generation.responseMimeType=String(extra.responseMimeType||"application/json");
+          if(extra.responseSchema)generation.responseSchema=extra.responseSchema;
+        }
+        const instruction=plainJsonFallback
+          ?systemInstruction+"\n\nمهم جدًا: أخرج كائن JSON صالحًا فقط دون Markdown أو أي نص خارجه، وبنفس الحقول المطلوبة في التعليمات."
+          :systemInstruction;
+        const response=await fetch("https://generativelanguage.googleapis.com/v1beta/models/"+encodeURIComponent(model)+":generateContent",{
+          method:"POST",
+          headers:{"content-type":"application/json","x-goog-api-key":apiKey},
+          body:JSON.stringify({
+            systemInstruction:{parts:[{text:instruction}]},
+            contents:(contents||[]).map((item:any)=>({role:item?.role==="model"?"model":"user",parts:(item?.parts||[]).map((part:any)=>({text:String(part?.text||"")}))})),
+            generationConfig:generation
+          }),
+          signal:controller.signal
+        });
+        const raw=await response.text();
+        let data:any=null; try{data=JSON.parse(raw)}catch{}
+        if(response.ok){
+          const answer=(Array.isArray(data?.candidates)?data.candidates:[]).flatMap((candidate:any)=>candidate?.content?.parts||[]).map((part:any)=>String(part?.text||"")).filter(Boolean).join("\n").trim();
+          if(answer)return answer;
+          lastError="GENERATE_CONTENT_EMPTY";
+          if(wantsJson&&!plainJsonFallback) continue;
+        }else{
+          const detail=String(data?.error?.message||response.status);
+          lastError="HTTP_"+response.status+":"+detail.slice(0,220);
+          const schemaError=/schema|response.?mime.?type|json.?schema|structured.?output|invalid argument/i.test(detail);
+          if(wantsJson&&!plainJsonFallback&&schemaError) continue;
+          // Authentication errors will not improve by trying another model.
+          if(response.status===401||response.status===403) throw new Error("AI_AUTH_ERROR:"+detail.slice(0,180));
+          // Only try the second model for model availability/rate/temporary failures.
+          break;
+        }
+      }catch(e){
+        lastError=e instanceof Error?(e.name==="AbortError"?"GENERATE_CONTENT_TIMEOUT":e.message):"GENERATE_CONTENT_NETWORK";
+        if(lastError.startsWith("AI_AUTH_ERROR:")) throw e;
+        break;
+      }finally{clearTimeout(timeout)}
+    }
   }
   console.error("Gemini providers failed",lastError);
   throw new Error("AI_UNAVAILABLE:"+lastError);
