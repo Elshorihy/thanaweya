@@ -836,6 +836,7 @@ async function ensureBridgeTools(env:Env){
   await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_student_reports_status_created ON student_reports(status,created_at)").run();
   await env.DB.prepare("CREATE TABLE IF NOT EXISTS admin_messages (id TEXT PRIMARY KEY,user_id TEXT NOT NULL,sender TEXT NOT NULL,message TEXT NOT NULL,read_at INTEGER,created_at INTEGER NOT NULL,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE)").run();
   await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_admin_messages_user_created ON admin_messages(user_id,created_at)").run();
+  await env.DB.prepare("CREATE TABLE IF NOT EXISTS bridge_notification_reads (user_id TEXT PRIMARY KEY,last_seen_at INTEGER NOT NULL DEFAULT 0,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE)").run();
   await env.DB.prepare("CREATE TABLE IF NOT EXISTS site_polls (id TEXT PRIMARY KEY,question TEXT NOT NULL,options_json TEXT NOT NULL,active INTEGER NOT NULL DEFAULT 1,expires_at INTEGER,created_at INTEGER NOT NULL)").run();
   await env.DB.prepare("CREATE TABLE IF NOT EXISTS site_poll_votes (poll_id TEXT NOT NULL,user_id TEXT NOT NULL,option_index INTEGER NOT NULL,created_at INTEGER NOT NULL,PRIMARY KEY(poll_id,user_id),FOREIGN KEY(poll_id) REFERENCES site_polls(id) ON DELETE CASCADE,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE)").run();
 }
@@ -2716,6 +2717,19 @@ export default {
           await ensureBridgeTools(env);
           const u=await userFrom(request,env);
           if(!u)return json({error:"يجب تسجيل الدخول"},401);
+          if(url.pathname==="/api/bridge/notifications" && request.method==="GET"){
+            const read=await env.DB.prepare("SELECT last_seen_at FROM bridge_notification_reads WHERE user_id=?").bind(u.id).first<any>();
+            const lastSeen=Number(read?.last_seen_at||0);
+            const reports=await env.DB.prepare("SELECT COUNT(*) AS n FROM student_reports WHERE user_id=? AND updated_at>? AND (status IN ('in_progress','resolved') OR LENGTH(TRIM(admin_reply))>0)").bind(u.id,lastSeen).first<any>();
+            const messages=await env.DB.prepare("SELECT COUNT(*) AS n FROM admin_messages WHERE user_id=? AND sender='admin' AND read_at IS NULL").bind(u.id).first<any>();
+            return json({ok:true,unread:Number(reports?.n||0)+Number(messages?.n||0)});
+          }
+          if(url.pathname==="/api/bridge/notifications/read" && request.method==="POST"){
+            const now=Date.now();
+            await env.DB.prepare("INSERT INTO bridge_notification_reads(user_id,last_seen_at) VALUES(?,?) ON CONFLICT(user_id) DO UPDATE SET last_seen_at=excluded.last_seen_at").bind(u.id,now).run();
+            await env.DB.prepare("UPDATE admin_messages SET read_at=? WHERE user_id=? AND sender='admin' AND read_at IS NULL").bind(now,u.id).run();
+            return json({ok:true});
+          }
           if(url.pathname==="/api/bridge/reports" && request.method==="POST"){
             const b=await body(request), category=String(b?.category||"مشكلة عامة").trim().slice(0,60), message=String(b?.message||"").trim().slice(0,2000);
             if(message.length<8)return json({error:"اكتب تفاصيل أوضح للمشكلة (8 أحرف على الأقل)."},400);
