@@ -160,8 +160,9 @@ async function userFrom(request:Request,env:Env) {
 }
 async function adminUserFrom(request:Request,env:Env) {
   const token=adminCookieValue(request); if(!token) return null;
+  await ensureLoginAudit(env);
   const tokenHash=await sha256(token);
-  const row=await env.DB.prepare("SELECT u.id,u.email,u.name,u.role,u.verified FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires_at>? AND u.role='owner'").bind(tokenHash,Date.now()).first<{id:string;email:string;name:string;role?:string;verified?:number}>();
+  const row=await env.DB.prepare("SELECT u.id,u.email,u.name,u.role,u.verified FROM admin_sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires_at>? AND u.role='owner'").bind(tokenHash,Date.now()).first<{id:string;email:string;name:string;role?:string;verified?:number}>();
   return row||null;
 }
 const sessionCookie=(token:string)=>`${COOKIE}=${token}; Path=/; HttpOnly; Secure; SameSite=None; Max-Age=${SESSION_DAYS*86400}`;
@@ -172,6 +173,24 @@ async function createSession(userId:string,env:Env) {
   const token=randomHex(32), hash=await sha256(token), expires=Date.now()+SESSION_DAYS*86400000;
   await env.DB.prepare("INSERT INTO sessions(id,user_id,token_hash,expires_at,created_at) VALUES(?,?,?,?,?)").bind(randomHex(16),userId,hash,expires,Date.now()).run();
   return token;
+}
+async function ensureLoginAudit(env:Env){
+  await env.DB.prepare("CREATE TABLE IF NOT EXISTS admin_sessions (id TEXT PRIMARY KEY,user_id TEXT NOT NULL,token_hash TEXT NOT NULL UNIQUE,expires_at INTEGER NOT NULL,created_at INTEGER NOT NULL)").run();
+  await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_admin_sessions_user ON admin_sessions(user_id)").run();
+  await env.DB.prepare("CREATE TABLE IF NOT EXISTS login_history (id TEXT PRIMARY KEY,user_id TEXT NOT NULL,email TEXT NOT NULL,name TEXT NOT NULL,device_name TEXT NOT NULL,user_agent TEXT NOT NULL,login_type TEXT NOT NULL,logged_in_at INTEGER NOT NULL)").run();
+  await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_login_history_time ON login_history(logged_in_at DESC)").run();
+}
+function loginDeviceName(ua:string){
+  const s=ua.toLowerCase();
+  const os=s.includes("windows")?"Windows":s.includes("android")?"Android":s.includes("iphone")||s.includes("ipad")?"iOS":s.includes("mac os")||s.includes("macintosh")?"macOS":s.includes("linux")?"Linux":"جهاز غير معروف";
+  const browser=s.includes("edg/")?"Edge":s.includes("opr/")||s.includes("opera")?"Opera":s.includes("firefox/")?"Firefox":s.includes("chrome/")||s.includes("crios/")?"Chrome":s.includes("safari/")?"Safari":"متصفح غير معروف";
+  const device=s.includes("ipad")?"iPad":s.includes("iphone")?"iPhone":s.includes("android")?(s.includes("mobile")?"موبايل Android":"تابلت Android"):s.includes("windows")||s.includes("macintosh")||s.includes("linux")?"كمبيوتر":"جهاز";
+  return device+" · "+os+" · "+browser;
+}
+async function recordLogin(env:Env,user:any,request:Request,loginType:"site"|"admin"){
+  await ensureLoginAudit(env);
+  const ua=String(request.headers.get("User-Agent")||"غير متاح").slice(0,500);
+  await env.DB.prepare("INSERT INTO login_history(id,user_id,email,name,device_name,user_agent,login_type,logged_in_at) VALUES(?,?,?,?,?,?,?,?)").bind(randomHex(12),String(user.id),String(user.email||""),String(user.name||""),loginDeviceName(ua),ua,loginType,Date.now()).run();
 }
 function egyptDay(){const p=new Intl.DateTimeFormat("en",{timeZone:"Africa/Cairo",year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(new Date());const v=Object.fromEntries(p.filter(x=>x.type!=="literal").map(x=>[x.type,x.value]));return `${v.year}-${v.month}-${v.day}`;}
 async function body(request:Request){try{return await request.json() as any}catch{return null}}
@@ -2536,7 +2555,7 @@ export default {
             ownerBypass=String(owner?.role||"") === "owner";
           }
           const adminToken=adminCookieValue(request);
-          if(!ownerBypass && adminToken){const adminHash=await sha256(adminToken);const adminOwner=await env.DB.prepare("SELECT u.role FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires_at>?").bind(adminHash,Date.now()).first<any>().catch(()=>null);ownerBypass=String(adminOwner?.role||"")==="owner";}
+          if(!ownerBypass && adminToken){const adminHash=await sha256(adminToken);const adminOwner=await env.DB.prepare("SELECT u.role FROM admin_sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires_at>?").bind(adminHash,Date.now()).first<any>().catch(()=>null);ownerBypass=String(adminOwner?.role||"")==="owner";}
           if(maintenance==="1" && !ownerBypass && url.pathname!=="/api/admin/login") return json({error:"الموقع في وضع الصيانة حاليًا. حاول مرة أخرى لاحقًا."},503,{"retry-after":"300"});
         }
         // Owner panel uses one fixed account and its own HttpOnly cookie.
@@ -2686,7 +2705,11 @@ export default {
           if(email!=="hamza@thanaweya.dev" || !password || (await sha256(password))!==(await sha256(configured))) return json({error:"البريد أو كلمة مرور المالك غير صحيحة."},401);
           const owner=await env.DB.prepare("SELECT id,email,name,role FROM users WHERE id='owner-hamza' AND role='owner'").first<any>();
           if(!owner) return json({error:"حساب المالك غير موجود في قاعدة البيانات."},503);
-          const token=await createSession(String(owner.id),env);
+          await ensureLoginAudit(env);
+          await env.DB.prepare("DELETE FROM admin_sessions WHERE user_id=?").bind(String(owner.id)).run();
+          const token=randomHex(32),tokenHash=await sha256(token),expires=Date.now()+SESSION_DAYS*86400000,now=Date.now();
+          await env.DB.prepare("INSERT INTO admin_sessions(id,user_id,token_hash,expires_at,created_at) VALUES(?,?,?,?,?)").bind(randomHex(16),String(owner.id),tokenHash,expires,now).run();
+          await recordLogin(env,owner,request,"admin");
           return json({ok:true,user:{email:owner.email,name:owner.name,role:"owner"}},200,{"set-cookie":adminSessionCookie(token)});
         }
         if(url.pathname==="/api/admin/session" && request.method==="GET") {
@@ -2696,7 +2719,7 @@ export default {
         }
         if(url.pathname==="/api/admin/logout" && request.method==="POST") {
           const token=adminCookieValue(request);
-          if(token) await env.DB.prepare("DELETE FROM sessions WHERE token_hash=?").bind(await sha256(token)).run();
+          if(token){await ensureLoginAudit(env);await env.DB.prepare("DELETE FROM admin_sessions WHERE token_hash=?").bind(await sha256(token)).run();}
           return json({ok:true},200,{"set-cookie":clearAdminCookie()});
         }
         if(url.pathname.startsWith("/api/admin/")) {
@@ -2934,6 +2957,11 @@ export default {
             if(action==="update"&&id){await env.DB.prepare("UPDATE site_competitions SET title=?,description=?,kind=?,subject=?,questions_json=?,duration_seconds=?,points=? WHERE id=?").bind(title,description,kind,subject,JSON.stringify(questions),duration,points,id).run();await adminLog(env,String(env.TELEGRAM_CHAT_ID||admin.id),"WEB_ADMIN_UPDATE_COMPETITION",id,title);}
             else{await env.DB.prepare("INSERT INTO site_competitions(id,title,description,kind,subject,status,duration_seconds,points,questions_json,created_at) VALUES(?,?,?,?,?,'draft',?,?,?,?)").bind(randomHex(12),title,description,kind,subject,duration,points,JSON.stringify(questions),now).run();await adminLog(env,String(env.TELEGRAM_CHAT_ID||admin.id),"WEB_ADMIN_CREATE_COMPETITION","",title);}
             return json({ok:true});
+          }
+          if(url.pathname==="/api/admin/login-history" && request.method==="GET"){
+            await ensureLoginAudit(env);
+            const rows=await env.DB.prepare("SELECT id,user_id,email,name,device_name,user_agent,login_type,logged_in_at FROM login_history ORDER BY logged_in_at DESC LIMIT 200").all<any>();
+            return json({ok:true,logins:rows.results||[]});
           }
           if(url.pathname==="/api/admin/overview" && request.method==="GET"){
             const [users,verified,pending,posts,reports,messages,activity,maintenance,announcement]=await Promise.all([
@@ -3414,7 +3442,10 @@ export default {
           if(loginEmail==="hamza@thanaweya.dev" && (await sha256(loginPassword))==="b57cefb716911b0abdaead7feecd5e5ae7c6496f799499340af1944145b61138"){
             const owner=await env.DB.prepare("SELECT id,email,name FROM users WHERE id='owner-hamza'").first<any>();
             if(owner){
+              await ensureLoginAudit(env);
+              await env.DB.prepare("DELETE FROM sessions WHERE user_id=?").bind(String(owner.id)).run();
               const token=await createSession(owner.id,env);
+              await recordLogin(env,owner,request,"site");
               return json({user:{id:owner.id,email:owner.email,name:owner.name,phone:null,role:"owner",verified:true}},200,{"set-cookie":sessionCookie(token)},request);
             }
           }
@@ -3428,8 +3459,11 @@ export default {
             await env.DB.prepare("INSERT INTO user_phones(user_id,phone,updated_at) VALUES(?,?,?) ON CONFLICT(user_id) DO UPDATE SET phone=excluded.phone,updated_at=excluded.updated_at").bind(u.id,phone,Date.now()).run();
           }
           const phoneRow=await env.DB.prepare("SELECT phone FROM user_phones WHERE user_id=?").bind(u.id).first<any>();
-          // Expired sessions are already rejected by userFrom() via expires_at; avoid a table-wide cleanup on every login.
+          // Enforce one active site session per account: a new login invalidates the previous device.
+          await ensureLoginAudit(env);
+          await env.DB.prepare("DELETE FROM sessions WHERE user_id=?").bind(String(u.id)).run();
           const token=await createSession(u.id,env);
+          await recordLogin(env,u,request,"site");
           return json({user:{id:u.id,email:u.email,name:u.name,phone:phoneRow?.phone||null,role:u.role||"user",verified:Number(u.verified||0)===1}},200,{"set-cookie":sessionCookie(token)},request);
         }
         if(url.pathname==="/api/subscription/status" && request.method==="GET") {
