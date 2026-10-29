@@ -150,5 +150,6 @@ if(b.dataset.competitionToggle){if(!confirm('تغيير حالة نشر المس
 if(b.dataset.competitionDelete){if(!confirm('حذف المسابقة وكل محاولات الطلاب؟'))return;await api('competitions',{method:'POST',body:JSON.stringify({action:'delete',id:b.dataset.competitionDelete})});await loadCompetitions();return}
 }catch(err){showError(err)}});
 
-window.setInterval(()=>{if(!adminAuthed)return;loadMessages();if(activeTab==='overview')loadOverview()},15000);\nbootAdmin();
+window.setInterval(()=>{if(!adminAuthed)return;loadMessages();if(activeTab==='overview')loadOverview()},15000);
+bootAdmin();
 </script></body></html>
