@@ -2938,7 +2938,7 @@ export default {
             const userId=String(url.searchParams.get("userId")||"").slice(0,120);
             const rows=userId
               ? await env.DB.prepare("SELECT m.id,m.user_id,m.sender,m.message,m.read_at,m.created_at,u.name,u.email FROM admin_messages m JOIN users u ON u.id=m.user_id WHERE m.user_id=? ORDER BY m.created_at DESC LIMIT 100").bind(userId).all<any>()
-              : await env.DB.prepare("SELECT m.id,m.user_id,m.sender,m.message,m.read_at,m.created_at,u.name,u.email FROM admin_messages m JOIN users u ON u.id=m.user_id WHERE m.user_id IN (SELECT DISTINCT user_id FROM admin_messages ORDER BY created_at DESC LIMIT 150) ORDER BY m.created_at DESC LIMIT 750").all<any>();
+              : await env.DB.prepare("SELECT m.id,m.user_id,m.sender,m.message,m.read_at,m.created_at,u.name,u.email FROM admin_messages m JOIN users u ON u.id=m.user_id WHERE m.user_id IN (SELECT user_id FROM admin_messages GROUP BY user_id ORDER BY MAX(created_at) DESC LIMIT 150) ORDER BY m.created_at DESC LIMIT 750").all<any>();
             return json({ok:true,messages:rows.results||[]});
           }
           if(url.pathname==="/api/admin/messages/read" && request.method==="POST"){
