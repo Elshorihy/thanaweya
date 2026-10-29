@@ -1526,3 +1526,26 @@ body:has(.app)::before {
 @media(max-width:900px){.levelHero{grid-template-columns:auto minmax(0,1fr)}.levelHeroScore{grid-column:1/-1;display:grid;grid-template-columns:auto auto minmax(70px,1fr);align-items:center;gap:12px}.levelHeroScore strong{font-size:25px}.levelHeroScore small{grid-column:1/-1}.levelDailyGrid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:620px){.levelHero{grid-template-columns:1fr;gap:15px;padding:21px;border-radius:21px}.levelHeroOrb{width:60px;height:60px;border-radius:19px}.levelHeroCopy h1{font-size:31px}.levelHeroScore{grid-template-columns:auto auto;gap:8px 12px}.levelHeroScore .levelScoreTrack{grid-column:1/-1;grid-row:2}.levelHeroScore small{grid-column:1/-1}.levelDailyGrid{gap:9px}.levelMetric{padding:13px;border-radius:15px;gap:8px}.levelMetric>strong{font-size:22px}.levelSubjectGrid{grid-template-columns:1fr;gap:9px}.levelNextCard{align-items:flex-start;flex-wrap:wrap;padding:17px;gap:12px}.levelNextInfo{width:calc(100% - 70px);flex:1}.levelStartButton{width:100%}.levelHeatCard{padding:13px}.levelHeatGrid{gap:7px}.levelHeatCell{border-radius:6px}.levelHeatCellWrap small{font-size:8px}.levelHeatMeta{font-size:10px}.levelHeatFoot{font-size:10px}}
 @media(prefers-reduced-motion:no-preference){.levelSubjectCard{animation:levelCardIn .35s ease both}.levelSubjectCard:nth-child(2){animation-delay:.04s}.levelSubjectCard:nth-child(3){animation-delay:.08s}.levelSubjectCard:nth-child(4){animation-delay:.12s}@keyframes levelCardIn{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:translateY(0)}}}
+
+
+/* Stability hotfix: prevent content flicker caused by entrance/compositing animations. */
+@media (prefers-reduced-motion: no-preference) {
+  .appMain > section {
+    animation: none !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+  }
+  body:has(.app)::before {
+    animation: none !important;
+    transform: none !important;
+    filter: none !important;
+  }
+  .app .card,
+  .app .stat,
+  .app .daycard,
+  .app button,
+  .newLanding button {
+    animation: none !important;
+    transition-property: border-color, box-shadow, background-color, color !important;
+  }
+}
