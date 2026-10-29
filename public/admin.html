@@ -244,3 +244,16 @@ if(b.dataset.competitionDelete){if(!confirm('حذف المسابقة وكل مح
 window.setInterval(()=>{if(!adminAuthed)return;loadMessages();if(activeTab==='overview')loadOverview()},15000);
 bootAdmin();
 </script></body></html>
+
+/* Use the real Thanaweya logo instead of the decorative circles on stat cards */
+.stat:after{
+  content:"";
+  inset:auto 14px 12px auto;
+  width:76px;
+  height:76px;
+  border-radius:14px;
+  background:url("/icons/thanaweya-palestine-192.jpg") center/contain no-repeat;
+  opacity:.14;
+  filter:saturate(.8);
+  pointer-events:none;
+}
