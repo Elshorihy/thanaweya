@@ -2665,6 +2665,50 @@ export default {
           // bootstrapping every unrelated app table before loading the feed.
           await ensureSchema(env);
         }
+        if(url.pathname.startsWith("/api/admin/")) {
+          const admin=await userFrom(request,env);
+          if(!admin) return json({error:"سجّل الدخول بحساب المالك أولًا."},401);
+          if(String(admin.role||"")!=="owner") return json({error:"غير مسموح. لوحة الإدارة للمالك فقط."},403);
+          await ensureBridgeTools(env);
+          await ensureAdminTools(env);
+          if(url.pathname==="/api/admin/overview" && request.method==="GET"){
+            const [users,verified,pending,posts,reports,messages,activity,maintenance,announcement]=await Promise.all([
+              env.DB.prepare("SELECT COUNT(*) n FROM users").first<any>(),
+              env.DB.prepare("SELECT COUNT(*) n FROM users WHERE verified=1").first<any>(),
+              env.DB.prepare("SELECT COUNT(*) n FROM verification_requests WHERE status='pending'").first<any>().catch(()=>({n:0})),
+              env.DB.prepare("SELECT COUNT(*) n FROM community_posts WHERE deleted_at IS NULL").first<any>().catch(()=>({n:0})),
+              env.DB.prepare("SELECT COUNT(*) n FROM student_reports WHERE status NOT IN ('resolved','closed')").first<any>().catch(()=>({n:0})),
+              env.DB.prepare("SELECT COUNT(*) n FROM admin_messages WHERE sender='user' AND read_at IS NULL").first<any>().catch(()=>({n:0})),
+              env.DB.prepare("SELECT action,target,message,created_at FROM admin_activity ORDER BY created_at DESC LIMIT 8").all<any>().catch(()=>({results:[]} as any)),
+              getAdminSetting(env,"maintenance","0"),
+              getAdminSetting(env,"site_announcement","")
+            ]);
+            let announcementData:any=null; try{announcementData=announcement?JSON.parse(announcement):null}catch{}
+            return json({ok:true,stats:{users:Number(users?.n||0),verified:Number(verified?.n||0),pending:Number(pending?.n||0),posts:Number(posts?.n||0),reports:Number(reports?.n||0),messages:Number(messages?.n||0),maintenance:maintenance==="1"},announcement:announcementData,activity:(activity.results||[]).map((x:any)=>({action:String(x.action||""),target:String(x.target||""),message:String(x.message||""),created_at:Number(x.created_at||0)}))});
+          }
+          if(url.pathname==="/api/admin/reports" && request.method==="GET"){
+            const rows=await env.DB.prepare("SELECT r.id,r.category,r.message,r.status,r.admin_reply,r.created_at,r.updated_at,u.name,u.email FROM student_reports r JOIN users u ON u.id=r.user_id ORDER BY CASE r.status WHEN 'new' THEN 0 WHEN 'in_progress' THEN 1 ELSE 2 END,r.created_at DESC LIMIT 100").all<any>();
+            return json({ok:true,reports:(rows.results||[])});
+          }
+          if(url.pathname==="/api/admin/report-update" && request.method==="POST"){
+            const b=await body(request), id=String(b?.id||"").trim(), status=String(b?.status||"").trim(), reply=String(b?.reply||"").trim().slice(0,2000);
+            if(!id) return json({error:"رقم البلاغ مطلوب."},400);
+            if(!["new","in_progress","resolved","closed"].includes(status)) return json({error:"حالة البلاغ غير صحيحة."},400);
+            const report=await env.DB.prepare("SELECT id,user_id FROM student_reports WHERE id=?").bind(id).first<any>();
+            if(!report) return json({error:"البلاغ غير موجود."},404);
+            await env.DB.prepare("UPDATE student_reports SET status=?,admin_reply=?,updated_at=? WHERE id=?").bind(status,reply,Date.now(),id).run();
+            if(reply) await env.DB.prepare("INSERT INTO admin_messages(id,user_id,sender,message,created_at) VALUES(?,?,'admin',?,?)").bind(randomHex(10),String(report.user_id),reply,Date.now()).run();
+            await adminLog(env,String(admin.id),"WEB_ADMIN_REPORT_UPDATE",id,"status="+status+(reply?" +reply":""));
+            return json({ok:true});
+          }
+          if(url.pathname==="/api/admin/maintenance" && request.method==="POST"){
+            const b=await body(request), enabled=!!b?.enabled;
+            await setAdminSetting(env,"maintenance",enabled?"1":"0");
+            await adminLog(env,String(admin.id),enabled?"WEB_ADMIN_MAINTENANCE_ON":"WEB_ADMIN_MAINTENANCE_OFF");
+            return json({ok:true,enabled});
+          }
+          return json({error:"مسار الإدارة غير موجود."},404);
+        }
         if(url.pathname==="/api/competitions" && request.method==="GET"){
           await ensureCompetitionTables(env);
           const u=await userFrom(request,env);
