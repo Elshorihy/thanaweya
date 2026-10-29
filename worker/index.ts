@@ -2935,8 +2935,18 @@ export default {
           }
           if(url.pathname==="/api/admin/messages" && request.method==="GET"){
             await ensureBridgeTools(env);
-            const rows=await env.DB.prepare("SELECT m.user_id,m.message,m.created_at,u.name,u.email,COUNT(*) OVER(PARTITION BY m.user_id) AS message_count FROM admin_messages m JOIN users u ON u.id=m.user_id WHERE m.sender='user' AND m.read_at IS NULL ORDER BY m.created_at DESC LIMIT 100").all<any>();
+            const userId=String(url.searchParams.get("userId")||"").slice(0,120);
+            const rows=userId
+              ? await env.DB.prepare("SELECT m.id,m.user_id,m.sender,m.message,m.read_at,m.created_at,u.name,u.email FROM admin_messages m JOIN users u ON u.id=m.user_id WHERE m.user_id=? ORDER BY m.created_at DESC LIMIT 100").bind(userId).all<any>()
+              : await env.DB.prepare("SELECT m.id,m.user_id,m.sender,m.message,m.read_at,m.created_at,u.name,u.email FROM admin_messages m JOIN users u ON u.id=m.user_id WHERE m.user_id IN (SELECT DISTINCT user_id FROM admin_messages ORDER BY created_at DESC LIMIT 150) ORDER BY m.created_at DESC LIMIT 750").all<any>();
             return json({ok:true,messages:rows.results||[]});
+          }
+          if(url.pathname==="/api/admin/messages/read" && request.method==="POST"){
+            await ensureBridgeTools(env);
+            const b=await body(request),userId=String(b?.userId||"").slice(0,120);
+            if(!userId)return json({error:"حدد محادثة الطالب."},400);
+            await env.DB.prepare("UPDATE admin_messages SET read_at=? WHERE user_id=? AND sender='user' AND read_at IS NULL").bind(Date.now(),userId).run();
+            return json({ok:true});
           }
           if(url.pathname==="/api/admin/messages" && request.method==="POST"){
             await ensureBridgeTools(env);
