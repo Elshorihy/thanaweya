@@ -305,18 +305,17 @@ function StudentBridge({auth,notify}:{auth:import('./auth').AuthUser|null,notify
   if(!auth)return;
   setBridgeLoading(true);setBridgeError('');
   try{
-   const responses=await Promise.all([
-    fetch('/api/bridge/reports',{credentials:'include',cache:'no-store'}),
-    fetch('/api/bridge/messages',{credentials:'include',cache:'no-store'}),
-    fetch('/api/bridge/polls',{credentials:'include',cache:'no-store'})
+   const results=await Promise.all([
+    (async()=>{try{const r=await fetch('/api/bridge/reports',{credentials:'include',cache:'no-store'});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(String(d?.error||'HTTP '+r.status));return {key:'البلاغات',data:d};}catch(e){return {key:'البلاغات',error:e instanceof Error?e.message:'تعذر تحميل البلاغات'};}})(),
+    (async()=>{try{const r=await fetch('/api/bridge/messages',{credentials:'include',cache:'no-store'});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(String(d?.error||'HTTP '+r.status));return {key:'الرسائل',data:d};}catch(e){return {key:'الرسائل',error:e instanceof Error?e.message:'تعذر تحميل الرسائل'};}})(),
+    (async()=>{try{const r=await fetch('/api/bridge/polls',{credentials:'include',cache:'no-store'});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(String(d?.error||'HTTP '+r.status));return {key:'الاستطلاعات',data:d};}catch(e){return {key:'الاستطلاعات',error:e instanceof Error?e.message:'تعذر تحميل الاستطلاعات'};}})()
    ]);
-   const data=await Promise.all(responses.map(async r=>({ok:r.ok,status:r.status,data:await r.json().catch(()=>({}))})));
-   const failed=data.find(x=>!x.ok);
-   if(failed)throw new Error(String(failed.data?.error||('تعذر تحميل مركز التواصل (HTTP '+failed.status+').')));
-   const [rd,md,pd]=data.map(x=>x.data);
-   setReports(Array.isArray(rd.reports)?rd.reports:[]);
-   setMessages(Array.isArray(md.messages)?md.messages:[]);
-   setPolls(Array.isArray(pd.polls)?pd.polls:[]);
+   const reportsResult=results[0],messagesResult=results[1],pollsResult=results[2];
+   if('data' in reportsResult)setReports(Array.isArray(reportsResult.data.reports)?reportsResult.data.reports:[]);
+   if('data' in messagesResult)setMessages(Array.isArray(messagesResult.data.messages)?messagesResult.data.messages:[]);
+   if('data' in pollsResult)setPolls(Array.isArray(pollsResult.data.polls)?pollsResult.data.polls:[]);
+   const errors=results.filter((x:any)=>'error' in x).map((x:any)=>x.key+': '+x.error);
+   setBridgeError(errors.join(' — '));
   }catch(e){setBridgeError(e instanceof Error?e.message:'تعذر الاتصال بمركز التواصل. جرّب التحديث.');}
   finally{setBridgeLoading(false);}
  };
