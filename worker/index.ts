@@ -2983,7 +2983,16 @@ export default {
             return json({ok:true,answer,conversationId:chatId,action:{executed:executed>0,count:executed},used:reservedCount,remaining:Math.max(0,limit-reservedCount),limit,model:String(env.GEMINI_MODEL||"gemini-2.5-flash")});
           }catch(e){
             if(usageReserved){try{await env.DB.prepare("UPDATE ai_usage SET count=MAX(0,count-1) WHERE user_id=? AND day=?").bind(u.id,day).run();}catch(rollbackError){console.error("AI quota rollback failed",rollbackError);}}
-            console.error("AI request failed",e);const detail=String(e instanceof Error?e.message:e||"").slice(0,180);const userMessage=detail==="NO_AI"?"خدمة الذكاء الاصطناعي غير مهيأة على الخادم. لازم يتضبط مفتاح Gemini في Cloudflare.":"خدمة الذكاء الاصطناعي لم تستجب بعد محاولات الاتصال. جرّب بعد قليل، ولو استمرت المشكلة فالإدارة تحتاج مراجعة إعدادات Gemini.";return json({ok:false,retry:true,error:userMessage},503)
+            console.error("AI request failed",e);const detail=String(e instanceof Error?e.message:e||"").slice(0,240);
+            let userMessage="تعذر على Gemini الرد بعد محاولات الاتصال. جرّب بعد قليل.";
+            let diagnosticCode="AI_UNAVAILABLE";
+            if(detail==="NO_AI"){diagnosticCode="NO_AI";userMessage="خدمة الذكاء الاصطناعي غير مهيأة: مفتاح Gemini غير موجود في إعدادات الخادم.";}
+            else if(detail.startsWith("AI_AUTH_ERROR:")){diagnosticCode="GEMINI_AUTH";userMessage="مفتاح Gemini مرفوض من Google. الإدارة تحتاج مراجعة المفتاح وصلاحياته في Cloudflare.";}
+            else if(/HTTP_429/.test(detail)){diagnosticCode="GEMINI_QUOTA";userMessage="وصلت خدمة Gemini إلى حد الطلبات أو الحصة المتاحة. جرّب لاحقًا.";}
+            else if(/GENERATE_CONTENT_TIMEOUT/.test(detail)){diagnosticCode="GEMINI_TIMEOUT";userMessage="Gemini اتأخر في الرد. جرّب مرة أخرى بعد قليل.";}
+            else if(/HTTP_404/.test(detail)){diagnosticCode="GEMINI_MODEL_NOT_FOUND";userMessage="نموذج Gemini غير متاح للمفتاح الحالي. راجع إعدادات النموذج في Cloudflare.";}
+            else if(/HTTP_400/.test(detail)){diagnosticCode="GEMINI_BAD_REQUEST";userMessage="Google رفض إعدادات طلب Gemini. تم تسجيل رمز التشخيص لمراجعة الإدارة.";}
+            return json({ok:false,retry:true,error:userMessage,code:diagnosticCode},503)
           }
         }
         if(url.pathname==="/api/auth/register/start" && request.method==="POST") {
