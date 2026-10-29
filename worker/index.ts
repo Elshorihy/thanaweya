@@ -189,31 +189,7 @@ async function callGemini(env:Env, contents:any[], systemInstruction:string, gen
   let lastError="";
   // Use the stable generateContent REST API directly. The Interactions endpoint can
   // be unavailable for a project/model and was delaying every request before fallback.
-  for(const model of models){
-    const controller=new AbortController();
-    const timeout=setTimeout(()=>controller.abort(),25000);
-    try{
-      const payload:any={model,input,store:false,generation_config:generationConfig};
-      if(responseFormat)payload.response_format=responseFormat;
-      const response=await fetch("https://generativelanguage.googleapis.com/v1beta/interactions",{
-        method:"POST",
-        headers:{"content-type":"application/json","x-goog-api-key":apiKey},
-        body:JSON.stringify(payload),
-        signal:controller.signal
-      });
-      const raw=await response.text();
-      let data:any=null; try{data=JSON.parse(raw)}catch{}
-      if(response.ok){
-        const answer=String(data?.output_text||"").trim() ||
-          (Array.isArray(data?.steps)?data.steps.filter((x:any)=>x?.type==="model_output").flatMap((x:any)=>x?.content||[]).map((x:any)=>String(x?.text||"")).filter(Boolean).join("\n").trim():"");
-        if(answer)return answer;
-        lastError="INTERACTIONS_EMPTY";
-      }else{
-        lastError=String(data?.error?.message||response.status);
-      }
-    }catch(e){lastError=e instanceof Error?(e.name==="AbortError"?"INTERACTIONS_TIMEOUT":e.message):"INTERACTIONS_NETWORK"}
-    finally{clearTimeout(timeout)}
-  }
+  // Use the stable generateContent REST API directly to avoid slow unsupported Interactions attempts.
   for(const model of models){
     const controller=new AbortController();
     const timeout=setTimeout(()=>controller.abort(),25000);
