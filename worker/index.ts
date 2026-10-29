@@ -3742,6 +3742,10 @@ export default {
       } catch(e) {
         console.error("API error", url.pathname, e);
         const message=e instanceof Error ? e.message : String(e);
+        try{
+          await ensureClientErrors(env);
+          await env.DB.prepare("INSERT INTO client_errors(id,source_key,source,page,message,stack,user_agent,user_id,created_at,resolved_at) VALUES(?,?,?,?,?,?,?,?,?,NULL)").bind(randomHex(12),"server","server",url.pathname.slice(0,180),message.slice(0,400),e instanceof Error?String(e.stack||"").slice(0,1800):"",String(request.headers.get("User-Agent")||"").slice(0,300),null,Date.now()).run();
+        }catch(logError){console.error("Could not persist API error",logError)}
         if(url.pathname!=="/api/telegram/webhook" && url.pathname!=="/api/health"){
           ctx.waitUntil(sendAdminAlert(env,"❌ خطأ في الخادم","📍 "+url.pathname+"\n⚠️ "+message.slice(0,300),"server_error",5*60*1000));
         }
