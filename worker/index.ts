@@ -1593,29 +1593,30 @@ async function sendCompetitionWinnerResult(env:Env,chatId:string,id:string,c:any
 }
 
 function telegramDashboardKeyboard(){
-  return {inline_keyboard:[
-    [{text:"🎫 بلاغات الطلاب",callback_data:"bridge_reports"},{text:"💬 رسائل الموقع",callback_data:"bridge_messages"}],
-    [{text:"🧠 تحليل الأعطال",callback_data:"bridge_analysis"},{text:"📊 استطلاع جديد",callback_data:"bridge_poll_create"}],
-    [{text:"💡 اقتراحات تطوير",callback_data:"dash_improve"},{text:"🎯 مهمات اليوم",callback_data:"dash_missions"}],
-    [{text:"⚡ مركز القيادة",callback_data:"dash_center"}],
-    [{text:"🧪 تشخيص عميق للنظام",callback_data:"dash_diagnostics"}],
-    [{text:"📊 الرئيسية والإحصائيات",callback_data:"dash_stats"},{text:"🩺 حالة النظام",callback_data:"dash_system"}],
-    [{text:"👥 المستخدمين",callback_data:"dash_users"},{text:"💳 التوثيق",callback_data:"dash_verifications"}],
-    [{text:"🔎 بحث عن مستخدم",callback_data:"dash_search"}],
-    [{text:"🟢 نشاط المستخدمين",callback_data:"dash_live"},{text:"🕐 آخر المستخدمين",callback_data:"dash_recent"}],
-    [{text:"📈 الزيارات",callback_data:"dash_traffic"},{text:"📊 تحليلات 30 يوم",callback_data:"dash_traffic30"}],
-    [{text:"🔐 الدخول و OTP",callback_data:"dash_auth"},{text:"📱 واتساب",callback_data:"dash_wa"}],
-    [{text:"🛠️ أدوات الإدارة",callback_data:"dash_tools"}],
-    [{text:"📚 مصادر المحاضرات",callback_data:"dash_global_lectures"}],
-    [{text:"🏆 مسابقات ثانوية",callback_data:"dash_competitions"}],
-    [{text:"🧹 مدير مجتمع ثانوية",callback_data:"dash_community_manager"}],
-    [{text:"🧠 المساعد الإداري",callback_data:"dash_admin_assistant"}],
-    [{text:"↩️ تراجع عن آخر عملية",callback_data:"dash_undo_last"}],
-    [{text:"📰 منشورات مجتمع ثانوية",callback_data:"dash_community_posts"}],
-    [{text:"📢 مركز الإشعارات",callback_data:"dash_global_notifications"}],
-    [{text:"📢 إرسال واتساب",callback_data:"dash_broadcast"},{text:"📧 إرسال Gmail",callback_data:"dash_email_broadcast"}],
-    [{text:"🔄 تحديث اللوحة",callback_data:"dash_home"}]
-  ]};
+  // A persistent bottom keyboard: unlike inline buttons, it stays beside the message field.
+  return {
+    keyboard:[
+      [{text:"📊 الرئيسية والإحصائيات"},{text:"⚡ مركز القيادة"}],
+      [{text:"👥 المستخدمين"},{text:"💳 التوثيق"}],
+      [{text:"🎫 بلاغات الطلاب"},{text:"💬 رسائل الموقع"}],
+      [{text:"🟢 نشاط المستخدمين"},{text:"🕐 آخر المستخدمين"}],
+      [{text:"📈 الزيارات"},{text:"📊 تحليلات 30 يوم"}],
+      [{text:"🧠 تحليل الأعطال"},{text:"🩺 حالة النظام"}],
+      [{text:"🔎 بحث عن مستخدم"},{text:"🔐 الدخول و OTP"}],
+      [{text:"📱 واتساب"},{text:"🛠️ أدوات الإدارة"}],
+      [{text:"📚 مصادر المحاضرات"},{text:"🏆 مسابقات ثانوية"}],
+      [{text:"🧹 مدير مجتمع ثانوية"},{text:"📰 منشورات المجتمع"}],
+      [{text:"🧠 المساعد الإداري"},{text:"🎯 مهمات اليوم"}],
+      [{text:"💡 اقتراحات تطوير"},{text:"🧪 تشخيص النظام"}],
+      [{text:"📢 مركز الإشعارات"},{text:"📊 استطلاع جديد"}],
+      [{text:"📢 إرسال واتساب"},{text:"📧 إرسال Gmail"}],
+      [{text:"↩️ تراجع عن آخر عملية"},{text:"🔄 تحديث اللوحة"}]
+    ],
+    is_persistent:true,
+    resize_keyboard:true,
+    one_time_keyboard:false,
+    input_field_placeholder:"اختار قسم الإدارة…"
+  };
 }
 const dashBack=()=>({inline_keyboard:[
   [{text:"⚡ مركز القيادة",callback_data:"dash_center"}],
@@ -2465,6 +2466,43 @@ async function handleTelegramUpdate(env:Env,update:any){
     return;
   }
 
+  const dashboardTextActions:Record<string,string>={
+    "📊 الرئيسية والإحصائيات":"dash_stats",
+    "⚡ مركز القيادة":"dash_center",
+    "👥 المستخدمين":"dash_users",
+    "💳 التوثيق":"dash_verifications",
+    "🎫 بلاغات الطلاب":"bridge_reports",
+    "💬 رسائل الموقع":"bridge_messages",
+    "🟢 نشاط المستخدمين":"dash_live",
+    "🕐 آخر المستخدمين":"dash_recent",
+    "📈 الزيارات":"dash_traffic",
+    "📊 تحليلات 30 يوم":"dash_traffic30",
+    "🧠 تحليل الأعطال":"bridge_analysis",
+    "🩺 حالة النظام":"dash_system",
+    "🔎 بحث عن مستخدم":"dash_search",
+    "🔐 الدخول و OTP":"dash_auth",
+    "📱 واتساب":"dash_wa",
+    "🛠️ أدوات الإدارة":"dash_tools",
+    "📚 مصادر المحاضرات":"dash_global_lectures",
+    "🏆 مسابقات ثانوية":"dash_competitions",
+    "🧹 مدير مجتمع ثانوية":"dash_community_manager",
+    "📰 منشورات المجتمع":"dash_community_posts",
+    "🧠 المساعد الإداري":"dash_admin_assistant",
+    "🎯 مهمات اليوم":"dash_missions",
+    "💡 اقتراحات تطوير":"dash_improve",
+    "🧪 تشخيص النظام":"dash_diagnostics",
+    "📢 مركز الإشعارات":"dash_global_notifications",
+    "📊 استطلاع جديد":"bridge_poll_create",
+    "📢 إرسال واتساب":"dash_broadcast",
+    "📧 إرسال Gmail":"dash_email_broadcast",
+    "↩️ تراجع عن آخر عملية":"dash_undo_last",
+    "🔄 تحديث اللوحة":"dash_home"
+  };
+  const dashboardAction=dashboardTextActions[text];
+  if(dashboardAction){
+    await handleTelegramUpdate(env,{callback_query:{id:"reply-keyboard-"+Date.now(),data:dashboardAction,message}});
+    return;
+  }
   if(text==="/start" || text==="/panel" || text==="/dashboard" || text==="/stats" || text==="📊 الإحصائيات الآن"){await sendTelegramDashboard(env,chatId);return;}
   if(text==="/report"){await sendTelegramAdminReport(env,chatId);return;}
   if(text==="/tools"){await sendTelegramAdminTools(env,chatId);return;}
