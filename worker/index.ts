@@ -2958,13 +2958,31 @@ export default {
             else{await env.DB.prepare("INSERT INTO site_competitions(id,title,description,kind,subject,status,duration_seconds,points,questions_json,created_at) VALUES(?,?,?,?,?,'draft',?,?,?,?)").bind(randomHex(12),title,description,kind,subject,duration,points,JSON.stringify(questions),now).run();await adminLog(env,String(env.TELEGRAM_CHAT_ID||admin.id),"WEB_ADMIN_CREATE_COMPETITION","",title);}
             return json({ok:true});
           }
+          if(url.pathname==="/api/admin/sessions" && request.method==="GET"){
+            await ensureLoginAudit(env);
+            const rows=await env.DB.prepare("SELECT s.id AS session_id,s.user_id,u.name,u.email,s.created_at,s.expires_at,(SELECT lh.device_name FROM login_history lh WHERE lh.user_id=s.user_id AND lh.login_type='site' AND ABS(lh.logged_in_at-s.created_at)<120000 ORDER BY ABS(lh.logged_in_at-s.created_at) LIMIT 1) AS device_name FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.expires_at>? ORDER BY s.created_at DESC LIMIT 200").bind(Date.now()).all<any>();
+            return json({ok:true,sessions:rows.results||[]});
+          }
+          if(url.pathname==="/api/admin/sessions/revoke" && request.method==="POST"){
+            const b=await body(request),sessionId=String(b?.sessionId||"").trim(),userId=String(b?.userId||"").trim();
+            if(sessionId){
+              const result=await env.DB.prepare("DELETE FROM sessions WHERE id=? AND user_id<>'owner-hamza'").bind(sessionId).run();
+              if(!Number(result.meta?.changes||0)) return json({error:"الجلسة غير موجودة أو تم إنهاؤها بالفعل."},404);
+            }else if(userId && userId!=="owner-hamza"){
+              await env.DB.prepare("DELETE FROM sessions WHERE user_id=?").bind(userId).run();
+            }else return json({error:"حدد جلسة أو حسابًا صحيحًا."},400);
+            await adminLog(env,String(env.TELEGRAM_CHAT_ID||admin.id),"WEB_ADMIN_REVOKE_SESSION",sessionId||userId,sessionId?"إنهاء جلسة واحدة":"إنهاء جميع جلسات المستخدم");
+            return json({ok:true});
+          }
           if(url.pathname==="/api/admin/login-history" && request.method==="GET"){
             await ensureLoginAudit(env);
             const rows=await env.DB.prepare("SELECT id,user_id,email,name,device_name,user_agent,login_type,logged_in_at FROM login_history ORDER BY logged_in_at DESC LIMIT 200").all<any>();
             return json({ok:true,logins:rows.results||[]});
           }
           if(url.pathname==="/api/admin/overview" && request.method==="GET"){
-            const [users,verified,pending,posts,reports,messages,activity,maintenance,announcement]=await Promise.all([
+            await ensureLoginAudit(env);
+            await ensurePageViews(env).catch(()=>{});
+            const [users,verified,pending,posts,reports,messages,activity,maintenance,announcement,activeSessions,visitsToday]=await Promise.all([
               env.DB.prepare("SELECT COUNT(*) n FROM users").first<any>(),
               env.DB.prepare("SELECT COUNT(*) n FROM users WHERE verified=1").first<any>(),
               env.DB.prepare("SELECT COUNT(*) n FROM verification_requests WHERE status='pending'").first<any>().catch(()=>({n:0})),
@@ -2973,10 +2991,12 @@ export default {
               env.DB.prepare("SELECT COUNT(*) n FROM admin_messages WHERE sender='user' AND read_at IS NULL").first<any>().catch(()=>({n:0})),
               env.DB.prepare("SELECT action,target,message,created_at FROM admin_activity ORDER BY created_at DESC LIMIT 8").all<any>().catch(()=>({results:[]} as any)),
               getAdminSetting(env,"maintenance","0"),
-              getAdminSetting(env,"site_announcement","")
+              getAdminSetting(env,"site_announcement",""),
+              env.DB.prepare("SELECT COUNT(*) n FROM sessions WHERE expires_at>?").bind(Date.now()).first<any>().catch(()=>({n:0})),
+              env.DB.prepare("SELECT COUNT(*) n FROM site_page_views WHERE day=?").bind(egyptDay()).first<any>().catch(()=>({n:0}))
             ]);
             let announcementData:any=null; try{announcementData=announcement?JSON.parse(announcement):null}catch{}
-            return json({ok:true,stats:{users:Number(users?.n||0),verified:Number(verified?.n||0),pending:Number(pending?.n||0),posts:Number(posts?.n||0),reports:Number(reports?.n||0),messages:Number(messages?.n||0),maintenance:maintenance==="1"},announcement:announcementData,activity:(activity.results||[]).map((x:any)=>({action:String(x.action||""),target:String(x.target||""),message:String(x.message||""),created_at:Number(x.created_at||0)}))});
+            return json({ok:true,stats:{users:Number(users?.n||0),verified:Number(verified?.n||0),pending:Number(pending?.n||0),posts:Number(posts?.n||0),reports:Number(reports?.n||0),messages:Number(messages?.n||0),activeSessions:Number(activeSessions?.n||0),visitsToday:Number(visitsToday?.n||0),maintenance:maintenance==="1"},announcement:announcementData,activity:(activity.results||[]).map((x:any)=>({action:String(x.action||""),target:String(x.target||""),message:String(x.message||""),created_at:Number(x.created_at||0)}))});
           }
           if(url.pathname==="/api/admin/reports" && request.method==="GET"){
             const rows=await env.DB.prepare("SELECT r.id,r.category,r.message,r.status,r.admin_reply,r.created_at,r.updated_at,u.name,u.email FROM student_reports r JOIN users u ON u.id=r.user_id ORDER BY CASE r.status WHEN 'new' THEN 0 WHEN 'in_progress' THEN 1 ELSE 2 END,r.created_at DESC LIMIT 100").all<any>();
