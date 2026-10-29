@@ -2512,7 +2512,7 @@ export default {
     if(url.pathname.startsWith("/api/")) {
       try {
         if(request.method==="OPTIONS") return new Response(null,{status:204,headers:{"access-control-allow-origin":"*","access-control-allow-methods":"GET,POST,PUT,DELETE,OPTIONS","access-control-allow-headers":"content-type, accept","cache-control":"no-store"}});
-        if(url.pathname!=="/api/pageview" && url.pathname!=="/api/telegram/webhook" && url.pathname!=="/api/health" && !url.pathname.startsWith("/api/auth/")){
+        if(url.pathname!=="/api/pageview" && url.pathname!=="/api/telegram/webhook" && url.pathname!=="/api/health" && url.pathname!=="/api/health/ai" && !url.pathname.startsWith("/api/auth/")){
           const maintenanceRead=env.DB.prepare("SELECT value FROM admin_settings WHERE key=?").bind("maintenance").first<any>().then((row:any)=>String(row?.value||"0")).catch(()=>"0");
           const maintenance=await Promise.race([maintenanceRead,new Promise<string>(resolve=>setTimeout(()=>resolve("0"),1500))]);
           const token=cookieValue(request);
@@ -2629,6 +2629,28 @@ export default {
         if(url.pathname==="/api/health") {
           try { await ensureSchema(env); await env.DB.prepare("SELECT 1 AS ok").first(); return json({ok:true,db:true}); }
           catch(e) { console.error("D1 health check failed",e); return json({ok:false,db:false,error:"D1 binding/database is not available. Check the DB binding in Cloudflare."},503); }
+        }
+        // Protected deployment-only provider smoke test. The Telegram bot token is never returned or logged.
+        if(url.pathname==="/api/health/ai" && request.method==="POST") {
+          if(!env.TELEGRAM_BOT_TOKEN || request.headers.get("x-thanaweya-health-token")!==env.TELEGRAM_BOT_TOKEN) return json({error:"Not found"},404);
+          const started=Date.now();
+          await env.DB.prepare("CREATE TABLE IF NOT EXISTS ai_health_checks (id INTEGER PRIMARY KEY AUTOINCREMENT, ok INTEGER NOT NULL, code TEXT NOT NULL, model TEXT NOT NULL, latency_ms INTEGER NOT NULL, created_at INTEGER NOT NULL)").run();
+          try {
+            const raw=await callGemini(env,[{role:"user",parts:[{text:'Return exactly a JSON object with the boolean field ok set to true.'}]}],"You are an automated deployment smoke test. Return only valid JSON with ok=true.",{responseMimeType:"application/json",responseSchema:{type:"object",properties:{ok:{type:"boolean"}},required:["ok"]}});
+            const result=JSON.parse(raw);
+            if(result?.ok!==true) throw new Error("GEMINI_SMOKE_INVALID_RESPONSE");
+            const latency=Date.now()-started;
+            await env.DB.prepare("INSERT INTO ai_health_checks(ok,code,model,latency_ms,created_at) VALUES(1,'OK','gemini-3.5-flash-lite',?,?)").bind(latency,Date.now()).run();
+            await env.DB.prepare("DELETE FROM ai_health_checks WHERE id NOT IN (SELECT id FROM ai_health_checks ORDER BY id DESC LIMIT 10)").run();
+            return json({ok:true,provider:"gemini",model:"gemini-3.5-flash-lite",latencyMs:latency});
+          } catch(e) {
+            const detail=String(e instanceof Error?e.message:e||"AI_UNAVAILABLE");
+            const code=detail==="NO_AI"?"NO_AI":detail.startsWith("AI_AUTH_ERROR:")?"GEMINI_AUTH":/HTTP_429/.test(detail)?"GEMINI_QUOTA":/HTTP_404/.test(detail)?"GEMINI_MODEL_NOT_FOUND":/HTTP_400/.test(detail)?"GEMINI_BAD_REQUEST":/TIMEOUT/.test(detail)?"GEMINI_TIMEOUT":"GEMINI_UNAVAILABLE";
+            await env.DB.prepare("INSERT INTO ai_health_checks(ok,code,model,latency_ms,created_at) VALUES(0,?,'gemini-3.5-flash-lite',?,?)").bind(code,Date.now()-started,Date.now()).run();
+            await env.DB.prepare("DELETE FROM ai_health_checks WHERE id NOT IN (SELECT id FROM ai_health_checks ORDER BY id DESC LIMIT 10)").run();
+            console.error("Gemini deployment smoke test failed",code);
+            return json({ok:false,provider:"gemini",code},503);
+          }
         }
         // Login must stay on the shortest possible path: all auth tables are already
         // provisioned by registration/normal app traffic. Running schema migrations,
