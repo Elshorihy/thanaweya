@@ -3430,6 +3430,14 @@ export default {
         return json({error:"حدث خطأ في الخادم",detail:message.slice(0,240)},500);
       }
     }
+    if(url.pathname === "/admin" || url.pathname === "/admin/"){
+      const assetUrl=new URL("/admin.html",url);
+      const assetRequest=new Request(assetUrl.toString(),request);
+      const assetResponse=await env.ASSETS.fetch(assetRequest);
+      const headers=new Headers(assetResponse.headers);
+      headers.set("cache-control","no-store, no-cache, must-revalidate, max-age=0");
+      return new Response(assetResponse.body,{status:assetResponse.status,statusText:assetResponse.statusText,headers});
+    }
     if(url.pathname === "/" || url.pathname === "/index.html"){
       const assetResponse=await env.ASSETS.fetch(request);
       const headers=new Headers(assetResponse.headers);
