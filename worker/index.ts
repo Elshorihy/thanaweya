@@ -3430,12 +3430,15 @@ export default {
         return json({error:"حدث خطأ في الخادم",detail:message.slice(0,240)},500);
       }
     }
-    if(url.pathname === "/admin" || url.pathname === "/admin/"){
-      const assetUrl=new URL("/admin.html",url);
-      const assetRequest=new Request(assetUrl.toString(),request);
+    // Admin panel aliases. Serve the static HTML with a fresh GET request so
+    // incoming method/redirect state cannot leak into the asset request.
+    if(url.pathname === "/admin" || url.pathname === "/admin/" || url.pathname === "/control" || url.pathname === "/control/"){
+      const assetUrl=new URL("/admin.html",url.origin);
+      const assetRequest=new Request(assetUrl.toString(),{method:"GET",headers:{"accept":"text/html"}});
       const assetResponse=await env.ASSETS.fetch(assetRequest);
       const headers=new Headers(assetResponse.headers);
       headers.set("cache-control","no-store, no-cache, must-revalidate, max-age=0");
+      headers.set("pragma","no-cache");
       return new Response(assetResponse.body,{status:assetResponse.status,statusText:assetResponse.statusText,headers});
     }
     if(url.pathname === "/" || url.pathname === "/index.html"){
