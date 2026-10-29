@@ -86,6 +86,19 @@ jobs:
           rm -f "$login_body"
           test "$login_status" = "401"
 
+      - name: Verify live Gemini provider
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${TELEGRAM_BOT_TOKEN:-}" ]; then
+            echo "TELEGRAM_BOT_TOKEN is required for the protected Gemini smoke test."
+            exit 1
+          fi
+          BASE="https://thanaweya.sheenomatp.workers.dev"
+          result="$(curl -fsSL --retry 2 --retry-delay 2 --max-time 45 -H "x-thanaweya-health-token: ${TELEGRAM_BOT_TOKEN}" -X POST "$BASE/api/health/ai")"
+          node -e 'const x=JSON.parse(process.argv[1]); if(x.ok!==true) process.exit(1); console.log(JSON.stringify({ok:x.ok,provider:x.provider,model:x.model,latencyMs:x.latencyMs}))' "$result"
+
       - name: Refresh Telegram webhook
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
