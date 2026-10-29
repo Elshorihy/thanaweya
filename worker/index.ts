@@ -2911,9 +2911,7 @@ export default {
             }
             if(channel==="email"){
               if(!subject)return json({error:"عنوان البريد مطلوب."},400);
-              const pending=await env.DB.prepare("SELECT email FROM users WHERE email_verified_at IS NOT NULL ORDER BY created_at ASC").all<any>();
-              const emails=(pending.results||[]).map((x:any)=>String(x.email||"")).filter(Boolean);
-              const result=await broadcastEmail(env,subject,emails,message);
+              const result=await broadcastEmail(env,subject,message);
               await adminLog(env,String(env.TELEGRAM_CHAT_ID||admin.id),"WEB_ADMIN_EMAIL_BROADCAST","all",subject+" sent="+result.sent+" failed="+result.failed);
               return json({ok:true,result});
             }
