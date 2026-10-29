@@ -2705,6 +2705,173 @@ export default {
           if(String(admin.role||"")!=="owner") return json({error:"غير مسموح. لوحة الإدارة للمالك فقط."},403);
           await ensureBridgeTools(env);
           await ensureAdminTools(env);
+          if(url.pathname==="/api/admin/users" && request.method==="GET"){
+            const q=String(url.searchParams.get("q")||"").trim().slice(0,100);
+            const like="%"+q+"%";
+            const rows=await env.DB.prepare("SELECT u.id,u.name,u.email,u.role,u.verified,u.email_verified_at,u.created_at,u.updated_at,p.phone,(SELECT COUNT(*) FROM sessions s WHERE s.user_id=u.id AND s.expires_at>?) AS active_sessions FROM users u LEFT JOIN user_phones p ON p.user_id=u.id WHERE (?='' OR u.name LIKE ? OR u.email LIKE ? OR COALESCE(p.phone,'') LIKE ?) ORDER BY u.created_at DESC LIMIT 100").bind(Date.now(),q,like,like,like).all<any>();
+            return json({ok:true,users:rows.results||[]});
+          }
+          if(url.pathname==="/api/admin/user-action" && request.method==="POST"){
+            const b=await body(request),id=String(b?.id||""),action=String(b?.action||"");
+            if(!id||id==="owner-hamza") return json({error:"لا يمكن تنفيذ الإجراء على حساب المالك."},400);
+            const user=await env.DB.prepare("SELECT id,email,name FROM users WHERE id=?").bind(id).first<any>();
+            if(!user)return json({error:"المستخدم غير موجود."},404);
+            if(action==="logout"){
+              const r=await env.DB.prepare("DELETE FROM sessions WHERE user_id=?").bind(id).run();
+              await adminLog(env,String(env.TELEGRAM_CHAT_ID||admin.id),"WEB_ADMIN_LOGOUT_USER",id,String(r.meta?.changes||0)+" sessions");
+              return json({ok:true,changed:Number(r.meta?.changes||0)});
+            }
+            if(action==="delete"){
+              await env.DB.batch([
+                env.DB.prepare("DELETE FROM sessions WHERE user_id=?").bind(id),
+                env.DB.prepare("DELETE FROM auth_codes WHERE email=?").bind(String(user.email||"")),
+                env.DB.prepare("DELETE FROM user_phones WHERE user_id=?").bind(id),
+                env.DB.prepare("DELETE FROM user_data WHERE user_id=?").bind(id),
+                env.DB.prepare("DELETE FROM users WHERE id=?").bind(id)
+              ]);
+              await adminLog(env,String(env.TELEGRAM_CHAT_ID||admin.id),"WEB_ADMIN_DELETE_USER",id,String(user.email||""));
+              return json({ok:true});
+            }
+            if(action==="verify"){
+              await env.DB.prepare("UPDATE users SET verified=1,updated_at=? WHERE id=?").bind(Date.now(),id).run();
+              await adminLog(env,String(env.TELEGRAM_CHAT_ID||admin.id),"WEB_ADMIN_VERIFY_USER",id,String(user.email||""));
+              return json({ok:true});
+            }
+            if(action==="unverify"){
+              await env.DB.prepare("UPDATE users SET verified=0,updated_at=? WHERE id=?").bind(Date.now(),id).run();
+              await adminLog(env,String(env.TELEGRAM_CHAT_ID||admin.id),"WEB_ADMIN_UNVERIFY_USER",id,String(user.email||""));
+              return json({ok:true});
+            }
+            return json({error:"إجراء غير معروف."},400);
+          }
+          if(url.pathname==="/api/admin/verifications" && request.method==="GET"){
+            const rows=await env.DB.prepare("SELECT vr.id,vr.status,vr.transfer_phone,vr.created_at,vr.reviewed_at,vr.rejection_reason,u.id AS user_id,u.name,u.email FROM verification_requests vr JOIN users u ON u.id=vr.user_id ORDER BY CASE vr.status WHEN 'pending' THEN 0 ELSE 1 END,vr.created_at DESC LIMIT 100").all<any>();
+            return json({ok:true,requests:rows.results||[],paymentPhone:await getPaymentPhone(env)});
+          }
+          if(url.pathname==="/api/admin/verification-decision" && request.method==="POST"){
+            const b=await body(request),id=String(b?.id||""),decision=String(b?.decision||"");
+            if(!id)return json({error:"رقم الطلب مطلوب."},400);
+            if(decision==="approve"){
+              const months=Math.max(1,Math.min(120,Math.floor(Number(b?.months)||1)));
+              await activateVerification(env,String(env.TELEGRAM_CHAT_ID||admin.id),id,months);
+              return json({ok:true});
+            }
+            if(decision==="reject"){
+              const row=await env.DB.prepare("SELECT id,user_id,status FROM verification_requests WHERE id=?").bind(id).first<any>();
+              if(!row)return json({error:"طلب التوثيق غير موجود."},404);
+              if(String(row.status)!=="pending")return json({error:"تم التعامل مع الطلب بالفعل."},409);
+              await env.DB.prepare("UPDATE verification_requests SET status='rejected',reviewed_at=?,reviewed_by=? WHERE id=? AND status='pending'").bind(Date.now(),String(admin.id),id).run();
+              await adminLog(env,String(env.TELEGRAM_CHAT_ID||admin.id),"WEB_ADMIN_REJECT_VERIFICATION",String(row.user_id),id);
+              return json({ok:true});
+            }
+            return json({error:"قرار غير صالح."},400);
+          }
+          if(url.pathname==="/api/admin/community" && request.method==="GET"){
+            await env.DB.prepare("CREATE TABLE IF NOT EXISTS community_posts (id TEXT PRIMARY KEY,user_id TEXT NOT NULL,subject TEXT NOT NULL,kind TEXT NOT NULL,title TEXT NOT NULL,content TEXT NOT NULL,created_at INTEGER NOT NULL,deleted_at INTEGER)").run();
+            const rows=await env.DB.prepare("SELECT p.id,p.user_id,p.subject,p.kind,p.title,p.content,p.created_at,u.name,u.email,u.verified FROM community_posts p LEFT JOIN users u ON u.id=p.user_id WHERE p.deleted_at IS NULL ORDER BY p.created_at DESC LIMIT 100").all<any>();
+            return json({ok:true,posts:rows.results||[]});
+          }
+          if(url.pathname==="/api/admin/community" && request.method==="POST"){
+            const b=await body(request),id=String(b?.id||""),action=String(b?.action||"");
+            if(action!=="delete"||!id)return json({error:"إجراء أو منشور غير صالح."},400);
+            const r=await env.DB.prepare("UPDATE community_posts SET deleted_at=? WHERE id=? AND deleted_at IS NULL").bind(Date.now(),id).run();
+            if(!Number(r.meta?.changes||0))return json({error:"المنشور غير موجود أو محذوف."},404);
+            await recordAdminUndo(env,String(env.TELEGRAM_CHAT_ID||admin.id),"DELETE_COMMUNITY_POST",id,{});
+            await adminLog(env,String(env.TELEGRAM_CHAT_ID||admin.id),"WEB_ADMIN_DELETE_COMMUNITY_POST",id);
+            return json({ok:true});
+          }
+          if(url.pathname==="/api/admin/announcement" && request.method==="GET"){
+            const raw=await getAdminSetting(env,"site_announcement","");
+            let announcement=null;try{announcement=raw?JSON.parse(raw):null}catch{}
+            return json({ok:true,announcement});
+          }
+          if(url.pathname==="/api/admin/announcement" && request.method==="POST"){
+            const b=await body(request),action=String(b?.action||"save");
+            if(action==="delete"){await setAdminSetting(env,"site_announcement","");await adminLog(env,String(env.TELEGRAM_CHAT_ID||admin.id),"WEB_ADMIN_DELETE_ANNOUNCEMENT");return json({ok:true});}
+            const title=String(b?.title||"").trim().slice(0,120),message=String(b?.message||"").trim().slice(0,2000);
+            const placement=["top","center","modal"].includes(String(b?.placement))?String(b.placement):"top";
+            const type=["first","fixed","temporary"].includes(String(b?.type))?String(b.type):"fixed";
+            const buttonText=String(b?.buttonText||"").trim().slice(0,50),buttonUrl=String(b?.buttonUrl||"").trim().slice(0,500);
+            if(!title||!message)return json({error:"العنوان والرسالة مطلوبان."},400);
+            if(buttonText&&!/^https?:\/\//i.test(buttonUrl))return json({error:"رابط الزر غير صالح."},400);
+            const previous=await getAdminSetting(env,"site_announcement","");
+            let prior:any=null;try{prior=previous?JSON.parse(previous):null}catch{}
+            const a={id:prior?.id||randomHex(12),title,message,placement,type,durationSec:placement==="modal"?Math.max(1,Math.min(60,Number(b?.durationSec)||5)):0,buttonText,buttonUrl,enabled:b?.enabled===false?false:true,createdAt:prior?.createdAt||Date.now(),expiresAt:type==="temporary"?Date.now()+Math.max(1,Math.min(720,Number(b?.hours)||24))*3600000:null};
+            await setAdminSetting(env,"site_announcement",JSON.stringify(a));
+            await adminLog(env,String(env.TELEGRAM_CHAT_ID||admin.id),"WEB_ADMIN_SAVE_ANNOUNCEMENT",a.id,title);
+            return json({ok:true,announcement:a});
+          }
+          if(url.pathname==="/api/admin/lectures" && request.method==="GET"){
+            await ensureGlobalLectures(env);
+            const rows=await env.DB.prepare("SELECT id,title,subject_name, url,description,kind,enabled,created_at,updated_at FROM global_lectures ORDER BY created_at DESC LIMIT 100").all<any>();
+            return json({ok:true,lectures:rows.results||[]});
+          }
+          if(url.pathname==="/api/admin/lectures" && request.method==="POST"){
+            await ensureGlobalLectures(env);
+            const b=await body(request),action=String(b?.action||"save"),id=String(b?.id||"");
+            if(action==="delete"){await env.DB.prepare("DELETE FROM global_lectures WHERE id=?").bind(id).run();await adminLog(env,String(env.TELEGRAM_CHAT_ID||admin.id),"WEB_ADMIN_DELETE_LECTURE",id);return json({ok:true});}
+            const title=String(b?.title||"").trim().slice(0,160),subject=String(b?.subject_name||"").trim().slice(0,100),link=String(b?.url||"").trim().slice(0,1000),description=String(b?.description||"").trim().slice(0,1000);
+            if(!title||!subject||!/^https?:\/\//i.test(link))return json({error:"العنوان والمادة ورابط صحيح مطلوبين."},400);
+            const now=Date.now();
+            if(action==="update"&&id){await env.DB.prepare("UPDATE global_lectures SET title=?,subject_name=?,url=?,description=?,updated_at=? WHERE id=?").bind(title,subject,link,description,now,id).run();}
+            else await env.DB.prepare("INSERT INTO global_lectures(id,title,subject_name,url,description,kind,enabled,created_at,updated_at) VALUES(?,?,?,?,?,'link',1,?,?)").bind(randomHex(16),title,subject,link,description,now,now).run();
+            await adminLog(env,String(env.TELEGRAM_CHAT_ID||admin.id),action==="update"?"WEB_ADMIN_UPDATE_LECTURE":"WEB_ADMIN_CREATE_LECTURE",id||subject,title);
+            return json({ok:true});
+          }
+          if(url.pathname==="/api/admin/notifications" && request.method==="GET"){
+            await ensureGlobalNotifications(env);await ensurePushSubscriptions(env);
+            const [rows,devices]=await Promise.all([
+              env.DB.prepare("SELECT id,title,message,type,enabled,expires_at,created_at FROM global_notifications ORDER BY created_at DESC LIMIT 100").all<any>(),
+              env.DB.prepare("SELECT COUNT(*) AS n FROM push_subscriptions").first<any>()
+            ]);
+            return json({ok:true,notifications:rows.results||[],devices:Number(devices?.n||0)});
+          }
+          if(url.pathname==="/api/admin/notifications" && request.method==="POST"){
+            const b=await body(request),action=String(b?.action||"send");
+            if(action==="delete"){await env.DB.prepare("DELETE FROM global_notifications WHERE id=?").bind(String(b?.id||"")).run();await adminLog(env,String(env.TELEGRAM_CHAT_ID||admin.id),"WEB_ADMIN_DELETE_NOTIFICATION",String(b?.id||""));return json({ok:true});}
+            const title=String(b?.title||"").trim().slice(0,140),message=String(b?.message||"").trim().slice(0,2000),link=String(b?.url||"/").trim().slice(0,500);
+            if(!title||!message)return json({error:"عنوان الإشعار ونصه مطلوبان."},400);
+            if(link!=="/"&&!/^https?:\/\//i.test(link))return json({error:"الرابط لازم يكون http أو https."},400);
+            const result=await broadcastWebPush(env,title,message,link);
+            const now=Date.now();
+            await ensureGlobalNotifications(env);
+            await env.DB.prepare("INSERT INTO global_notifications(id,title,message,type,enabled,expires_at,created_at) VALUES(?,?,?,'info',1,NULL,?)").bind(randomHex(16),title,message,now).run();
+            await adminLog(env,String(env.TELEGRAM_CHAT_ID||admin.id),"WEB_ADMIN_PUSH_BROADCAST","all",title+" | sent="+result.sent+" failed="+result.failed);
+            return json({ok:true,result});
+          }
+          if(url.pathname==="/api/admin/polls" && request.method==="GET"){
+            await ensureBridgeTools(env);
+            const rows=await env.DB.prepare("SELECT p.id,p.question,p.options_json,p.active,p.expires_at,p.created_at,(SELECT COUNT(*) FROM site_poll_votes v WHERE v.poll_id=p.id) AS votes FROM site_polls p ORDER BY p.created_at DESC LIMIT 100").all<any>();
+            return json({ok:true,polls:(rows.results||[]).map((p:any)=>{let options:any[]=[];try{options=JSON.parse(p.options_json||"[]")}catch{}return {...p,options,votes:Number(p.votes||0)}})});
+          }
+          if(url.pathname==="/api/admin/polls" && request.method==="POST"){
+            await ensureBridgeTools(env);
+            const b=await body(request),action=String(b?.action||"create");
+            if(action==="delete"){await env.DB.prepare("DELETE FROM site_poll_votes WHERE poll_id=?").bind(String(b?.id||"")).run();await env.DB.prepare("DELETE FROM site_polls WHERE id=?").bind(String(b?.id||"")).run();await adminLog(env,String(env.TELEGRAM_CHAT_ID||admin.id),"WEB_ADMIN_DELETE_POLL",String(b?.id||""));return json({ok:true});}
+            if(action==="toggle"){const id=String(b?.id||"");await env.DB.prepare("UPDATE site_polls SET active=CASE WHEN active=1 THEN 0 ELSE 1 END WHERE id=?").bind(id).run();await adminLog(env,String(env.TELEGRAM_CHAT_ID||admin.id),"WEB_ADMIN_TOGGLE_POLL",id);return json({ok:true});}
+            const question=String(b?.question||"").trim().slice(0,240),options=Array.isArray(b?.options)?b.options.map((x:any)=>String(x).trim().slice(0,100)).filter(Boolean).slice(0,8):[];
+            if(!question||options.length<2)return json({error:"السؤال واختياران على الأقل مطلوبان."},400);
+            const hours=Math.max(1,Math.min(720,Number(b?.hours)||24)),now=Date.now();
+            const id=randomHex(10);await env.DB.prepare("INSERT INTO site_polls(id,question,options_json,active,expires_at,created_at) VALUES(?,?,?,1,?,?)").bind(id,question,JSON.stringify(options),now+hours*3600000,now).run();
+            await adminLog(env,String(env.TELEGRAM_CHAT_ID||admin.id),"WEB_ADMIN_CREATE_POLL",id,question);
+            return json({ok:true,id});
+          }
+          if(url.pathname==="/api/admin/system" && request.method==="GET"){
+            const checks:any[]=[];
+            const run=async(label:string,fn:()=>Promise<any>)=>{const start=Date.now();try{await fn();checks.push({label,ok:true,ms:Date.now()-start})}catch{checks.push({label,ok:false,ms:Date.now()-start})}};
+            await run("D1 / قاعدة البيانات",async()=>{const x=await env.DB.prepare("SELECT 1 AS ok").first<any>();if(Number(x?.ok)!==1)throw new Error("db")});
+            await run("الجداول الأساسية",async()=>{await env.DB.prepare("SELECT (SELECT COUNT(*) FROM users) u,(SELECT COUNT(*) FROM sessions) s,(SELECT COUNT(*) FROM user_data) d").first<any>()});
+            await run("التوثيق والاشتراكات",async()=>{await env.DB.prepare("SELECT (SELECT COUNT(*) FROM verification_requests) v,(SELECT COUNT(*) FROM subscriptions) s").first<any>()});
+            await run("سجل النشاط",async()=>{await env.DB.prepare("SELECT COUNT(*) n FROM admin_activity").first<any>()});
+            await run("إشعارات Push",async()=>{await ensurePushSubscriptions(env);await env.DB.prepare("SELECT COUNT(*) n FROM push_subscriptions").first<any>()});
+            return json({ok:true,checks,config:{ai:!!String(env.GEMINI_API_KEY||"").trim(),telegram:!!(env.TELEGRAM_BOT_TOKEN&&env.TELEGRAM_CHAT_ID),email:!!String(env.GOOGLE_APPS_SCRIPT_URL||"").trim(),whatsapp:!!(env.GREEN_API_INSTANCE_ID&&env.GREEN_API_TOKEN),push:!!(env.VAPID_PUBLIC_KEY&&env.VAPID_PRIVATE_KEY&&env.VAPID_SUBJECT)}});
+          }
+          if(url.pathname==="/api/admin/traffic" && request.method==="GET"){
+            await ensurePageViews(env);
+            const rows=await env.DB.prepare("SELECT day,COUNT(*) AS visits FROM site_page_views WHERE day>=date(?, '-29 day') GROUP BY day ORDER BY day DESC").bind(egyptDay()).all<any>();
+            const users=await env.DB.prepare("SELECT COUNT(*) n FROM users").first<any>();
+            return json({ok:true,days:rows.results||[],users:Number(users?.n||0)});
+          }
           if(url.pathname==="/api/admin/overview" && request.method==="GET"){
             const [users,verified,pending,posts,reports,messages,activity,maintenance,announcement]=await Promise.all([
               env.DB.prepare("SELECT COUNT(*) n FROM users").first<any>(),
