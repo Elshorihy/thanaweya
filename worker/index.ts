@@ -174,6 +174,11 @@ async function createSession(userId:string,env:Env) {
   await env.DB.prepare("INSERT INTO sessions(id,user_id,token_hash,expires_at,created_at) VALUES(?,?,?,?,?)").bind(randomHex(16),userId,hash,expires,Date.now()).run();
   return token;
 }
+async function ensureClientErrors(env:Env){
+  await env.DB.prepare("CREATE TABLE IF NOT EXISTS client_errors (id TEXT PRIMARY KEY,source_key TEXT NOT NULL,source TEXT NOT NULL DEFAULT 'client',page TEXT NOT NULL,message TEXT NOT NULL,stack TEXT NOT NULL,user_agent TEXT NOT NULL,user_id TEXT,created_at INTEGER NOT NULL,resolved_at INTEGER)").run();
+  await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_client_errors_created ON client_errors(created_at DESC)").run();
+  await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_client_errors_resolved ON client_errors(resolved_at,created_at DESC)").run();
+}
 async function ensureLoginAudit(env:Env){
   await env.DB.prepare("CREATE TABLE IF NOT EXISTS admin_sessions (id TEXT PRIMARY KEY,user_id TEXT NOT NULL,token_hash TEXT NOT NULL UNIQUE,expires_at INTEGER NOT NULL,created_at INTEGER NOT NULL)").run();
   await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_admin_sessions_user ON admin_sessions(user_id)").run();
@@ -2544,6 +2549,23 @@ export default {
     if(url.pathname.startsWith("/api/")) {
       try {
         if(request.method==="OPTIONS") return new Response(null,{status:204,headers:{"access-control-allow-origin":"*","access-control-allow-methods":"GET,POST,PUT,DELETE,OPTIONS","access-control-allow-headers":"content-type, accept","cache-control":"no-store"}});
+        if(url.pathname==="/api/client-error" && request.method==="POST"){
+          await ensureClientErrors(env);
+          const b=await body(request);
+          if(!b||typeof b!=="object")return json({error:"بيانات غير صالحة"},400);
+          const ip=String(request.headers.get("CF-Connecting-IP")||"unknown").slice(0,80);
+          const sourceKey=await sha256(ip);
+          const recent=await env.DB.prepare("SELECT COUNT(*) n FROM client_errors WHERE source_key=? AND created_at>?").bind(sourceKey,Date.now()-10*60*1000).first<any>();
+          if(Number(recent?.n||0)>=20)return json({ok:true,limited:true},202);
+          const message=String(b.message||"خطأ غير معروف").replace(/[\\r\\n\\t]+/g," ").slice(0,400);
+          const page=String(b.page||"/").split("?")[0].split("#")[0].slice(0,180);
+          const stack=String(b.stack||"").slice(0,1800);
+          const userAgent=String(request.headers.get("User-Agent")||"").slice(0,300);
+          let userId:string|null=null;
+          try{const u=await userFrom(request,env);if(u)userId=String(u.id)}catch{}
+          await env.DB.prepare("INSERT INTO client_errors(id,source_key,source,page,message,stack,user_agent,user_id,created_at,resolved_at) VALUES(?,?,?,?,?,?,?,?,?,NULL)").bind(randomHex(12),sourceKey,"client",page,message,stack,userAgent,userId,Date.now()).run();
+          return json({ok:true},202);
+        }
         if(url.pathname!=="/api/pageview" && url.pathname!=="/api/telegram/webhook" && url.pathname!=="/api/health" && url.pathname!=="/api/health/ai" && !url.pathname.startsWith("/api/auth/")){
           const maintenanceRead=env.DB.prepare("SELECT value FROM admin_settings WHERE key=?").bind("maintenance").first<any>().then((row:any)=>String(row?.value||"0")).catch(()=>"0");
           const maintenance=await Promise.race([maintenanceRead,new Promise<string>(resolve=>setTimeout(()=>resolve("0"),1500))]);
@@ -2878,6 +2900,22 @@ export default {
             const id=randomHex(10);await env.DB.prepare("INSERT INTO site_polls(id,question,options_json,active,expires_at,created_at) VALUES(?,?,?,1,?,?)").bind(id,question,JSON.stringify(options),now+hours*3600000,now).run();
             await adminLog(env,String(env.TELEGRAM_CHAT_ID||admin.id),"WEB_ADMIN_CREATE_POLL",id,question);
             return json({ok:true,id});
+          }
+          if(url.pathname==="/api/admin/errors" && request.method==="GET"){
+            await ensureClientErrors(env);
+            const status=String(url.searchParams.get("status")||"open")==="all"?"all":"open";
+            const rows=await env.DB.prepare("SELECT id,source,page,message,stack,user_agent,user_id,created_at,resolved_at FROM client_errors "+(status==="all"?"":"WHERE resolved_at IS NULL ")+"ORDER BY created_at DESC LIMIT 200").all<any>();
+            const counts=await env.DB.prepare("SELECT COUNT(*) total,SUM(CASE WHEN resolved_at IS NULL THEN 1 ELSE 0 END) open FROM client_errors").first<any>();
+            return json({ok:true,errors:rows.results||[],counts:{total:Number(counts?.total||0),open:Number(counts?.open||0)}});
+          }
+          if(url.pathname==="/api/admin/errors/resolve" && request.method==="POST"){
+            await ensureClientErrors(env);
+            const b=await body(request),id=String(b?.id||"").trim(),action=String(b?.action||"resolve");
+            if(!id)return json({error:"حدد الخطأ المطلوب."},400);
+            if(action==="reopen")await env.DB.prepare("UPDATE client_errors SET resolved_at=NULL WHERE id=?").bind(id).run();
+            else await env.DB.prepare("UPDATE client_errors SET resolved_at=? WHERE id=?").bind(Date.now(),id).run();
+            await adminLog(env,String(env.TELEGRAM_CHAT_ID||admin.id),"WEB_ADMIN_CLIENT_ERROR",id,action==="reopen"?"إعادة فتح خطأ":"حل خطأ");
+            return json({ok:true});
           }
           if(url.pathname==="/api/admin/system" && request.method==="GET"){
             const checks:any[]=[];
