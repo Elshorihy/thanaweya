@@ -15,6 +15,7 @@ interface Env {
   VAPID_SUBJECT?: string;
   GEMINI_API_KEY?: string;
   GEMINI_ADMIN_API_KEY?: string;
+  ADMIN_PASSWORD?: string;
   GEMINI_MODEL?: string;
 }
 
@@ -99,6 +100,7 @@ async function ensureAuthSchema(env:Env){
   await authSchemaReady;
 }
 const COOKIE = "thanaweya_session";
+const ADMIN_COOKIE = "thanaweya_admin_session";
 const SESSION_DAYS = 30;
 
 function json(data: unknown, status=200, headers: Record<string,string>={}, request?:Request) {
@@ -143,19 +145,29 @@ function generateOtpCode(){
 async function otpHash(email:string,type:string,code:string){
   return sha256(email+":"+type+":"+code);
 }
-function cookieValue(request:Request) {
+function cookieNamed(request:Request,name:string) {
   const raw=request.headers.get("Cookie")||"";
-  for(const part of raw.split(";")) { const [k,...rest]=part.trim().split("="); if(k===COOKIE) return rest.join("="); }
+  for(const part of raw.split(";")) { const [k,...rest]=part.trim().split("="); if(k===name) return rest.join("="); }
   return "";
 }
+function cookieValue(request:Request) { return cookieNamed(request,COOKIE); }
+function adminCookieValue(request:Request) { return cookieNamed(request,ADMIN_COOKIE); }
 async function userFrom(request:Request,env:Env) {
   const token=cookieValue(request); if(!token) return null;
   const tokenHash=await sha256(token);
   const row=await env.DB.prepare("SELECT u.id,u.email,u.name,u.role,u.verified FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires_at>?").bind(tokenHash,Date.now()).first<{id:string;email:string;name:string;role?:string;verified?:number}>();
   return row||null;
 }
+async function adminUserFrom(request:Request,env:Env) {
+  const token=adminCookieValue(request); if(!token) return null;
+  const tokenHash=await sha256(token);
+  const row=await env.DB.prepare("SELECT u.id,u.email,u.name,u.role,u.verified FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires_at>? AND u.role='owner'").bind(tokenHash,Date.now()).first<{id:string;email:string;name:string;role?:string;verified?:number}>();
+  return row||null;
+}
 const sessionCookie=(token:string)=>`${COOKIE}=${token}; Path=/; HttpOnly; Secure; SameSite=None; Max-Age=${SESSION_DAYS*86400}`;
 const clearCookie=()=>`${COOKIE}=; Path=/; HttpOnly; Secure; SameSite=None; Max-Age=0`;
+const adminSessionCookie=(token:string)=>`${ADMIN_COOKIE}=${token}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=${SESSION_DAYS*86400}`;
+const clearAdminCookie=()=>`${ADMIN_COOKIE}=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0`;
 async function createSession(userId:string,env:Env) {
   const token=randomHex(32), hash=await sha256(token), expires=Date.now()+SESSION_DAYS*86400000;
   await env.DB.prepare("INSERT INTO sessions(id,user_id,token_hash,expires_at,created_at) VALUES(?,?,?,?,?)").bind(randomHex(16),userId,hash,expires,Date.now()).run();
@@ -2523,7 +2535,9 @@ export default {
             const owner=await env.DB.prepare("SELECT u.role FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires_at>?").bind(tokenHash,Date.now()).first<any>().catch(()=>null);
             ownerBypass=String(owner?.role||"") === "owner";
           }
-          if(maintenance==="1" && !ownerBypass) return json({error:"الموقع في وضع الصيانة حاليًا. حاول مرة أخرى لاحقًا."},503,{"retry-after":"300"});
+          const adminToken=adminCookieValue(request);
+          if(!ownerBypass && adminToken){const adminHash=await sha256(adminToken);const adminOwner=await env.DB.prepare("SELECT u.role FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires_at>?").bind(adminHash,Date.now()).first<any>().catch(()=>null);ownerBypass=String(adminOwner?.role||"")==="owner";}
+          if(maintenance==="1" && !ownerBypass && url.pathname!=="/api/admin/login") return json({error:"الموقع في وضع الصيانة حاليًا. حاول مرة أخرى لاحقًا."},503,{"retry-after":"300"});
         }
         // Owner panel uses one fixed account and its own HttpOnly cookie.
         // It does not create a user/session record and does not depend on the site's normal auth.
@@ -2665,8 +2679,28 @@ export default {
           // bootstrapping every unrelated app table before loading the feed.
           await ensureSchema(env);
         }
+        if(url.pathname==="/api/admin/login" && request.method==="POST") {
+          const b=await body(request),email=cleanEmail(b?.email),password=String(b?.password||"");
+          const configured=String(env.ADMIN_PASSWORD||"");
+          if(!configured) return json({error:"دخول الإدارة غير مهيأ بعد. اضبط ADMIN_PASSWORD في أسرار Cloudflare."},503);
+          if(email!=="hamza@thanaweya.dev" || !password || (await sha256(password))!==(await sha256(configured))) return json({error:"البريد أو كلمة مرور المالك غير صحيحة."},401);
+          const owner=await env.DB.prepare("SELECT id,email,name,role FROM users WHERE id='owner-hamza' AND role='owner'").first<any>();
+          if(!owner) return json({error:"حساب المالك غير موجود في قاعدة البيانات."},503);
+          const token=await createSession(String(owner.id),env);
+          return json({ok:true,user:{email:owner.email,name:owner.name,role:"owner"}},200,{"set-cookie":adminSessionCookie(token)});
+        }
+        if(url.pathname==="/api/admin/session" && request.method==="GET") {
+          const admin=await adminUserFrom(request,env);
+          if(!admin) return json({error:"سجّل الدخول للوحة الإدارة."},401);
+          return json({ok:true,user:{email:admin.email,name:admin.name,role:"owner"}});
+        }
+        if(url.pathname==="/api/admin/logout" && request.method==="POST") {
+          const token=adminCookieValue(request);
+          if(token) await env.DB.prepare("DELETE FROM sessions WHERE token_hash=?").bind(await sha256(token)).run();
+          return json({ok:true},200,{"set-cookie":clearAdminCookie()});
+        }
         if(url.pathname.startsWith("/api/admin/")) {
-          const admin=await userFrom(request,env);
+          const admin=await adminUserFrom(request,env);
           if(!admin) return json({error:"سجّل الدخول بحساب المالك أولًا."},401);
           if(String(admin.role||"")!=="owner") return json({error:"غير مسموح. لوحة الإدارة للمالك فقط."},403);
           await ensureBridgeTools(env);
