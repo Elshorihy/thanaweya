@@ -110,7 +110,7 @@ export async function handleStudyRooms(request: Request, env: RoomEnv, user: Roo
   if(action==="moderate"&&request.method==="POST"){
     if(user.role!=="owner")return fail("غير مصرح",403);
     const reportId=String(b.reportId||"").slice(0,80),decision=String(b.decision||"");
-    if(!["dismiss","mute","ban","resolve"].includes(decision))return fail("قرار غير صالح");
+    if(!["dismiss","warn","mute","ban","resolve"].includes(decision))return fail("قرار غير صالح");
     const r=await db.prepare("SELECT id,room_id,reported_user_id FROM study_room_reports WHERE id=?").bind(reportId).first<any>();if(!r)return fail("البلاغ غير موجود",404);
     if(decision==="ban")await db.prepare("INSERT OR REPLACE INTO study_room_bans(room_id,user_id,banned_by,reason,created_at) VALUES(?,?,?,?,?)").bind(r.room_id,r.reported_user_id,user.id,"قرار إداري بعد مراجعة بلاغ",now).run();
     if(decision==="mute")await db.prepare("UPDATE study_room_members SET status='muted' WHERE room_id=? AND user_id=?").bind(r.room_id,r.reported_user_id).run();
