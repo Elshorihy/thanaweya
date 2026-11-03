@@ -16,7 +16,7 @@ export default function StudyRooms({auth,notify}:{auth:Auth;notify:(message:stri
  const [members,setMembers]=useState<Member[]>([]),[messages,setMessages]=useState<ChatMessage[]>([]),[draft,setDraft]=useState(''),[timer,setTimer]=useState<TimerState>(emptyTimer),[duration,setDuration]=useState(25),[remaining,setRemaining]=useState(0);
  const [reportTarget,setReportTarget]=useState<Member|null>(null),[reportReason,setReportReason]=useState(reasons[0]),[reportDetails,setReportDetails]=useState('');
  const [socketState,setSocketState]=useState<'connecting'|'connected'|'offline'>('offline'),[micOn,setMicOn]=useState(false),[voiceBusy,setVoiceBusy]=useState(false),[micMembers,setMicMembers]=useState<Record<string,boolean>>({});
- const wsRef=useRef<WebSocket|null>(null),makingOfferRef=useRef<Map<string,boolean>>(new Map()),leavingRef=useRef(false),reconnectRef=useRef<number|null>(null),retryRef=useRef(0),inviteRef=useRef(''),roomRef=useRef<Room|null>(null),localStreamRef=useRef<MediaStream|null>(null),peersRef=useRef<Map<string,RTCPeerConnection>>(new Map()),audioRef=useRef<Map<string,HTMLAudioElement>>(new Map()),micStateRef=useRef(false),membersRef=useRef<Member[]>([]);
+ const wsRef=useRef<WebSocket|null>(null),makingOfferRef=useRef<Map<string,boolean>>(new Map()),leavingRef=useRef(false),reconnectRef=useRef<number|null>(null),retryRef=useRef(0),inviteRef=useRef(''),roomRef=useRef<Room|null>(null),localStreamRef=useRef<MediaStream|null>(null),peersRef=useRef<Map<string,RTCPeerConnection>>(new Map()),audioRef=useRef<Map<string,HTMLAudioElement>>(new Map()),micStateRef=useRef(false),membersRef=useRef<Member[]>([]),heartbeatRef=useRef<number|null>(null);
  const api=async(path:string,method='GET',data?:Record<string,unknown>)=>{const r=await fetch(path,{method,credentials:'same-origin',cache:'no-store',headers:method==='GET'?undefined:{'content-type':'application/json'},body:data?JSON.stringify(data):undefined});const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.error||'حصل خطأ في الاتصال');return j};
  const loadRooms=useCallback(async()=>{setLoading(true);try{const j=await api('/api/study-rooms');setRooms(j.rooms||[])}catch(e){notify(e instanceof Error?e.message:'تعذر تحميل الغرف')}finally{setLoading(false)}},[]);
  useEffect(()=>{void loadRooms()},[loadRooms]);
@@ -63,7 +63,7 @@ export default function StudyRooms({auth,notify}:{auth:Auth;notify:(message:stri
   const protocol=location.protocol==='https:'?'wss:':'ws:';
   const ws=new WebSocket(protocol+'//'+location.host+'/api/study-rooms/'+encodeURIComponent(room.id)+'/live');
   wsRef.current=ws;setSocketState('connecting');
-  ws.onopen=()=>{retryRef.current=0;setSocketState('connected');if(micStateRef.current)send({type:'mic',enabled:true})};
+  ws.onopen=()=>{retryRef.current=0;setSocketState('connected');if(heartbeatRef.current!==null)window.clearInterval(heartbeatRef.current);heartbeatRef.current=window.setInterval(()=>send({type:'heartbeat'}),25000);if(micStateRef.current)send({type:'mic',enabled:true})};
   ws.onmessage=event=>{let data:any;try{data=JSON.parse(String(event.data))}catch{return}
    if(data.type==='hello'){applyPresence(data.members||[]);setMessages(data.messages||[]);setTimer(data.timer||emptyTimer)}
    else if(data.type==='presence')applyPresence(data.members||[]);
@@ -75,14 +75,14 @@ export default function StudyRooms({auth,notify}:{auth:Auth;notify:(message:stri
    else if(data.type==='notice')notify(data.message||'تنبيه من الغرفة');
    else if(data.type==='room_closed'){leavingRef.current=true;stopLocalAudio();setActiveRoom(null);setSocketState('offline');notify('تم إغلاق الغرفة من صاحبها.');void loadRooms()}
   };
-  ws.onclose=()=>{if(wsRef.current===ws)wsRef.current=null;if(leavingRef.current)return;setSocketState('offline');const delay=Math.min(12000,1000*Math.pow(2,Math.min(retryRef.current++,4)));reconnectRef.current=window.setTimeout(async()=>{const current=roomRef.current;if(!current||leavingRef.current)return;try{await api('/api/study-rooms/'+encodeURIComponent(current.id),'POST',{action:'join',inviteCode:inviteRef.current});connectSocket(current)}catch{setSocketState('offline')}},delay)};
+  ws.onclose=()=>{if(heartbeatRef.current!==null){window.clearInterval(heartbeatRef.current);heartbeatRef.current=null}if(wsRef.current===ws)wsRef.current=null;if(leavingRef.current)return;setSocketState('offline');const delay=Math.min(12000,1000*Math.pow(2,Math.min(retryRef.current++,4)));reconnectRef.current=window.setTimeout(async()=>{const current=roomRef.current;if(!current||leavingRef.current)return;try{await api('/api/study-rooms/'+encodeURIComponent(current.id),'POST',{action:'join',inviteCode:inviteRef.current});connectSocket(current)}catch{setSocketState('offline')}},delay)};
   ws.onerror=()=>setSocketState('offline');
  },[auth.id,loadRooms]);
  useEffect(()=>{
   if(!activeRoom)return;
   let cancelled=false;leavingRef.current=false;
   (async()=>{try{const j=await api('/api/study-rooms/'+encodeURIComponent(activeRoom.id)+'/messages');if(!cancelled){setMessages(j.messages||[]);applyPresence(j.members||[])}}catch(e){if(!cancelled)notify(e instanceof Error?e.message:'تعذر تحميل رسائل الغرفة')}if(!cancelled)connectSocket(activeRoom)})();
-  return()=>{cancelled=true;leavingRef.current=true;if(reconnectRef.current!==null)window.clearTimeout(reconnectRef.current);stopLocalAudio();const ws=wsRef.current;wsRef.current=null;try{ws?.close()}catch{};void api('/api/study-rooms/'+encodeURIComponent(activeRoom.id),'POST',{action:'leave'}).catch(()=>{})};
+  return()=>{cancelled=true;leavingRef.current=true;if(reconnectRef.current!==null)window.clearTimeout(reconnectRef.current);if(heartbeatRef.current!==null){window.clearInterval(heartbeatRef.current);heartbeatRef.current=null}stopLocalAudio();const ws=wsRef.current;wsRef.current=null;try{ws?.close()}catch{};void api('/api/study-rooms/'+encodeURIComponent(activeRoom.id),'POST',{action:'leave'}).catch(()=>{})};
  },[activeRoom?.id]);
  const createRoom=async()=>{
   if(title.trim().length<3){notify('اكتب اسمًا واضحًا للغرفة');return}
@@ -91,8 +91,8 @@ export default function StudyRooms({auth,notify}:{auth:Auth;notify:(message:stri
  const joinRoom=async(room:Room,code='')=>{
   try{await api('/api/study-rooms/'+encodeURIComponent(room.id),'POST',{action:'join',inviteCode:code});inviteRef.current=code;setJoinTarget(null);setInviteCode('');setActiveRoom(room);await loadRooms()}catch(e){notify(e instanceof Error?e.message:'تعذر الانضمام للغرفة')}
  };
- const leaveRoom=async()=>{if(!activeRoom)return;leavingRef.current=true;if(reconnectRef.current!==null)window.clearTimeout(reconnectRef.current);stopLocalAudio();try{await api('/api/study-rooms/'+encodeURIComponent(activeRoom.id),'POST',{action:'leave'})}catch{};try{wsRef.current?.close()}catch{};wsRef.current=null;setActiveRoom(null);setMessages([]);setMembers([]);setTimer(emptyTimer);setSocketState('offline');await loadRooms()};
- const closeRoom=async()=>{if(!activeRoom||activeRoom.ownerId!==auth.id)return;if(!window.confirm('تقفل الغرفة وتنهي الجلسة لكل الموجودين؟'))return;try{await api('/api/study-rooms/'+encodeURIComponent(activeRoom.id),'POST',{action:'close'});leavingRef.current=true;stopLocalAudio();wsRef.current?.close();wsRef.current=null;setActiveRoom(null);notify('تم إغلاق الغرفة.');await loadRooms()}catch(e){notify(e instanceof Error?e.message:'تعذر إغلاق الغرفة')}};
+ const leaveRoom=async()=>{if(!activeRoom)return;leavingRef.current=true;if(reconnectRef.current!==null)window.clearTimeout(reconnectRef.current);if(heartbeatRef.current!==null){window.clearInterval(heartbeatRef.current);heartbeatRef.current=null}stopLocalAudio();try{await api('/api/study-rooms/'+encodeURIComponent(activeRoom.id),'POST',{action:'leave'})}catch{};try{wsRef.current?.close()}catch{};wsRef.current=null;setActiveRoom(null);setMessages([]);setMembers([]);setTimer(emptyTimer);setSocketState('offline');await loadRooms()};
+ const closeRoom=async()=>{if(!activeRoom||activeRoom.ownerId!==auth.id)return;if(!window.confirm('تقفل الغرفة وتنهي الجلسة لكل الموجودين؟'))return;try{await api('/api/study-rooms/'+encodeURIComponent(activeRoom.id),'POST',{action:'close'});leavingRef.current=true;if(heartbeatRef.current!==null){window.clearInterval(heartbeatRef.current);heartbeatRef.current=null}stopLocalAudio();wsRef.current?.close();wsRef.current=null;setActiveRoom(null);notify('تم إغلاق الغرفة.');await loadRooms()}catch(e){notify(e instanceof Error?e.message:'تعذر إغلاق الغرفة')}};
  const sendChat=()=>{const content=draft.trim().slice(0,500);if(!content)return;send({type:'chat',content});setDraft('')};
  const toggleMic=async()=>{
   if(voiceBusy)return;setVoiceBusy(true);
