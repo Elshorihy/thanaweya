@@ -1,0 +1,81 @@
+import React,{useCallback,useEffect,useRef,useState} from "react";
+import {Users,Plus,Lock,EyeOff,Globe,Send,LogOut,Mic,MicOff,Flag,ShieldCheck,RefreshCw,Copy,Volume2,VolumeX} from "lucide-react";
+import "./rooms.css";
+type Auth={id:string;name:string;role?:string};
+type Room={id:string;ownerId:string;ownerName:string;title:string;subject:string;description:string;visibility:string;maxMembers:number;isLocked:number;members:number;myRole?:string};
+type Member={id:string;name:string;role:string;status:string};
+type Message={id:string;userId:string;name:string;content:string;createdAt:number};
+type Report={id:string;roomId:string;reporterName:string;reportedName:string;reason:string;details:string;status:string;evidence:{id:string;name:string;content:string;createdAt:number}[]};
+const subjects=["عام","الرياضيات","الفيزياء","الكيمياء","اللغة العربية","اللغة الإنجليزية"];
+const reasons=["إساءة أو تنمر","محتوى غير لائق","تحرش أو مضايقات","سبام أو إزعاج","مخالفة أخرى"];
+export default function StudyRooms({auth,notify}:{auth:Auth;notify:(s:string)=>void}){
+ const [rooms,setRooms]=useState<Room[]>([]),[active,setActive]=useState(""),[roomInfo,setRoomInfo]=useState<any>(null),[members,setMembers]=useState<Member[]>([]),[messages,setMessages]=useState<Message[]>([]),[draft,setDraft]=useState(""),[loading,setLoading]=useState(true),[busy,setBusy]=useState(false);
+ const [showCreate,setShowCreate]=useState(false),[title,setTitle]=useState(""),[subject,setSubject]=useState("عام"),[description,setDescription]=useState(""),[visibility,setVisibility]=useState("public"),[inviteCode,setInviteCode]=useState(""),[joinCode,setJoinCode]=useState("");
+ const [reportTarget,setReportTarget]=useState<Member|null>(null),[reportReason,setReportReason]=useState(reasons[0]),[reportDetails,setReportDetails]=useState(""),[evidenceIds,setEvidenceIds]=useState<string[]>([]);
+ const [reports,setReports]=useState<Report[]>([]),[showReports,setShowReports]=useState(false),[micOn,setMicOn]=useState(false),[muted,setMuted]=useState(false),[remoteStreams,setRemoteStreams]=useState<Record<string,MediaStream>>({});
+ const localStream=useRef<MediaStream|null>(null),pcs=useRef<Map<string,RTCPeerConnection>>(new Map()),audioRefs=useRef<Map<string,HTMLAudioElement>>(new Map()),seenSignals=useRef<Set<string>>(new Set()),syncing=useRef(false);
+ const api=useCallback(async(action:string,data:Record<string,unknown>={},method:"GET"|"POST"="POST")=>{
+  const url=method==="GET"?"/api/study-rooms?"+new URLSearchParams({action,...Object.fromEntries(Object.entries(data).map(([k,v])=>[k,String(v)]))}):"/api/study-rooms";
+  const r=await fetch(url,{method,credentials:"same-origin",cache:"no-store",headers:{"content-type":"application/json"},body:method==="POST"?JSON.stringify({action,...data}):undefined});
+  const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.error||"تعذر تنفيذ الطلب");return j;
+ },[]);
+ const loadRooms=useCallback(async()=>{try{const j=await api("list",{},"GET");setRooms(j.rooms||[])}catch(e){notify(e instanceof Error?e.message:"تعذر تحميل الغرف")}finally{setLoading(false)}},[api,notify]);
+ useEffect(()=>{void loadRooms()},[loadRooms]);
+ const stopVoice=useCallback(()=>{localStream.current?.getTracks().forEach(t=>t.stop());localStream.current=null;pcs.current.forEach(pc=>pc.close());pcs.current.clear();setRemoteStreams({});setMicOn(false)},[]);
+ useEffect(()=>()=>stopVoice(),[stopVoice]);
+ const sendSignal=useCallback((toUserId:string,kind:string,payload:unknown)=>api("signal",{roomId:active,toUserId,kind,payload}),[api,active]);
+ const makePeer=useCallback((peer:Member)=>{
+  let pc=pcs.current.get(peer.id);if(pc)return pc;
+  pc=new RTCPeerConnection({iceServers:[{urls:"stun:stun.l.google.com:19302"}]});
+  localStream.current?.getTracks().forEach(track=>pc!.addTrack(track,localStream.current!));
+  pc.onicecandidate=e=>{if(e.candidate)void sendSignal(peer.id,"candidate",e.candidate.toJSON()).catch(()=>{})};
+  pc.ontrack=e=>{const stream=e.streams[0];if(stream)setRemoteStreams(old=>({...old,[peer.id]:stream}))};
+  pc.onconnectionstatechange=()=>{if(pc!.connectionState==="failed"||pc!.connectionState==="closed"){pc!.close();pcs.current.delete(peer.id);setRemoteStreams(old=>{const n={...old};delete n[peer.id];return n})}};
+  pcs.current.set(peer.id,pc);return pc;
+ },[sendSignal]);
+ const syncRoom=useCallback(async()=>{
+  if(!active||syncing.current)return;syncing.current=true;
+  try{
+   const j=await api("sync",{roomId:active},"GET");setRoomInfo(j.room);setMembers(j.members||[]);setMessages(j.messages||[]);
+   const current=(j.members||[]) as Member[];
+   for(const peer of current){if(peer.id===auth.id)continue;const pc=makePeer(peer);
+    if(auth.id<peer.id&&pc.signalingState==="stable"&&!pc.localDescription){const offer=await pc.createOffer();await pc.setLocalDescription(offer);await sendSignal(peer.id,"offer",offer)}
+   }
+   for(const sig of (j.signals||[])){if(seenSignals.current.has(sig.id))continue;seenSignals.current.add(sig.id);const peer=current.find(x=>x.id===sig.fromUserId)||{id:sig.fromUserId,name:"",role:"member",status:"studying"};const pc=makePeer(peer);
+    try{if(sig.kind==="offer"){await pc.setRemoteDescription(new RTCSessionDescription(sig.payload));const answer=await pc.createAnswer();await pc.setLocalDescription(answer);await sendSignal(peer.id,"answer",answer)}
+     else if(sig.kind==="answer"){if(pc.signalingState==="have-local-offer")await pc.setRemoteDescription(new RTCSessionDescription(sig.payload))}
+     else if(sig.kind==="candidate"){await pc.addIceCandidate(new RTCIceCandidate(sig.payload))}
+    }catch{}
+   }
+  }catch(e){if(e instanceof Error&&e.message.includes("انتهت عضويتك")){setActive("");stopVoice();void loadRooms();notify(e.message)}}
+  finally{syncing.current=false}
+ },[active,api,auth.id,loadRooms,makePeer,notify,sendSignal,stopVoice]);
+ useEffect(()=>{if(!active)return;void syncRoom();const t=window.setInterval(()=>void syncRoom(),2200);return()=>window.clearInterval(t)},[active,syncRoom]);
+ useEffect(()=>{for(const [id,stream] of Object.entries(remoteStreams)){const el=audioRefs.current.get(id);if(el&&el.srcObject!==stream){el.srcObject=stream;void el.play().catch(()=>{})}}},[remoteStreams]);
+ const createRoom=async()=>{setBusy(true);try{const j=await api("create",{title,subject,description,visibility});setShowCreate(false);setTitle("");setDescription("");setInviteCode(j.inviteCode||"");setActive(j.roomId);await loadRooms();notify("تم إنشاء الغرفة")}catch(e){notify(e instanceof Error?e.message:"تعذر إنشاء الغرفة")}finally{setBusy(false)}};
+ const join=async(id:string,code="")=>{setBusy(true);try{const j=await api("join",{roomId:id,code});setActive(j.roomId);setShowReports(false)}catch(e){notify(e instanceof Error?e.message:"تعذر دخول الغرفة")}finally{setBusy(false)}};
+ const leave=async()=>{try{await api("leave",{roomId:active})}catch{}stopVoice();setActive("");setRoomInfo(null);await loadRooms()};
+ const send=async()=>{if(!draft.trim())return;try{await api("send",{roomId:active,content:draft.trim()});setDraft("");await syncRoom()}catch(e){notify(e instanceof Error?e.message:"تعذر إرسال الرسالة")}};
+ const startMic=async()=>{try{const stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true},video:false});localStream.current=stream;for(const peer of members){if(peer.id===auth.id)continue;const pc=makePeer(peer);stream.getTracks().forEach(t=>pc.addTrack(t,stream));if(auth.id<peer.id){const offer=await pc.createOffer();await pc.setLocalDescription(offer);await sendSignal(peer.id,"offer",offer)}}setMicOn(true);setMuted(false)}catch{notify("لم نتمكن من فتح المايك. راجع إذن الميكروفون في المتصفح.")}};
+ const toggleMute=()=>{const next=!muted;localStream.current?.getAudioTracks().forEach(t=>t.enabled=!next);setMuted(next)};
+ const submitReport=async()=>{if(!reportTarget)return;try{await api("report",{roomId:active,reportedUserId:reportTarget.id,reason:reportReason,details:reportDetails,evidenceIds});setReportTarget(null);setReportDetails("");setEvidenceIds([]);notify("تم إرسال البلاغ وحفظ الأدلة النصية للمراجعة")}catch(e){notify(e instanceof Error?e.message:"تعذر إرسال البلاغ")}};
+ const loadReports=async()=>{try{const j=await api("reports",{},"GET");setReports(j.reports||[]);setShowReports(true)}catch(e){notify(e instanceof Error?e.message:"تعذر تحميل البلاغات")}};
+ const moderate=async(id:string,decision:string)=>{try{await api("moderate",{reportId:id,decision});await loadReports();notify("تم حفظ القرار الإداري")}catch(e){notify(e instanceof Error?e.message:"تعذر تنفيذ القرار")}};
+ return <section className="studyRooms" dir="rtl">
+  <header className="roomsHero"><div className="roomsHeroIcon"><Users size={30}/></div><div className="roomsHeroText"><span>THANAWeya · LIVE STUDY</span><h1>غرف المذاكرة</h1><p>ذاكروا مع بعض، شجّعوا بعض، وخلّوا وقتكم لهدف.</p></div><div className="roomsHeroCount"><strong>{rooms.length}</strong><small>غرفة ظاهرة</small></div></header>
+  {inviteCode&&<div className="roomsInviteNotice">كود غرفتك: <b>{inviteCode}</b><button onClick={()=>{void navigator.clipboard?.writeText(inviteCode);notify("تم نسخ كود الدعوة")}}><Copy size={15}/> نسخ</button></div>}
+  {!active&&!showReports&&<><div className="roomsToolbar"><div><h2>الغرف المتاحة</h2><p>كل غرفة تستوعب 5 طلاب فقط.</p></div><button className="roomsPrimary" onClick={()=>setShowCreate(v=>!v)}><Plus size={17}/> إنشاء غرفة</button></div>
+   {showCreate&&<div className="roomsCreate"><h3>إنشاء غرفة جديدة</h3><label>اسم الغرفة<input value={title} onChange={e=>setTitle(e.target.value.slice(0,70))} placeholder="مثال: مراجعة التفاضل"/></label><div className="roomsFormGrid"><label>المادة<select value={subject} onChange={e=>setSubject(e.target.value)}>{subjects.map(x=><option key={x}>{x}</option>)}</select></label><label>نوع الغرفة<select value={visibility} onChange={e=>setVisibility(e.target.value)}><option value="public">عامة</option><option value="private">خاصة بكود</option><option value="hidden">مخفية بكود</option></select></label></div><label>وصف مختصر<input value={description} onChange={e=>setDescription(e.target.value.slice(0,240))} placeholder="هنذاكر إيه؟"/></label><div className="roomsActions"><button className="roomsPrimary" disabled={busy} onClick={()=>void createRoom()}>إنشاء الغرفة</button><button className="roomsGhost" onClick={()=>setShowCreate(false)}>إلغاء</button></div></div>}
+   <div className="roomsJoinCode"><input value={joinCode} onChange={e=>setJoinCode(e.target.value.toUpperCase().slice(0,12))} placeholder="عندك كود دعوة؟"/><button disabled={!joinCode.trim()||busy} onClick={()=>void join("",joinCode)}>انضم بالكود</button></div>
+   {loading?<div className="roomsEmpty">بنحمّل الغرف...</div>:rooms.length===0?<div className="roomsEmpty"><Users size={32}/><b>لسه مفيش غرف مفتوحة</b><span>أنشئ أول غرفة وابدأ المذاكرة مع زملائك.</span></div>:<div className="roomsGrid">{rooms.map(r=><article className="roomCard" key={r.id}><div className="roomCardTop"><span className="roomSubject">{r.subject}</span><span className="roomPrivacy">{r.visibility==="public"?<Globe size={14}/>:r.visibility==="hidden"?<EyeOff size={14}/>:<Lock size={14}/>} {r.visibility==="public"?"عامة":r.visibility==="hidden"?"مخفية":"خاصة"}</span></div><h3>{r.title}</h3><p>{r.description||"جلسة مذاكرة جماعية"}</p><div className="roomCardMeta"><span><Users size={15}/>{r.members}/5</span><span>{r.ownerName}</span></div><button className="roomsPrimary" disabled={busy||r.members>=5||!!r.isLocked} onClick={()=>void join(r.id)}>{r.myRole?"العودة للغرفة":r.members>=5?"مكتملة":"دخول الغرفة"}</button></article>)}</div>}
+   {auth.role==="owner"&&<button className="roomsAdminLink" onClick={()=>void loadReports()}><ShieldCheck size={17}/> مراجعة البلاغات</button>}
+  </>}
+  {active&&<div className="roomWorkspace"><div className="roomWorkspaceHead"><div><span>{roomInfo?.subject||"غرفة مذاكرة"}</span><h2>{roomInfo?.title||"جاري فتح الغرفة..."}</h2><small>{members.length}/5 أعضاء · {roomInfo?.visibility==="hidden"?"غرفة مخفية":roomInfo?.visibility==="private"?"غرفة خاصة":"غرفة عامة"}</small></div><button className="roomsGhost" onClick={()=>void leave()}><LogOut size={16}/> مغادرة</button></div>
+   <div className="roomVoiceBar"><div className="roomVoiceStatus"><Volume2 size={18}/><span>الصوت المباشر · بدون تسجيل أو حفظ</span></div>{!micOn?<button onClick={()=>void startMic()} disabled={members.length<2}><Mic size={16}/> فتح المايك</button>:<button onClick={toggleMute}>{muted?<MicOff size={16}/>:<Mic size={16}/>} {muted?"إلغاء الكتم":"كتم المايك"}</button>}<button className="roomsGhost" onClick={stopVoice}><VolumeX size={16}/> إيقاف الصوت</button></div>
+   <div className="roomColumns"><div className="roomChat"><div className="roomChatHead"><b>دردشة الغرفة</b><span>الرسائل النصية تحفظ عند الإبلاغ فقط كدليل مختار</span></div><div className="roomMessages">{messages.map(m=><div className={"roomMessage "+(m.userId===auth.id?"mine":"")} key={m.id}><div><b>{m.name}</b><time>{new Date(m.createdAt).toLocaleTimeString("ar-EG",{hour:"2-digit",minute:"2-digit"})}</time></div><p>{m.content}</p>{m.userId!==auth.id&&<label className="roomEvidence"><input type="checkbox" checked={evidenceIds.includes(m.id)} onChange={e=>setEvidenceIds(old=>e.target.checked?[...old,m.id].slice(-8):old.filter(x=>x!==m.id))}/> تحديد كدليل</label>}</div>)}</div><form className="roomComposer" onSubmit={e=>{e.preventDefault();void send()}}><input value={draft} onChange={e=>setDraft(e.target.value.slice(0,500))} placeholder="اكتب رسالة للغرفة..." maxLength={500}/><button disabled={!draft.trim()}><Send size={17}/></button></form></div>
+    <aside className="roomMembers"><h3><Users size={17}/> الأعضاء</h3>{members.map(m=><div className="roomMember" key={m.id}><span className="roomAvatar">{(m.name||"?").slice(0,1)}</span><div><b>{m.name}</b><small>{m.role==="owner"?"صاحب الغرفة":"مشارك"}</small></div>{m.id!==auth.id&&<button title="إبلاغ عن العضو" onClick={()=>{setReportTarget(m);setEvidenceIds([])}}><Flag size={15}/></button>}</div>)}<div className="roomSafety">لا تسجّل الغرفة الصوت. استخدم الإبلاغ عند وجود مخالفة، وحدد الرسائل المرتبطة بها كدليل.</div></aside>
+   </div>{Object.entries(remoteStreams).map(([id])=><audio key={id} ref={el=>{if(el)audioRefs.current.set(id,el);else audioRefs.current.delete(id)}} autoPlay playsInline/>)}</div>}
+  {reportTarget&&<div className="roomsModalShade"><div className="roomsModal"><h3>الإبلاغ عن {reportTarget.name}</h3><label>سبب البلاغ<select value={reportReason} onChange={e=>setReportReason(e.target.value)}>{reasons.map(x=><option key={x}>{x}</option>)}</select></label><label>تفاصيل إضافية<textarea value={reportDetails} onChange={e=>setReportDetails(e.target.value.slice(0,1000))} placeholder="اشرح اللي حصل باختصار..." rows={3}/></label><p className="roomsEvidenceNote">الأدلة المحددة: {evidenceIds.length} رسالة. لن يتم تسجيل الصوت أو إرفاقه.</p><div className="roomsActions"><button className="roomsPrimary" onClick={()=>void submitReport()}>إرسال البلاغ</button><button className="roomsGhost" onClick={()=>setReportTarget(null)}>إلغاء</button></div></div></div>}
+  {showReports&&<div className="roomsAdminPanel"><div className="roomsToolbar"><h2>مراجعة البلاغات</h2><button className="roomsGhost" onClick={()=>setShowReports(false)}>رجوع</button></div>{reports.length===0?<div className="roomsEmpty">لا توجد بلاغات حاليًا.</div>:reports.map(r=><article className="roomsReport" key={r.id}><div><b>{r.reason}</b><span>{r.reporterName} أبلغ عن {r.reportedName}</span><small>الغرفة: {r.roomId} · {new Date(r.createdAt).toLocaleString("ar-EG")}</small></div><p>{r.details||"لا توجد تفاصيل إضافية"}</p><div className="roomsReportEvidence">{r.evidence.map((e:any)=><blockquote key={e.id}><b>{e.name}</b> · {e.content}</blockquote>)}</div>{r.status==="open"&&<div className="roomsActions"><button onClick={()=>void moderate(r.id,"warn")}>تحذير / إغلاق</button><button onClick={()=>void moderate(r.id,"mute")}>كتم</button><button onClick={()=>void moderate(r.id,"ban")}>حظر من الغرفة</button><button className="roomsGhost" onClick={()=>void moderate(r.id,"dismiss")}>رفض البلاغ</button></div>}</article>)}</div>}
+ </section>;
+}
