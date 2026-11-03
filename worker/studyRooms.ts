@@ -46,6 +46,7 @@ export async function handleStudyRooms(request: Request, env: RoomEnv, user: Roo
     if(await db.prepare("SELECT 1 FROM study_room_bans WHERE room_id=? AND user_id=?").bind(target.id,user.id).first())return fail("تم منعك من دخول هذه الغرفة",403);
     if(Number(target.is_locked))return fail("الغرفة مقفولة حاليًا",403);
     const exists=await db.prepare("SELECT 1 FROM study_room_members WHERE room_id=? AND user_id=?").bind(target.id,user.id).first();
+    if(exists){ await db.prepare("UPDATE study_room_members SET last_seen=? WHERE room_id=? AND user_id=?").bind(now,target.id,user.id).run(); }
     if(!exists){
       const count=await db.prepare("SELECT COUNT(*) n FROM study_room_members WHERE room_id=? AND last_seen>?").bind(target.id,now-45000).first<any>();
       if(Number(count?.n||0)>=5)return fail("الغرفة مكتملة (5 طلاب)",409);
@@ -65,7 +66,7 @@ export async function handleStudyRooms(request: Request, env: RoomEnv, user: Roo
     await db.prepare("DELETE FROM study_room_members WHERE room_id=? AND user_id=?").bind(room,user.id).run();return roomJson({ok:true});
   }
   if(action==="send"&&request.method==="POST"){
-    if(!await roomMember(db,room,user.id))return fail("انضم للغرفة أولًا",403);
+    const currentMember=await db.prepare("SELECT status FROM study_room_members WHERE room_id=? AND user_id=?").bind(room,user.id).first<any>();if(!currentMember)return fail("انضم للغرفة أولًا",403);if(currentMember.status==="muted")return fail("تم كتمك مؤقتًا في هذه الغرفة",403);
     const content=String(b.content||"").trim().slice(0,500);if(!content)return fail("اكتب رسالة الأول");
     const recent=await db.prepare("SELECT COUNT(*) n FROM study_room_messages WHERE room_id=? AND user_id=? AND created_at>?").bind(room,user.id,now-10000).first<any>();
     if(Number(recent?.n||0)>=8)return fail("استنى شوية قبل إرسال رسائل جديدة",429);
