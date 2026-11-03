@@ -16,7 +16,7 @@ export default function StudyRooms({auth,notify}:{auth:Auth;notify:(message:stri
  const [members,setMembers]=useState<Member[]>([]),[messages,setMessages]=useState<ChatMessage[]>([]),[draft,setDraft]=useState(''),[timer,setTimer]=useState<TimerState>(emptyTimer),[duration,setDuration]=useState(25),[remaining,setRemaining]=useState(0);
  const [reportTarget,setReportTarget]=useState<Member|null>(null),[reportReason,setReportReason]=useState(reasons[0]),[reportDetails,setReportDetails]=useState('');
  const [socketState,setSocketState]=useState<'connecting'|'connected'|'offline'>('offline'),[micOn,setMicOn]=useState(false),[voiceBusy,setVoiceBusy]=useState(false),[micMembers,setMicMembers]=useState<Record<string,boolean>>({});
- const wsRef=useRef<WebSocket|null>(null),leavingRef=useRef(false),reconnectRef=useRef<number|null>(null),retryRef=useRef(0),inviteRef=useRef(''),roomRef=useRef<Room|null>(null),localStreamRef=useRef<MediaStream|null>(null),peersRef=useRef<Map<string,RTCPeerConnection>>(new Map()),audioRef=useRef<Map<string,HTMLAudioElement>>(new Map()),micStateRef=useRef(false),membersRef=useRef<Member[]>([]);
+ const wsRef=useRef<WebSocket|null>(null),makingOfferRef=useRef<Map<string,boolean>>(new Map()),leavingRef=useRef(false),reconnectRef=useRef<number|null>(null),retryRef=useRef(0),inviteRef=useRef(''),roomRef=useRef<Room|null>(null),localStreamRef=useRef<MediaStream|null>(null),peersRef=useRef<Map<string,RTCPeerConnection>>(new Map()),audioRef=useRef<Map<string,HTMLAudioElement>>(new Map()),micStateRef=useRef(false),membersRef=useRef<Member[]>([]);
  const api=async(path:string,method='GET',data?:Record<string,unknown>)=>{const r=await fetch(path,{method,credentials:'same-origin',cache:'no-store',headers:method==='GET'?undefined:{'content-type':'application/json'},body:data?JSON.stringify(data):undefined});const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.error||'حصل خطأ في الاتصال');return j};
  const loadRooms=useCallback(async()=>{setLoading(true);try{const j=await api('/api/study-rooms');setRooms(j.rooms||[])}catch(e){notify(e instanceof Error?e.message:'تعذر تحميل الغرف')}finally{setLoading(false)}},[]);
  useEffect(()=>{void loadRooms()},[loadRooms]);
@@ -26,7 +26,7 @@ export default function StudyRooms({auth,notify}:{auth:Auth;notify:(message:stri
  useEffect(()=>{if(!timer.running){setRemaining(timer.duration*60);return}const tick=()=>setRemaining(Math.max(0,Math.ceil((timer.endsAt-Date.now())/1000)));tick();const id=window.setInterval(tick,500);return()=>window.clearInterval(id)},[timer]);
  const send=(value:unknown)=>{const ws=wsRef.current;if(ws?.readyState===WebSocket.OPEN)ws.send(JSON.stringify(value))};
  const closePeers=()=>{for(const pc of peersRef.current.values())try{pc.close()}catch{}peersRef.current.clear();for(const audio of audioRef.current.values()){audio.pause();audio.srcObject=null}audioRef.current.clear()};
- const stopLocalAudio=()=>{localStreamRef.current?.getTracks().forEach(t=>t.stop());localStreamRef.current=null;closePeers();setMicOn(false);send({type:'mic',enabled:false})};
+ const stopLocalAudio=()=>{localStreamRef.current?.getTracks().forEach(t=>t.stop());localStreamRef.current=null;closePeers();setMicOn(false);micStateRef.current=false;send({type:'mic',enabled:false})};
  const sendSignal=(target:string,payload:unknown)=>send({type:'signal',target,payload});
  const getPeer=(peerId:string)=>{
   let pc=peersRef.current.get(peerId);if(pc)return pc;
@@ -36,7 +36,7 @@ export default function StudyRooms({auth,notify}:{auth:Auth;notify:(message:stri
   pc.onicecandidate=e=>{if(e.candidate)sendSignal(peerId,{candidate:e.candidate})};
   pc.ontrack=e=>{let audio=audioRef.current.get(peerId);if(!audio){audio=new Audio();audio.autoplay=true;audio.playsInline=true;audioRef.current.set(peerId,audio)}audio.srcObject=e.streams[0];void audio.play().catch(()=>{})};
   pc.onconnectionstatechange=()=>{if(pc&&(pc.connectionState==='failed'||pc.connectionState==='closed')){pc.close();peersRef.current.delete(peerId);const a=audioRef.current.get(peerId);if(a){a.pause();a.srcObject=null;audioRef.current.delete(peerId)}}};
-  pc.onnegotiationneeded=async()=>{try{if(pc!.signalingState!=='stable')return;await pc!.setLocalDescription();sendSignal(peerId,{description:pc!.localDescription})}catch{}};
+  pc.onnegotiationneeded=async()=>{try{if(pc!.signalingState!=='stable')return;makingOfferRef.current.set(peerId,true);await pc!.setLocalDescription();sendSignal(peerId,{description:pc!.localDescription})}catch{}finally{makingOfferRef.current.set(peerId,false)}};
   return pc;
  };
  const handleSignal=async(from:string,payload:any)=>{
@@ -44,8 +44,10 @@ export default function StudyRooms({auth,notify}:{auth:Auth;notify:(message:stri
   try{
    if(payload?.description){
     const description=payload.description;
-    const offerCollision=description.type==='offer'&&pc.signalingState!=='stable';
-    if(offerCollision){try{await pc.setLocalDescription({type:'rollback'})}catch{}}
+    const polite=auth.id.localeCompare(from)>0;
+    const offerCollision=description.type==='offer'&&(makingOfferRef.current.get(from)===true||pc.signalingState!=='stable');
+    if(offerCollision&&!polite)return;
+    if(offerCollision&&polite){try{await pc.setLocalDescription({type:'rollback'})}catch{}}
     await pc.setRemoteDescription(description);
     if(description.type==='offer'){await pc.setLocalDescription();sendSignal(from,{description:pc.localDescription})}
    }else if(payload?.candidate){try{await pc.addIceCandidate(payload.candidate)}catch{}}
@@ -66,8 +68,9 @@ export default function StudyRooms({auth,notify}:{auth:Auth;notify:(message:stri
    if(data.type==='hello'){applyPresence(data.members||[]);setTimer(data.timer||emptyTimer)}
    else if(data.type==='presence')applyPresence(data.members||[]);
    else if(data.type==='chat')setMessages(old=>[...old,data.message].slice(-100));
+   else if(Array.isArray(data.messages))setMessages(data.messages.slice(-100));
    else if(data.type==='timer')setTimer(data.timer||emptyTimer);
-   else if(data.type==='mic')setMicMembers(old=>({...old,[data.userId]:!!data.enabled}));
+   else if(data.type==='mic'){setMicMembers(old=>({...old,[data.userId]:!!data.enabled}));if(!data.enabled){const pc=peersRef.current.get(data.userId);pc?.close();peersRef.current.delete(data.userId);const audio=audioRef.current.get(data.userId);if(audio){audio.pause();audio.srcObject=null;audioRef.current.delete(data.userId)}}}
    else if(data.type==='signal')void handleSignal(data.from,data.payload);
    else if(data.type==='notice')notify(data.message||'تنبيه من الغرفة');
    else if(data.type==='room_closed'){leavingRef.current=true;stopLocalAudio();setActiveRoom(null);setSocketState('offline');notify('تم إغلاق الغرفة من صاحبها.');void loadRooms()}
