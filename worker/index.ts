@@ -2650,10 +2650,11 @@ export class StudyRoomHub extends DurableObject<Env> {
         const state=ws.deserializeAttachment() as {userId?:string}|null;
         if(state?.userId===userId)try{ws.close(4001,"reconnected")}catch{}
       }
-      const pair=new WebSocketPair(),client=pair[0],server=pair[1];
+      const pair=new WebSocketPair(),[client,server]=Object.values(pair) as [WebSocket,WebSocket];
       this.ctx.acceptWebSocket(server);
-      server.serializeAttachment({userId,name,isOwner:request.headers.get("x-room-is-owner")==="1",joinedAt:Date.now()});
-      server.send(JSON.stringify({type:"hello",members:this.members()}));
+      server.serializeAttachment({userId,name,isOwner:request.headers.get("x-room-is-owner")==="1",roomId:this.ctx.id.toString(),joinedAt:Date.now()});
+      const timerRow=this.ctx.storage.sql.exec<{value:string}>("SELECT value FROM room_state WHERE key='timer'").toArray()[0];
+      server.send(JSON.stringify({type:"hello",members:this.members(),timer:timerRow?JSON.parse(timerRow.value):{running:false,duration:0,startedAt:0,endsAt:0}}));
       this.broadcast({type:"presence",members:this.members()});
       return new Response(null,{status:101,webSocket:client});
     }
@@ -2670,6 +2671,8 @@ export class StudyRoomHub extends DurableObject<Env> {
       if(recent>=8){try{ws.send(JSON.stringify({type:"notice",message:"تمهل قليلًا قبل إرسال رسائل أخرى."}))}catch{};return;}
       const row={id:crypto.randomUUID(),user_id:state.userId,name:state.name,content,created_at:Date.now()};
       this.ctx.storage.sql.exec("INSERT INTO messages(id,user_id,name,content,created_at) VALUES(?,?,?,?,?)",row.id,row.user_id,row.name,row.content,row.created_at);
+      this.ctx.storage.sql.exec("DELETE FROM messages WHERE created_at<?",Date.now()-86400000);
+      this.ctx.storage.sql.exec("DELETE FROM messages WHERE id IN (SELECT id FROM messages ORDER BY created_at DESC LIMIT -1 OFFSET 100)");
       this.broadcast({type:"chat",message:row});
       return;
     }
@@ -2702,10 +2705,14 @@ export class StudyRoomHub extends DurableObject<Env> {
     }
   }
   async webSocketClose(ws:WebSocket):Promise<void>{
-    const state=ws.deserializeAttachment() as {userId?:string}|null;
+    const state=ws.deserializeAttachment() as {userId?:string,roomId?:string}|null;
     if(!state?.userId)return;
     const stillConnected=this.ctx.getWebSockets().some(peer=>(peer.deserializeAttachment() as {userId?:string}|null)?.userId===state.userId);
-    if(!stillConnected)this.broadcast({type:"presence",members:this.members()});
+    if(!stillConnected){
+      this.ctx.storage.sql.exec("DELETE FROM members WHERE user_id=?",state.userId);
+      if(state.roomId)try{await this.env.DB.prepare("DELETE FROM study_room_members WHERE room_id=? AND user_id=?").bind(state.roomId,state.userId).run()}catch{}
+      this.broadcast({type:"presence",members:this.members()});
+    }
   }
 }
 
