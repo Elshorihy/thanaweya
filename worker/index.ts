@@ -2622,7 +2622,7 @@ export class StudyRoomHub extends DurableObject<Env> {
         if(count>=5)return Response.json({error:"الغرفة مكتملة (5 طلاب)."}, {status:409});
         this.ctx.storage.sql.exec("INSERT INTO members(user_id,name,joined_at,last_seen) VALUES(?,?,?,?)",userId,name,Date.now(),Date.now());
       }else this.ctx.storage.sql.exec("UPDATE members SET name=?,last_seen=? WHERE user_id=?",name,Date.now(),userId);
-      await this.ctx.storage.setAlarm(Date.now()+45000);
+      await this.ctx.storage.setAlarm(Date.now()+60000);
       this.broadcast({type:"presence",members:this.members()});
       return Response.json({ok:true,members:this.members()});
     }
@@ -2727,7 +2727,7 @@ export class StudyRoomHub extends DurableObject<Env> {
     }
   }
   async alarm():Promise<void>{
-    const stale=this.ctx.storage.sql.exec<{user_id:string}>("SELECT user_id FROM members WHERE last_seen<?",Date.now()-90000).toArray();
+    const stale=this.ctx.storage.sql.exec<{user_id:string}>("SELECT user_id FROM members WHERE last_seen<?",Date.now()-180000).toArray();
     for(const row of stale){
       this.ctx.storage.sql.exec("DELETE FROM members WHERE user_id=?",row.user_id);
       try{const roomId=await this.ctx.storage.get<string>("roomId");if(roomId)await this.env.DB.prepare("DELETE FROM study_room_members WHERE room_id=? AND user_id=?").bind(roomId,row.user_id).run()}catch{}
@@ -3802,7 +3802,7 @@ export default {
               if(!["public","private","hidden"].includes(visibility))return json({error:"نوع الغرفة غير صالح."},400);
               const owned=await env.DB.prepare("SELECT COUNT(*) AS n FROM study_rooms WHERE owner_user_id=? AND status='open'").bind(u.id).first<any>();
               if(Number(owned?.n||0)>=3)return json({error:"يمكنك إنشاء 3 غرف مفتوحة بحد أقصى."},429);
-              const id=randomHex(16),inviteCode=visibility==="public"?"":randomHex(4).toUpperCase(),now=Date.now();
+              const id=randomHex(16),inviteCode=visibility==="public"?"":randomHex(8).toUpperCase(),now=Date.now();
               const stub=env.STUDY_ROOM_HUB.getByName(id);
               const reserve=await stub.fetch("https://study-room.internal/reserve",{method:"POST",headers:{"x-room-user-id":u.id,"x-room-user-name":u.name,"x-room-id":id}});
               if(!reserve.ok)return json({error:"تعذر تجهيز الغرفة. حاول مرة أخرى."},503);
