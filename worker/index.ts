@@ -885,7 +885,7 @@ async function sendTelegramBridgeReports(env:Env,chatId:string){
   const items=rows.results||[];
   if(!items.length){await telegramCall(env,"sendMessage",{chat_id:chatId,text:"🎫 مفيش بلاغات دعم مفتوحة حاليًا.",reply_markup:dashBack()});}
   for(const x of items){
-    const txt="🎫 بلاغ دعم #"+String(x.id).slice(0,8)+"\\n👤 "+String(x.name||"طالب")+" — "+String(x.email||"")+"\\n📂 "+String(x.category)+"\\n📌 الحالة: "+String(x.status==="new"?"جديد":"قيد الحل")+"\\n\\n"+String(x.message||"").slice(0,1500);
+    const txt="🎫 بلاغ دعم #"+String(x.id).slice(0,8)+"\n👤 "+String(x.name||"طالب")+" — "+String(x.email||"")+"\n📂 "+String(x.category)+"\n📌 الحالة: "+String(x.status==="new"?"جديد":"قيد الحل")+"\n\n"+String(x.message||"").slice(0,1500);
     await telegramCall(env,"sendMessage",{chat_id:chatId,text:txt,reply_markup:{inline_keyboard:[
       [{text:"✍️ رد على الطالب",callback_data:"bridge_report_reply:"+x.id}],
       [{text:"🛠️ قيد الحل",callback_data:"bridge_report_status:in_progress:"+x.id},{text:"✅ تم الحل",callback_data:"bridge_report_status:resolved:"+x.id}]
@@ -896,7 +896,7 @@ async function sendTelegramBridgeReports(env:Env,chatId:string){
     for(const x of safety.results||[]){
       let ev:any={};try{ev=JSON.parse(String(x.evidence_json||"{}"))}catch{}
       const post=ev?.post||{};
-      const text=["🚨 بلاغ مجتمع #"+String(x.id).slice(0,8),"👤 المبلّغ: "+String(x.reporter_name||"طالب"),"👤 صاحب المحتوى: "+String(x.target_name||"طالب"),"📂 السبب: "+String(x.reason),"📌 الحالة: "+String(x.status),"📝 توضيح: "+String(x.reporter_note||"—"),"","📎 الدليل المحفوظ: "+String(post.title||"بدون عنوان"),String(post.content||"").slice(0,900),"💬 الردود المحفوظة: "+String(Array.isArray(ev?.comments)?ev.comments.length:0)].join("\\n");
+      const text=["🚨 بلاغ مجتمع #"+String(x.id).slice(0,8),"👤 المبلّغ: "+String(x.reporter_name||"طالب"),"👤 صاحب المحتوى: "+String(x.target_name||"طالب"),"📂 السبب: "+String(x.reason),"📌 الحالة: "+String(x.status),"📝 توضيح: "+String(x.reporter_note||"—"),"","📎 الدليل المحفوظ: "+String(post.title||"بدون عنوان"),String(post.content||"").slice(0,900),"💬 الردود المحفوظة: "+String(Array.isArray(ev?.comments)?ev.comments.length:0)].join("\n");
       await telegramCall(env,"sendMessage",{chat_id:chatId,text,reply_markup:{inline_keyboard:[[{text:"🔎 قيد المراجعة",callback_data:"crs:in_review:"+x.id},{text:"✅ تم التعامل",callback_data:"crs:resolved:"+x.id}],[{text:"🚫 رفض البلاغ",callback_data:"crs:rejected:"+x.id}]]}});
     }
   }catch(e){console.error("Community safety reports listing failed",e);}
@@ -3666,8 +3666,8 @@ export default {
             const evidence={capturedAt:now,post:{id:String(post.id),author:String(post.authorName||"طالب"),subject:String(post.subject||""),kind:String(post.kind||""),title:String(post.title||""),content:String(post.content||"").slice(0,4000),createdAt:Number(post.created_at||0)},comments:(comments.results||[]).reverse().map((x:any)=>({id:String(x.id),author:String(x.name||"طالب"),content:String(x.content||"").slice(0,1200),createdAt:Number(x.created_at||0)}))};
             const reportId=randomHex(10);
             await env.DB.prepare("INSERT INTO community_reports(id,post_id,reporter_id,reason,status,created_at,reporter_note,evidence_json,updated_at) VALUES(?,?,?,?,?,?,?,?,?)").bind(reportId,postId,u.id,reason,"open",now,reporterNote,JSON.stringify(evidence),now).run();
-            const evidenceText="📌 الدليل المحفوظ وقت البلاغ:\\n"+String(post.title||"بدون عنوان")+"\\n"+String(post.content||"").slice(0,900)+"\\n\\n💬 الردود المحفوظة: "+String((comments.results||[]).length);
-            ctx.waitUntil(notifyOwnerTelegram(env,"🚨 بلاغ مجتمع جديد\\n\\n🆔 "+reportId+"\\n👤 المبلّغ: "+u.name+"\\n👤 صاحب المحتوى: "+String(post.authorName||"طالب")+"\\n📂 السبب: "+reason+"\\n📝 توضيح المبلّغ: "+(reporterNote||"لم يضف توضيحًا")+"\\n\\n"+evidenceText,{inline_keyboard:[[{text:"🔎 قيد المراجعة",callback_data:"crs:in_review:"+reportId},{text:"✅ تم التعامل",callback_data:"crs:resolved:"+reportId}],[{text:"🚫 رفض البلاغ",callback_data:"crs:rejected:"+reportId}]]}));
+            const evidenceText="📌 الدليل المحفوظ وقت البلاغ:\n"+String(post.title||"بدون عنوان")+"\n"+String(post.content||"").slice(0,900)+"\n\n💬 الردود المحفوظة: "+String((comments.results||[]).length);
+            ctx.waitUntil(notifyOwnerTelegram(env,"🚨 بلاغ مجتمع جديد\n\n🆔 "+reportId+"\n👤 المبلّغ: "+u.name+"\n👤 صاحب المحتوى: "+String(post.authorName||"طالب")+"\n📂 السبب: "+reason+"\n📝 توضيح المبلّغ: "+(reporterNote||"لم يضف توضيحًا")+"\n\n"+evidenceText,{inline_keyboard:[[{text:"🔎 قيد المراجعة",callback_data:"crs:in_review:"+reportId},{text:"✅ تم التعامل",callback_data:"crs:resolved:"+reportId}],[{text:"🚫 رفض البلاغ",callback_data:"crs:rejected:"+reportId}]]}));
             return json({ok:true,id:reportId,message:"وصل البلاغ للإدارة مع حفظ نسخة من المحتوى والردود وقت الإبلاغ."});
           }
           if(action==="delete"){
