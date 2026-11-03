@@ -3831,7 +3831,7 @@ export default {
           if(endpoint==="messages" && request.method==="GET"){
             if(!member)return json({error:"انضم للغرفة أولًا."},403);
             const history=await stub.fetch("https://study-room.internal/history",{headers:{"x-room-user-id":u.id}});
-            return new Response(await history.text(),{status:history.status,headers:{"content-type":"application/json; charset=utf-8","cache-control":"no-store"});
+            return new Response(await history.text(),{status:history.status,headers:{"content-type":"application/json; charset=utf-8","cache-control":"no-store"}});
           }
           if(endpoint==="report" && request.method==="POST"){
             if(!member)return json({error:"لازم تكون عضوًا في الغرفة لإرسال بلاغ."},403);
