@@ -883,14 +883,23 @@ async function sendTelegramBridgeReports(env:Env,chatId:string){
   await ensureBridgeTools(env);
   const rows=await env.DB.prepare("SELECT r.id,r.category,r.message,r.status,r.created_at,u.name,u.email FROM student_reports r JOIN users u ON u.id=r.user_id WHERE r.status IN ('new','in_progress') ORDER BY r.created_at DESC LIMIT 10").all<any>();
   const items=rows.results||[];
-  if(!items.length){await telegramCall(env,"sendMessage",{chat_id:chatId,text:"🎫 مفيش بلاغات مفتوحة حاليًا.",reply_markup:dashBack()});return;}
+  if(!items.length){await telegramCall(env,"sendMessage",{chat_id:chatId,text:"🎫 مفيش بلاغات دعم مفتوحة حاليًا.",reply_markup:dashBack()});}
   for(const x of items){
-    const txt="🎫 بلاغ #"+String(x.id).slice(0,8)+"\n👤 "+String(x.name||"طالب")+" — "+String(x.email||"")+"\n📂 "+String(x.category)+"\n📌 الحالة: "+String(x.status==="new"?"جديد":"قيد الحل")+"\n\n"+String(x.message||"").slice(0,1800);
+    const txt="🎫 بلاغ دعم #"+String(x.id).slice(0,8)+"\\n👤 "+String(x.name||"طالب")+" — "+String(x.email||"")+"\\n📂 "+String(x.category)+"\\n📌 الحالة: "+String(x.status==="new"?"جديد":"قيد الحل")+"\\n\\n"+String(x.message||"").slice(0,1500);
     await telegramCall(env,"sendMessage",{chat_id:chatId,text:txt,reply_markup:{inline_keyboard:[
       [{text:"✍️ رد على الطالب",callback_data:"bridge_report_reply:"+x.id}],
       [{text:"🛠️ قيد الحل",callback_data:"bridge_report_status:in_progress:"+x.id},{text:"✅ تم الحل",callback_data:"bridge_report_status:resolved:"+x.id}]
     ]}});
   }
+  try{
+    const safety=await env.DB.prepare("SELECT r.id,r.reason,r.reporter_note,r.status,r.evidence_json,r.created_at,reporter.name AS reporter_name,target.name AS target_name FROM community_reports r JOIN users reporter ON reporter.id=r.reporter_id JOIN community_posts p ON p.id=r.post_id JOIN users target ON target.id=p.user_id WHERE r.status IN ('open','in_review') ORDER BY r.created_at DESC LIMIT 10").all<any>();
+    for(const x of safety.results||[]){
+      let ev:any={};try{ev=JSON.parse(String(x.evidence_json||"{}"))}catch{}
+      const post=ev?.post||{};
+      const text=["🚨 بلاغ مجتمع #"+String(x.id).slice(0,8),"👤 المبلّغ: "+String(x.reporter_name||"طالب"),"👤 صاحب المحتوى: "+String(x.target_name||"طالب"),"📂 السبب: "+String(x.reason),"📌 الحالة: "+String(x.status),"📝 توضيح: "+String(x.reporter_note||"—"),"","📎 الدليل المحفوظ: "+String(post.title||"بدون عنوان"),String(post.content||"").slice(0,900),"💬 الردود المحفوظة: "+String(Array.isArray(ev?.comments)?ev.comments.length:0)].join("\\n");
+      await telegramCall(env,"sendMessage",{chat_id:chatId,text,reply_markup:{inline_keyboard:[[{text:"🔎 قيد المراجعة",callback_data:"crs:in_review:"+x.id},{text:"✅ تم التعامل",callback_data:"crs:resolved:"+x.id}],[{text:"🚫 رفض البلاغ",callback_data:"crs:rejected:"+x.id}]]}});
+    }
+  }catch(e){console.error("Community safety reports listing failed",e);}
 }
 async function sendTelegramBridgeMessages(env:Env,chatId:string){
   await ensureBridgeTools(env);
@@ -2031,6 +2040,20 @@ async function handleTelegramUpdate(env:Env,update:any){
       if(status==="resolved")await env.DB.prepare("INSERT INTO admin_messages(id,user_id,sender,message,created_at) VALUES(?,?,'admin',?,?)").bind(randomHex(10),report.user_id,"تم حل البلاغ رقم "+id.slice(0,8)+". لو المشكلة لسه موجودة ابعتلنا رسالة.",Date.now()).run();
       await adminLog(env,chatId,"REPORT_STATUS",id,status);
       await telegramCall(env,"sendMessage",{chat_id:chatId,text:status==="resolved"?"✅ تم إغلاق البلاغ وإبلاغ الطالب.":"🛠️ تم تحويل البلاغ إلى قيد الحل.",reply_markup:{inline_keyboard:[[ {text:"🎫 باقي البلاغات",callback_data:"bridge_reports"} ]] }});
+      return;
+    }
+    if(data.startsWith("crs:")){
+      const p=data.split(":"),status=p[1],id=p.slice(2).join(":");
+      if(!["in_review","resolved","rejected"].includes(status))return;
+      const report=await env.DB.prepare("SELECT id,reporter_id FROM community_reports WHERE id=?").bind(id).first<any>();
+      if(!report){await telegramCall(env,"sendMessage",{chat_id:chatId,text:"البلاغ غير موجود."});return;}
+      await env.DB.prepare("UPDATE community_reports SET status=?,updated_at=? WHERE id=?").bind(status,Date.now(),id).run();
+      const label=status==="in_review"?"قيد المراجعة":status==="resolved"?"تم التعامل":"مرفوض بعد المراجعة";
+      if(status==="resolved"||status==="rejected"){
+        await env.DB.prepare("INSERT INTO admin_messages(id,user_id,sender,message,created_at) VALUES(?,?,'admin',?,?)").bind(randomHex(10),report.reporter_id,"تم تحديث حالة بلاغك رقم "+id.slice(0,8)+" إلى: "+label+".",Date.now()).run();
+      }
+      await adminLog(env,chatId,"COMMUNITY_REPORT_STATUS",id,status);
+      await telegramCall(env,"sendMessage",{chat_id:chatId,text:"✅ تم تحديث حالة البلاغ إلى: "+label,reply_markup:{inline_keyboard:[[ {text:"🚨 البلاغات المفتوحة",callback_data:"bridge_reports"} ]] }});
       return;
     }
     if(data.startsWith("bridge_report_reply:")){
@@ -3595,6 +3618,10 @@ export default {
           await env.DB.prepare("CREATE TABLE IF NOT EXISTS community_comments (id TEXT PRIMARY KEY,post_id TEXT NOT NULL,user_id TEXT NOT NULL,content TEXT NOT NULL,created_at INTEGER NOT NULL,FOREIGN KEY(post_id) REFERENCES community_posts(id) ON DELETE CASCADE,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE)").run();
           await env.DB.prepare("CREATE TABLE IF NOT EXISTS community_likes (post_id TEXT NOT NULL,user_id TEXT NOT NULL,created_at INTEGER NOT NULL,PRIMARY KEY(post_id,user_id),FOREIGN KEY(post_id) REFERENCES community_posts(id) ON DELETE CASCADE,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE)").run();
           await env.DB.prepare("CREATE TABLE IF NOT EXISTS community_reports (id TEXT PRIMARY KEY,post_id TEXT NOT NULL,reporter_id TEXT NOT NULL,reason TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'open',created_at INTEGER NOT NULL,FOREIGN KEY(post_id) REFERENCES community_posts(id) ON DELETE CASCADE,FOREIGN KEY(reporter_id) REFERENCES users(id) ON DELETE CASCADE)").run();
+          try { await env.DB.prepare("ALTER TABLE community_reports ADD COLUMN reporter_note TEXT NOT NULL DEFAULT ''").run(); } catch {}
+          try { await env.DB.prepare("ALTER TABLE community_reports ADD COLUMN evidence_json TEXT NOT NULL DEFAULT '{}'").run(); } catch {}
+          try { await env.DB.prepare("ALTER TABLE community_reports ADD COLUMN updated_at INTEGER NOT NULL DEFAULT 0").run(); } catch {}
+          try { await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_community_reports_status_created ON community_reports(status,created_at DESC)").run(); } catch {}
           await env.DB.prepare("CREATE TABLE IF NOT EXISTS community_best_answers (post_id TEXT PRIMARY KEY,comment_id TEXT NOT NULL,selected_by TEXT NOT NULL,created_at INTEGER NOT NULL,FOREIGN KEY(post_id) REFERENCES community_posts(id) ON DELETE CASCADE,FOREIGN KEY(comment_id) REFERENCES community_comments(id) ON DELETE CASCADE,FOREIGN KEY(selected_by) REFERENCES users(id) ON DELETE CASCADE)").run();
           await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_community_posts_created ON community_posts(deleted_at,created_at)").run();
           if(request.method==="GET"){
@@ -3627,9 +3654,21 @@ export default {
           }
           if(action==="report"){
             if(!postId)return json({error:"المشاركة غير محددة"},400);
-            const post=await env.DB.prepare("SELECT id,user_id FROM community_posts WHERE id=? AND deleted_at IS NULL").bind(postId).first<any>();if(!post)return json({error:"المشاركة غير موجودة"},404);if(post.user_id===u.id)return json({error:"لا يمكنك الإبلاغ عن مشاركتك"},400);
-            const prior=await env.DB.prepare("SELECT id FROM community_reports WHERE post_id=? AND reporter_id=? AND status='open'").bind(postId,u.id).first();if(prior)return json({ok:true,message:"سبق الإبلاغ عن المشاركة"});
-            await env.DB.prepare("INSERT INTO community_reports(id,post_id,reporter_id,reason,status,created_at) VALUES(?,?,?,?,?,?)").bind(crypto.randomUUID(),postId,u.id,String(b?.reason||"مراجعة").slice(0,250),"open",now).run();return json({ok:true});
+            const post=await env.DB.prepare("SELECT p.id,p.user_id,p.subject,p.kind,p.title,p.content,p.created_at,u.name AS authorName FROM community_posts p JOIN users u ON u.id=p.user_id WHERE p.id=? AND p.deleted_at IS NULL").bind(postId).first<any>();
+            if(!post)return json({error:"المشاركة غير موجودة"},404);
+            if(post.user_id===u.id)return json({error:"لا يمكنك الإبلاغ عن مشاركتك"},400);
+            const reason=String(b?.reason||"").trim().slice(0,80);
+            const reporterNote=String(b?.details||"").trim().slice(0,1000);
+            if(!["إساءة أو تنمر","محتوى غير لائق","تحرش أو مضايقات","سبام أو إزعاج","معلومات شخصية","مخالفة أخرى"].includes(reason))return json({error:"سبب البلاغ غير صالح"},400);
+            const prior=await env.DB.prepare("SELECT id FROM community_reports WHERE post_id=? AND reporter_id=? AND status IN ('open','in_review')").bind(postId,u.id).first<any>();
+            if(prior)return json({ok:true,message:"سبق إرسال بلاغ مفتوح عن هذه المشاركة."});
+            const comments=await env.DB.prepare("SELECT c.id,u.name,c.content,c.created_at FROM community_comments c JOIN users u ON u.id=c.user_id WHERE c.post_id=? ORDER BY c.created_at DESC LIMIT 12").bind(postId).all<any>();
+            const evidence={capturedAt:now,post:{id:String(post.id),author:String(post.authorName||"طالب"),subject:String(post.subject||""),kind:String(post.kind||""),title:String(post.title||""),content:String(post.content||"").slice(0,4000),createdAt:Number(post.created_at||0)},comments:(comments.results||[]).reverse().map((x:any)=>({id:String(x.id),author:String(x.name||"طالب"),content:String(x.content||"").slice(0,1200),createdAt:Number(x.created_at||0)}))};
+            const reportId=randomHex(10);
+            await env.DB.prepare("INSERT INTO community_reports(id,post_id,reporter_id,reason,status,created_at,reporter_note,evidence_json,updated_at) VALUES(?,?,?,?,?,?,?,?,?)").bind(reportId,postId,u.id,reason,"open",now,reporterNote,JSON.stringify(evidence),now).run();
+            const evidenceText="📌 الدليل المحفوظ وقت البلاغ:\\n"+String(post.title||"بدون عنوان")+"\\n"+String(post.content||"").slice(0,900)+"\\n\\n💬 الردود المحفوظة: "+String((comments.results||[]).length);
+            ctx.waitUntil(notifyOwnerTelegram(env,"🚨 بلاغ مجتمع جديد\\n\\n🆔 "+reportId+"\\n👤 المبلّغ: "+u.name+"\\n👤 صاحب المحتوى: "+String(post.authorName||"طالب")+"\\n📂 السبب: "+reason+"\\n📝 توضيح المبلّغ: "+(reporterNote||"لم يضف توضيحًا")+"\\n\\n"+evidenceText,{inline_keyboard:[[{text:"🔎 قيد المراجعة",callback_data:"crs:in_review:"+reportId},{text:"✅ تم التعامل",callback_data:"crs:resolved:"+reportId}],[{text:"🚫 رفض البلاغ",callback_data:"crs:rejected:"+reportId}]]}));
+            return json({ok:true,id:reportId,message:"وصل البلاغ للإدارة مع حفظ نسخة من المحتوى والردود وقت الإبلاغ."});
           }
           if(action==="delete"){
             const post=await env.DB.prepare("SELECT id,user_id FROM community_posts WHERE id=? AND deleted_at IS NULL").bind(postId).first<any>();if(!post)return json({error:"المشاركة غير موجودة"},404);if(post.user_id!==u.id&&u.role!=="owner")return json({error:"غير مسموح بحذف المشاركة دي"},403);
