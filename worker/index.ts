@@ -2633,11 +2633,13 @@ export class StudyRoomHub extends DurableObject<Env> {
         if(state?.userId===userId)try{ws.close(1000,"left room")}catch{}
       }
       this.broadcast({type:"presence",members:this.members()});
+      if(this.members().length)await this.ctx.storage.setAlarm(Date.now()+45000);else await this.ctx.storage.deleteAlarm();
       return Response.json({ok:true});
     }
     if(action==="close"){
       for(const ws of this.ctx.getWebSockets())try{ws.send(JSON.stringify({type:"room_closed"}));ws.close(1000,"room closed")}catch{}
       this.ctx.storage.sql.exec("DELETE FROM members");
+      await this.ctx.storage.deleteAlarm();
       return Response.json({ok:true});
     }
     if(action==="history"){
