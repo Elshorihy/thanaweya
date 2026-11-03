@@ -1,8 +1,10 @@
 import {sendNotification,type PushSubscription as WebPushSubscription} from "web-push-neo";
+import { DurableObject } from "cloudflare:workers";
 
 interface Env {
   DB: D1Database;
   ASSETS: Fetcher;
+  STUDY_ROOM_HUB: DurableObjectNamespace<StudyRoomHub>;
   TELEGRAM_BOT_TOKEN: string;
   TELEGRAM_CHAT_ID: string;
   GREEN_API_INSTANCE_ID?: string;
@@ -79,6 +81,15 @@ async function ensureSchema(env:Env){
   await schemaReady;
 }
 let authSchemaReady:Promise<void>|null=null;
+async function ensureStudyRoomSchema(env:Env){
+  await ensureAuthSchema(env);
+  await env.DB.prepare("CREATE TABLE IF NOT EXISTS study_rooms (id TEXT PRIMARY KEY,title TEXT NOT NULL,subject TEXT NOT NULL DEFAULT 'عام',description TEXT NOT NULL DEFAULT '',visibility TEXT NOT NULL DEFAULT 'public',invite_hash TEXT,owner_user_id TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'open',created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL,FOREIGN KEY(owner_user_id) REFERENCES users(id) ON DELETE CASCADE)").run();
+  await env.DB.prepare("CREATE TABLE IF NOT EXISTS study_room_members (room_id TEXT NOT NULL,user_id TEXT NOT NULL,joined_at INTEGER NOT NULL,PRIMARY KEY(room_id,user_id),FOREIGN KEY(room_id) REFERENCES study_rooms(id) ON DELETE CASCADE,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE)").run();
+  await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_study_rooms_open ON study_rooms(status,visibility,created_at DESC)").run();
+  await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_study_room_members_user ON study_room_members(user_id,joined_at DESC)").run();
+  await env.DB.prepare("CREATE TABLE IF NOT EXISTS study_room_reports (id TEXT PRIMARY KEY,room_id TEXT NOT NULL,reporter_id TEXT NOT NULL,target_user_id TEXT NOT NULL,reason TEXT NOT NULL,details TEXT NOT NULL DEFAULT '',status TEXT NOT NULL DEFAULT 'open',evidence_json TEXT NOT NULL DEFAULT '{}',created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL,FOREIGN KEY(room_id) REFERENCES study_rooms(id) ON DELETE CASCADE,FOREIGN KEY(reporter_id) REFERENCES users(id) ON DELETE CASCADE,FOREIGN KEY(target_user_id) REFERENCES users(id) ON DELETE CASCADE)").run();
+  await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_study_room_reports_status ON study_room_reports(status,created_at DESC)").run();
+}
 async function ensureAuthSchema(env:Env){
   if(!authSchemaReady) authSchemaReady=(async()=>{
     await env.DB.prepare("CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY,email TEXT NOT NULL UNIQUE,name TEXT NOT NULL,password_hash TEXT NOT NULL,password_salt TEXT NOT NULL,phone TEXT,email_verified_at INTEGER,role TEXT NOT NULL DEFAULT 'user',verified INTEGER NOT NULL DEFAULT 0,created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL)").run();
@@ -2565,6 +2576,125 @@ async function handleTelegramUpdate(env:Env,update:any){
     return;
   }
   await sendTelegramDashboard(env,chatId);
+}
+
+
+export class StudyRoomHub extends DurableObject<Env> {
+  constructor(ctx: DurableObjectState, env: Env) {
+    super(ctx, env);
+    ctx.blockConcurrencyWhile(async () => {
+      ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS members (user_id TEXT PRIMARY KEY,name TEXT NOT NULL,joined_at INTEGER NOT NULL)");
+      ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS messages (id TEXT PRIMARY KEY,user_id TEXT NOT NULL,name TEXT NOT NULL,content TEXT NOT NULL,created_at INTEGER NOT NULL)");
+      ctx.storage.sql.exec("CREATE INDEX IF NOT EXISTS idx_room_messages_created ON messages(created_at DESC)");
+      ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS room_state (key TEXT PRIMARY KEY,value TEXT NOT NULL)");
+    });
+  }
+  private members(){return this.ctx.storage.sql.exec<{user_id:string,name:string,joined_at:number}>("SELECT user_id,name,joined_at FROM members ORDER BY joined_at ASC").toArray();}
+  private broadcast(payload:unknown,except?:string){
+    const data=JSON.stringify(payload);
+    for(const ws of this.ctx.getWebSockets()){
+      const state=ws.deserializeAttachment() as {userId?:string}|null;
+      if(state?.userId===except)continue;
+      try{ws.send(data)}catch{}
+    }
+  }
+  async fetch(request:Request):Promise<Response>{
+    const url=new URL(request.url),action=url.pathname.replace(/^\//,""),userId=String(request.headers.get("x-room-user-id")||""),name=String(request.headers.get("x-room-user-name")||"طالب");
+    if(!userId)return new Response("Unauthorized",{status:401});
+    if(action==="reserve"){
+      const existing=this.ctx.storage.sql.exec<{user_id:string}>("SELECT user_id FROM members WHERE user_id=?",userId).toArray()[0];
+      if(!existing){
+        const count=this.ctx.storage.sql.exec<{n:number}>("SELECT COUNT(*) AS n FROM members").one().n;
+        if(count>=5)return Response.json({error:"الغرفة مكتملة (5 طلاب)."}, {status:409});
+        this.ctx.storage.sql.exec("INSERT INTO members(user_id,name,joined_at) VALUES(?,?,?)",userId,name,Date.now());
+      }else this.ctx.storage.sql.exec("UPDATE members SET name=? WHERE user_id=?",name,userId);
+      this.broadcast({type:"presence",members:this.members()});
+      return Response.json({ok:true,members:this.members()});
+    }
+    if(action==="release"){
+      this.ctx.storage.sql.exec("DELETE FROM members WHERE user_id=?",userId);
+      for(const ws of this.ctx.getWebSockets()){
+        const state=ws.deserializeAttachment() as {userId?:string}|null;
+        if(state?.userId===userId)try{ws.close(1000,"left room")}catch{}
+      }
+      this.broadcast({type:"presence",members:this.members()});
+      return Response.json({ok:true});
+    }
+    if(action==="close"){
+      for(const ws of this.ctx.getWebSockets())try{ws.send(JSON.stringify({type:"room_closed"}));ws.close(1000,"room closed")}catch{}
+      this.ctx.storage.sql.exec("DELETE FROM members");
+      return Response.json({ok:true});
+    }
+    if(action==="history"){
+      if(!this.ctx.storage.sql.exec<{user_id:string}>("SELECT user_id FROM members WHERE user_id=?",userId).toArray().length)return Response.json({error:"لست عضوًا في الغرفة."},{status:403});
+      const messages=this.ctx.storage.sql.exec<{id:string,user_id:string,name:string,content:string,created_at:number}>("SELECT id,user_id,name,content,created_at FROM messages ORDER BY created_at DESC LIMIT 60").toArray().reverse();
+      return Response.json({messages,members:this.members()});
+    }
+    if(action==="websocket"){
+      if(request.headers.get("Upgrade")!=="websocket")return new Response("Expected websocket",{status:426});
+      const member=this.ctx.storage.sql.exec<{user_id:string}>("SELECT user_id FROM members WHERE user_id=?",userId).toArray()[0];
+      if(!member)return new Response("Join the room first",{status:403});
+      for(const ws of this.ctx.getWebSockets()){
+        const state=ws.deserializeAttachment() as {userId?:string}|null;
+        if(state?.userId===userId)try{ws.close(4001,"reconnected")}catch{}
+      }
+      const pair=new WebSocketPair(),client=pair[0],server=pair[1];
+      this.ctx.acceptWebSocket(server);
+      server.serializeAttachment({userId,name,isOwner:request.headers.get("x-room-is-owner")==="1",joinedAt:Date.now()});
+      server.send(JSON.stringify({type:"hello",members:this.members()}));
+      this.broadcast({type:"presence",members:this.members()});
+      return new Response(null,{status:101,webSocket:client});
+    }
+    return new Response("Not found",{status:404});
+  }
+  async webSocketMessage(ws:WebSocket,message:string|ArrayBuffer):Promise<void>{
+    const state=ws.deserializeAttachment() as {userId:string,name:string,isOwner:boolean}|null;
+    if(!state?.userId||typeof message!=="string")return;
+    let data:any;try{data=JSON.parse(message)}catch{return}
+    if(data?.type==="chat"){
+      const content=String(data.content||"").replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g,"").trim().slice(0,500);
+      if(!content)return;
+      const recent=this.ctx.storage.sql.exec<{n:number}>("SELECT COUNT(*) AS n FROM messages WHERE user_id=? AND created_at>?",state.userId,Date.now()-10000).one().n;
+      if(recent>=8){try{ws.send(JSON.stringify({type:"notice",message:"تمهل قليلًا قبل إرسال رسائل أخرى."}))}catch{};return;}
+      const row={id:crypto.randomUUID(),user_id:state.userId,name:state.name,content,created_at:Date.now()};
+      this.ctx.storage.sql.exec("INSERT INTO messages(id,user_id,name,content,created_at) VALUES(?,?,?,?,?)",row.id,row.user_id,row.name,row.content,row.created_at);
+      this.broadcast({type:"chat",message:row});
+      return;
+    }
+    if(data?.type==="timer"){
+      if(!state.isOwner)return;
+      const action=String(data.action||"");
+      if(action==="start"){
+        const duration=Math.max(5,Math.min(180,Number(data.duration)||25));
+        const timer={running:true,duration,startedAt:Date.now(),endsAt:Date.now()+duration*60000};
+        this.ctx.storage.sql.exec("INSERT INTO room_state(key,value) VALUES('timer',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",JSON.stringify(timer));
+        this.broadcast({type:"timer",timer});
+      }else if(action==="pause"||action==="stop"){
+        const timer={running:false,duration:0,startedAt:0,endsAt:0};
+        this.ctx.storage.sql.exec("INSERT INTO room_state(key,value) VALUES('timer',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",JSON.stringify(timer));
+        this.broadcast({type:"timer",timer});
+      }
+      return;
+    }
+    if(data?.type==="mic"){
+      this.broadcast({type:"mic",userId:state.userId,enabled:!!data.enabled});
+      return;
+    }
+    if(data?.type==="signal"){
+      const target=String(data.target||"");
+      if(!target||target===state.userId)return;
+      for(const peer of this.ctx.getWebSockets()){
+        const peerState=peer.deserializeAttachment() as {userId?:string}|null;
+        if(peerState?.userId===target){try{peer.send(JSON.stringify({type:"signal",from:state.userId,payload:data.payload}))}catch{};break;}
+      }
+    }
+  }
+  async webSocketClose(ws:WebSocket):Promise<void>{
+    const state=ws.deserializeAttachment() as {userId?:string}|null;
+    if(!state?.userId)return;
+    const stillConnected=this.ctx.getWebSockets().some(peer=>(peer.deserializeAttachment() as {userId?:string}|null)?.userId===state.userId);
+    if(!stillConnected)this.broadcast({type:"presence",members:this.members()});
+  }
 }
 
 export default {
