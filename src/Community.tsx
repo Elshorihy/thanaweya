@@ -6,7 +6,7 @@ type Post={id:string;userId:string;name:string;verified:boolean|number;isAdmin?:
 const subjects=['عام','اللغة العربية','اللغة الإنجليزية','الرياضيات','الفيزياء','الكيمياء'];
 const kinds=[['discussion','نقاش عام'],['question','سؤال دراسي'],['resource','مشاركة مصدر']];
 export default function Community({auth,notify}:{auth:Person;notify:(s:string)=>void}){
- const [posts,setPosts]=useState<Post[]>([]),[loading,setLoading]=useState(true),[filter,setFilter]=useState('الكل'),[kindFilter,setKindFilter]=useState('الكل'),[showComposer,setShowComposer]=useState(false),[title,setTitle]=useState(''),[content,setContent]=useState(''),[subject,setSubject]=useState('عام'),[kind,setKind]=useState('discussion'),[commentDraft,setCommentDraft]=useState<Record<string,string>>({}),[busy,setBusy]=useState(false);
+ const [posts,setPosts]=useState<Post[]>([]),[loading,setLoading]=useState(true),[filter,setFilter]=useState('الكل'),[kindFilter,setKindFilter]=useState('الكل'),[showComposer,setShowComposer]=useState(false),[title,setTitle]=useState(''),[content,setContent]=useState(''),[subject,setSubject]=useState('عام'),[kind,setKind]=useState('discussion'),[commentDraft,setCommentDraft]=useState<Record<string,string>>({}),[busy,setBusy]=useState(false),[reportTarget,setReportTarget]=useState<Post|null>(null),[reportReason,setReportReason]=useState('إساءة أو تنمر'),[reportDetails,setReportDetails]=useState('');
  const api=async(action:string,data:Record<string,unknown>={})=>{
   const controller=new AbortController();
   const timeout=window.setTimeout(()=>controller.abort(),20000);
