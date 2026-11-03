@@ -1655,3 +1655,5 @@ body:has(.app)::before {
 .studyRoomTimerControls button{border-radius:11px;padding:10px 15px;font-weight:800}
 .studyRoomTimerControls select{border-radius:11px;min-height:40px}
 @media(max-width:760px){.studyRoomMemberActions{margin-right:0;width:100%;padding:0 0 8px 43px}.studyRoomMemberActions button{flex:1}.studyRoomTimer{gap:15px}.studyRoomTimerControls{display:flex;width:100%}}
+
+.studyRoomTurnWarning{display:block;margin-top:5px;color:#f2c879!important;font-size:10px!important;line-height:1.7}
