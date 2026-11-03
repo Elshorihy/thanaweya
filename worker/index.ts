@@ -5,6 +5,9 @@ interface Env {
   DB: D1Database;
   ASSETS: Fetcher;
   STUDY_ROOM_HUB: DurableObjectNamespace<StudyRoomHub>;
+  STUDY_TURN_URLS?: string;
+  STUDY_TURN_USERNAME?: string;
+  STUDY_TURN_CREDENTIAL?: string;
   TELEGRAM_BOT_TOKEN: string;
   TELEGRAM_CHAT_ID: string;
   GREEN_API_INSTANCE_ID?: string;
@@ -88,6 +91,8 @@ async function ensureStudyRoomSchema(env:Env){
   await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_study_rooms_open ON study_rooms(status,visibility,created_at DESC)").run();
   await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_study_room_members_user ON study_room_members(user_id,joined_at DESC)").run();
   await env.DB.prepare("CREATE TABLE IF NOT EXISTS study_room_reports (id TEXT PRIMARY KEY,room_id TEXT NOT NULL,reporter_id TEXT NOT NULL,target_user_id TEXT NOT NULL,reason TEXT NOT NULL,details TEXT NOT NULL DEFAULT '',status TEXT NOT NULL DEFAULT 'open',evidence_json TEXT NOT NULL DEFAULT '{}',created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL,FOREIGN KEY(room_id) REFERENCES study_rooms(id) ON DELETE CASCADE,FOREIGN KEY(reporter_id) REFERENCES users(id) ON DELETE CASCADE,FOREIGN KEY(target_user_id) REFERENCES users(id) ON DELETE CASCADE)").run();
+  await env.DB.prepare("CREATE TABLE IF NOT EXISTS study_room_tasks (id TEXT PRIMARY KEY,room_id TEXT NOT NULL,user_id TEXT NOT NULL,title TEXT NOT NULL,completed INTEGER NOT NULL DEFAULT 0,created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL,FOREIGN KEY(room_id) REFERENCES study_rooms(id) ON DELETE CASCADE,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE)").run();
+  await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_study_room_tasks_room_user ON study_room_tasks(room_id,user_id,created_at)").run();
   await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_study_room_reports_status ON study_room_reports(status,created_at DESC)").run();
 }
 async function ensureAuthSchema(env:Env){
@@ -2626,6 +2631,14 @@ export class StudyRoomHub extends DurableObject<Env> {
       this.broadcast({type:"presence",members:this.members()});
       return Response.json({ok:true,members:this.members()});
     }
+    if(action==="broadcast"){
+      const member=this.ctx.storage.sql.exec<{user_id:string}>("SELECT user_id FROM members WHERE user_id=?",userId).toArray()[0];
+      if(!member)return new Response("Forbidden",{status:403});
+      const payload:any=await request.json().catch(()=>null);
+      if(payload?.type!=="tasks_refresh")return new Response("Invalid event",{status:400});
+      this.broadcast({type:"tasks_refresh"});
+      return Response.json({ok:true});
+    }
     if(action==="release"){
       this.ctx.storage.sql.exec("DELETE FROM members WHERE user_id=?",userId);
       for(const ws of this.ctx.getWebSockets()){
@@ -3782,7 +3795,7 @@ export default {
           }
           return json({ok:true,phone});
         }
-        const roomPath=url.pathname.match(/^\/api\/study-rooms(?:\/([^/]+))?(?:\/(live|messages|report))?$/);
+        const roomPath=url.pathname.match(/^\/api\/study-rooms(?:\/([^/]+))?(?:\/(live|messages|report|tasks|ice))?$/);
         if(roomPath && (request.method==="GET"||request.method==="POST")){
           await ensureStudyRoomSchema(env);
           const u=await userFrom(request,env);
@@ -3832,6 +3845,39 @@ export default {
             if(!member)return json({error:"انضم للغرفة أولًا."},403);
             const history=await stub.fetch("https://study-room.internal/history",{headers:{"x-room-user-id":u.id}});
             return new Response(await history.text(),{status:history.status,headers:{"content-type":"application/json; charset=utf-8","cache-control":"no-store"}});
+          }
+          if(endpoint==="ice" && request.method==="GET"){
+            if(!member)return json({error:"انضم للغرفة أولًا."},403);
+            const iceServers:any[]=[{urls:"stun:stun.l.google.com:19302"}];
+            if(env.STUDY_TURN_URLS&&env.STUDY_TURN_USERNAME&&env.STUDY_TURN_CREDENTIAL){
+              const urls=env.STUDY_TURN_URLS.split(",").map(x=>x.trim()).filter(Boolean);
+              if(urls.length)iceServers.push({urls,username:env.STUDY_TURN_USERNAME,credential:env.STUDY_TURN_CREDENTIAL});
+            }
+            return json({iceServers,turnConfigured:iceServers.length>1});
+          }
+          if(endpoint==="tasks" && request.method==="GET"){
+            if(!member)return json({error:"انضم للغرفة أولًا."},403);
+            const rows=await env.DB.prepare("SELECT t.id,t.user_id AS userId,u.name AS userName,t.title,t.completed,t.created_at AS createdAt,t.updated_at AS updatedAt FROM study_room_tasks t JOIN users u ON u.id=t.user_id WHERE t.room_id=? ORDER BY t.created_at ASC LIMIT 250").bind(roomId).all<any>();
+            return json({tasks:(rows.results||[]).map((t:any)=>({...t,completed:Number(t.completed)===1,createdAt:Number(t.createdAt),updatedAt:Number(t.updatedAt)}))});
+          }
+          if(endpoint==="tasks" && request.method==="POST"){
+            if(!member)return json({error:"انضم للغرفة أولًا."},403);
+            const b=await body(request),action=String(b?.action||""),now=Date.now();
+            if(action==="create"){
+              const title=String(b?.title||"").replace(/[\\u0000-\\u001f]/g," ").trim().slice(0,100);
+              if(title.length<2)return json({error:"اكتب مهمة واضحة من حرفين على الأقل."},400);
+              const count=await env.DB.prepare("SELECT COUNT(*) AS n FROM study_room_tasks WHERE room_id=? AND user_id=?").bind(roomId,u.id).first<any>();
+              if(Number(count?.n||0)>=30)return json({error:"الحد الأقصى 30 مهمة لكل طالب في الغرفة."},429);
+              await env.DB.prepare("INSERT INTO study_room_tasks(id,room_id,user_id,title,completed,created_at,updated_at) VALUES(?,?,?,?,0,?,?)").bind(randomHex(12),roomId,u.id,title,now,now).run();
+            }else if(action==="toggle"||action==="delete"){
+              const taskId=String(b?.taskId||"").slice(0,80);
+              const task=await env.DB.prepare("SELECT id,completed FROM study_room_tasks WHERE id=? AND room_id=? AND user_id=?").bind(taskId,roomId,u.id).first<any>();
+              if(!task)return json({error:"المهمة غير موجودة أو لا تخصك."},404);
+              if(action==="toggle")await env.DB.prepare("UPDATE study_room_tasks SET completed=?,updated_at=? WHERE id=? AND user_id=?").bind(Number(task.completed)===1?0:1,now,taskId,u.id).run();
+              else await env.DB.prepare("DELETE FROM study_room_tasks WHERE id=? AND user_id=?").bind(taskId,u.id).run();
+            }else return json({error:"إجراء غير معروف."},400);
+            await stub.fetch("https://study-room.internal/broadcast",{method:"POST",headers:{"x-room-user-id":u.id,"content-type":"application/json"},body:JSON.stringify({type:"tasks_refresh"})});
+            return json({ok:true});
           }
           if(endpoint==="report" && request.method==="POST"){
             if(!member)return json({error:"لازم تكون عضوًا في الغرفة لإرسال بلاغ."},403);
