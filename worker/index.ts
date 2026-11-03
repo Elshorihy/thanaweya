@@ -2652,7 +2652,7 @@ export class StudyRoomHub extends DurableObject<Env> {
       }
       const pair=new WebSocketPair(),[client,server]=Object.values(pair) as [WebSocket,WebSocket];
       this.ctx.acceptWebSocket(server);
-      server.serializeAttachment({userId,name,isOwner:request.headers.get("x-room-is-owner")==="1",roomId:this.ctx.id.toString(),joinedAt:Date.now()});
+      server.serializeAttachment({userId,name,isOwner:request.headers.get("x-room-is-owner")==="1",roomId:String(request.headers.get("x-room-id")||""),joinedAt:Date.now()});
       const timerRow=this.ctx.storage.sql.exec<{value:string}>("SELECT value FROM room_state WHERE key='timer'").toArray()[0];
       server.send(JSON.stringify({type:"hello",members:this.members(),timer:timerRow?JSON.parse(timerRow.value):{running:false,duration:0,startedAt:0,endsAt:0}}));
       this.broadcast({type:"presence",members:this.members()});
@@ -3804,7 +3804,7 @@ export default {
             if(!member)return json({error:"انضم للغرفة أولًا."},403);
             if(request.headers.get("Upgrade")!=="websocket")return json({error:"اتصال مباشر غير صالح."},426);
             const headers=new Headers(request.headers);
-            headers.set("x-room-user-id",u.id);headers.set("x-room-user-name",u.name);headers.set("x-room-is-owner",isOwner?"1":"0");
+            headers.set("x-room-user-id",u.id);headers.set("x-room-user-name",u.name);headers.set("x-room-is-owner",isOwner?"1":"0");headers.set("x-room-id",roomId);
             return stub.fetch(new Request("https://study-room.internal/websocket",{method:"GET",headers}));
           }
           if(endpoint==="messages" && request.method==="GET"){
@@ -3838,9 +3838,9 @@ export default {
                 const code=String(b?.inviteCode||"").trim().toUpperCase();
                 if(!code||await sha256(code)!==String(room.inviteHash||""))return json({error:"كود الدعوة غير صحيح."},403);
               }
+              const reserve=await stub.fetch("https://study-room.internal/reserve",{method:"POST",headers:{"x-room-user-id":u.id,"x-room-user-name":u.name}});
+              if(!reserve.ok){const data:any=await reserve.json().catch(()=>({}));return json({error:data.error||"الغرفة مكتملة."},reserve.status);}
               if(!already){
-                const reserve=await stub.fetch("https://study-room.internal/reserve",{method:"POST",headers:{"x-room-user-id":u.id,"x-room-user-name":u.name}});
-                if(!reserve.ok){const data:any=await reserve.json().catch(()=>({}));return json({error:data.error||"الغرفة مكتملة."},reserve.status);}
                 try{await env.DB.prepare("INSERT INTO study_room_members(room_id,user_id,joined_at) VALUES(?,?,?)").bind(roomId,u.id,Date.now()).run();}
                 catch(e){await stub.fetch("https://study-room.internal/release",{method:"POST",headers:{"x-room-user-id":u.id}});throw e;}
               }
