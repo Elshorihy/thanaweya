@@ -2654,7 +2654,8 @@ export class StudyRoomHub extends DurableObject<Env> {
       this.ctx.acceptWebSocket(server);
       server.serializeAttachment({userId,name,isOwner:request.headers.get("x-room-is-owner")==="1",roomId:String(request.headers.get("x-room-id")||""),joinedAt:Date.now()});
       const timerRow=this.ctx.storage.sql.exec<{value:string}>("SELECT value FROM room_state WHERE key='timer'").toArray()[0];
-      server.send(JSON.stringify({type:"hello",members:this.members(),timer:timerRow?JSON.parse(timerRow.value):{running:false,duration:0,startedAt:0,endsAt:0}}));
+      const messages=this.ctx.storage.sql.exec<{id:string,user_id:string,name:string,content:string,created_at:number}>("SELECT id,user_id,name,content,created_at FROM messages ORDER BY created_at DESC LIMIT 60").toArray().reverse();
+      server.send(JSON.stringify({type:"hello",members:this.members(),messages,timer:timerRow?JSON.parse(timerRow.value):{running:false,duration:0,startedAt:0,endsAt:0}}));
       this.broadcast({type:"presence",members:this.members()});
       return new Response(null,{status:101,webSocket:client});
     }
@@ -2707,7 +2708,7 @@ export class StudyRoomHub extends DurableObject<Env> {
   async webSocketClose(ws:WebSocket):Promise<void>{
     const state=ws.deserializeAttachment() as {userId?:string,roomId?:string}|null;
     if(!state?.userId)return;
-    const stillConnected=this.ctx.getWebSockets().some(peer=>(peer.deserializeAttachment() as {userId?:string}|null)?.userId===state.userId);
+    const stillConnected=this.ctx.getWebSockets().some(peer=>peer!==ws&&(peer.deserializeAttachment() as {userId?:string}|null)?.userId===state.userId);
     if(!stillConnected){
       this.ctx.storage.sql.exec("DELETE FROM members WHERE user_id=?",state.userId);
       if(state.roomId)try{await this.env.DB.prepare("DELETE FROM study_room_members WHERE room_id=? AND user_id=?").bind(state.roomId,state.userId).run()}catch{}
@@ -3851,9 +3852,9 @@ export default {
               await stub.fetch("https://study-room.internal/release",{method:"POST",headers:{"x-room-user-id":u.id}});
               await env.DB.prepare("DELETE FROM study_room_members WHERE room_id=? AND user_id=?").bind(roomId,u.id).run();
               if(isOwner){
-                const next=await env.DB.prepare("SELECT user_id FROM study_room_members WHERE room_id=? ORDER BY joined_at ASC LIMIT 1").bind(roomId).first<any>();
-                if(next)await env.DB.prepare("UPDATE study_rooms SET owner_user_id=?,updated_at=? WHERE id=?").bind(next.user_id,Date.now(),roomId).run();
-                else await env.DB.prepare("UPDATE study_rooms SET status='closed',updated_at=? WHERE id=?").bind(Date.now(),roomId).run();
+                await env.DB.prepare("UPDATE study_rooms SET status='closed',updated_at=? WHERE id=?").bind(Date.now(),roomId).run();
+                await env.DB.prepare("DELETE FROM study_room_members WHERE room_id=?").bind(roomId).run();
+                await stub.fetch("https://study-room.internal/close",{method:"POST",headers:{"x-room-user-id":u.id}});
               }
               return json({ok:true});
             }
