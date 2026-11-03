@@ -34,7 +34,7 @@ export default function StudyRooms({auth,notify}:{auth:Auth;notify:(message:stri
   peersRef.current.set(peerId,pc);
   if(localStreamRef.current)localStreamRef.current.getTracks().forEach(track=>pc!.addTrack(track,localStreamRef.current!));
   pc.onicecandidate=e=>{if(e.candidate)sendSignal(peerId,{candidate:e.candidate})};
-  pc.ontrack=e=>{let audio=audioRef.current.get(peerId);if(!audio){audio=new Audio();audio.autoplay=true;audio.playsInline=true;audioRef.current.set(peerId,audio)}audio.srcObject=e.streams[0];void audio.play().catch(()=>{})};
+  pc.ontrack=e=>{let audio=audioRef.current.get(peerId);if(!audio){audio=new Audio();audio.autoplay=true;audioRef.current.set(peerId,audio)}audio.srcObject=e.streams[0];void audio.play().catch(()=>{})};
   pc.onconnectionstatechange=()=>{if(pc&&(pc.connectionState==='failed'||pc.connectionState==='closed')){pc.close();peersRef.current.delete(peerId);const a=audioRef.current.get(peerId);if(a){a.pause();a.srcObject=null;audioRef.current.delete(peerId)}}};
   pc.onnegotiationneeded=async()=>{try{if(pc!.signalingState!=='stable')return;makingOfferRef.current.set(peerId,true);await pc!.setLocalDescription();sendSignal(peerId,{description:pc!.localDescription})}catch{}finally{makingOfferRef.current.set(peerId,false)}};
   return pc;
