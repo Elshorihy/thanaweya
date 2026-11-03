@@ -2054,6 +2054,18 @@ async function handleTelegramUpdate(env:Env,update:any){
       await telegramCall(env,"sendMessage",{chat_id:chatId,text:status==="resolved"?"✅ تم إغلاق البلاغ وإبلاغ الطالب.":"🛠️ تم تحويل البلاغ إلى قيد الحل.",reply_markup:{inline_keyboard:[[ {text:"🎫 باقي البلاغات",callback_data:"bridge_reports"} ]] }});
       return;
     }
+    if(data.startsWith("srr:")){
+      const p=data.split(":"),status=p[1],id=p.slice(2).join(":");
+      if(!["in_review","resolved","rejected"].includes(status))return;
+      const report=await env.DB.prepare("SELECT id,reporter_id FROM study_room_reports WHERE id=?").bind(id).first<any>();
+      if(!report){await telegramCall(env,"sendMessage",{chat_id:chatId,text:"بلاغ غرفة المذاكرة غير موجود."});return;}
+      await env.DB.prepare("UPDATE study_room_reports SET status=?,updated_at=? WHERE id=?").bind(status,Date.now(),id).run();
+      const label=status==="in_review"?"قيد المراجعة":status==="resolved"?"تم التعامل":"مرفوض بعد المراجعة";
+      if(status!=="in_review")await env.DB.prepare("INSERT INTO admin_messages(id,user_id,sender,message,created_at) VALUES(?,?,'admin',?,?)").bind(randomHex(10),report.reporter_id,"تم تحديث حالة بلاغ غرفة المذاكرة رقم "+id.slice(0,8)+" إلى: "+label+".",Date.now()).run();
+      await adminLog(env,chatId,"STUDY_ROOM_REPORT_STATUS",id,status);
+      await telegramCall(env,"sendMessage",{chat_id:chatId,text:"✅ تم تحديث بلاغ غرفة المذاكرة إلى: "+label});
+      return;
+    }
     if(data.startsWith("crs:")){
       const p=data.split(":"),status=p[1],id=p.slice(2).join(":");
       if(!["in_review","resolved","rejected"].includes(status))return;
@@ -3741,6 +3753,113 @@ export default {
             await env.DB.prepare("DELETE FROM user_phones WHERE user_id=?").bind(u.id).run();
           }
           return json({ok:true,phone});
+        }
+        const roomPath=url.pathname.match(/^\/api\/study-rooms(?:\/([^/]+))?(?:\/(live|messages|report))?$/);
+        if(roomPath && (request.method==="GET"||request.method==="POST")){
+          await ensureStudyRoomSchema(env);
+          const u=await userFrom(request,env);
+          if(!u)return json({error:"سجّل الدخول أولًا."},401);
+          if(u.role==="parent")return json({error:"غرف المذاكرة متاحة لحسابات الطلاب فقط."},403);
+          const roomId=roomPath[1]?decodeURIComponent(roomPath[1]):"";
+          const endpoint=roomPath[2]||"";
+          if(!roomId && request.method==="GET"){
+            const rows=await env.DB.prepare("SELECT r.id,r.title,r.subject,r.description,r.visibility,r.owner_user_id AS ownerId,o.name AS ownerName,r.created_at AS createdAt,(SELECT COUNT(*) FROM study_room_members m WHERE m.room_id=r.id) AS memberCount,EXISTS(SELECT 1 FROM study_room_members mine WHERE mine.room_id=r.id AND mine.user_id=?) AS isMember FROM study_rooms r JOIN users o ON o.id=r.owner_user_id WHERE r.status='open' AND (r.visibility<>'hidden' OR r.owner_user_id=? OR EXISTS(SELECT 1 FROM study_room_members mine WHERE mine.room_id=r.id AND mine.user_id=?)) ORDER BY CASE WHEN r.owner_user_id=? THEN 0 ELSE 1 END,r.created_at DESC LIMIT 60").bind(u.id,u.id,u.id,u.id).all<any>();
+            return json({rooms:rows.results||[]});
+          }
+          if(!roomId && request.method==="POST"){
+            const b=await body(request),action=String(b?.action||"");
+            if(action==="create"){
+              const title=String(b?.title||"").trim().slice(0,60),subject=String(b?.subject||"عام").trim().slice(0,50),description=String(b?.description||"").trim().slice(0,180),visibility=String(b?.visibility||"public");
+              if(title.length<3)return json({error:"اسم الغرفة لازم يكون 3 أحرف على الأقل."},400);
+              if(!["public","private","hidden"].includes(visibility))return json({error:"نوع الغرفة غير صالح."},400);
+              const owned=await env.DB.prepare("SELECT COUNT(*) AS n FROM study_rooms WHERE owner_user_id=? AND status='open'").bind(u.id).first<any>();
+              if(Number(owned?.n||0)>=3)return json({error:"يمكنك إنشاء 3 غرف مفتوحة بحد أقصى."},429);
+              const id=randomHex(16),inviteCode=visibility==="public"?"":randomHex(4).toUpperCase(),now=Date.now();
+              const stub=env.STUDY_ROOM_HUB.getByName(id);
+              const reserve=await stub.fetch("https://study-room.internal/reserve",{method:"POST",headers:{"x-room-user-id":u.id,"x-room-user-name":u.name}});
+              if(!reserve.ok)return json({error:"تعذر تجهيز الغرفة. حاول مرة أخرى."},503);
+              try{
+                await env.DB.batch([
+                  env.DB.prepare("INSERT INTO study_rooms(id,title,subject,description,visibility,invite_hash,owner_user_id,status,created_at,updated_at) VALUES(?,?,?,?,?,?,?,'open',?,?)").bind(id,title,subject,description,visibility,inviteCode?await sha256(inviteCode):null,u.id,now,now),
+                  env.DB.prepare("INSERT INTO study_room_members(room_id,user_id,joined_at) VALUES(?,?,?)").bind(id,u.id,now)
+                ]);
+              }catch(e){await stub.fetch("https://study-room.internal/release",{method:"POST",headers:{"x-room-user-id":u.id}});throw e;}
+              return json({ok:true,room:{id,title,subject,description,visibility,ownerId:u.id,ownerName:u.name,memberCount:1,isMember:true},inviteCode:inviteCode||null});
+            }
+            return json({error:"طلب غير معروف."},400);
+          }
+          const room=await env.DB.prepare("SELECT id,title,subject,description,visibility,invite_hash AS inviteHash,owner_user_id AS ownerId,status FROM study_rooms WHERE id=?").bind(roomId).first<any>();
+          if(!room||room.status!=="open")return json({error:"الغرفة غير موجودة أو أُغلقت."},404);
+          const member=await env.DB.prepare("SELECT user_id FROM study_room_members WHERE room_id=? AND user_id=?").bind(roomId,u.id).first<any>();
+          const isOwner=room.ownerId===u.id;
+          const stub=env.STUDY_ROOM_HUB.getByName(roomId);
+          if(endpoint==="live" && request.method==="GET"){
+            if(!member)return json({error:"انضم للغرفة أولًا."},403);
+            if(request.headers.get("Upgrade")!=="websocket")return json({error:"اتصال مباشر غير صالح."},426);
+            const headers=new Headers(request.headers);
+            headers.set("x-room-user-id",u.id);headers.set("x-room-user-name",u.name);headers.set("x-room-is-owner",isOwner?"1":"0");
+            return stub.fetch(new Request("https://study-room.internal/websocket",{method:"GET",headers}));
+          }
+          if(endpoint==="messages" && request.method==="GET"){
+            if(!member)return json({error:"انضم للغرفة أولًا."},403);
+            const history=await stub.fetch("https://study-room.internal/history",{headers:{"x-room-user-id":u.id}});
+            return new Response(await history.text(),{status:history.status,headers:{"content-type":"application/json; charset=utf-8","cache-control":"no-store"});
+          }
+          if(endpoint==="report" && request.method==="POST"){
+            if(!member)return json({error:"لازم تكون عضوًا في الغرفة لإرسال بلاغ."},403);
+            const b=await body(request),targetId=String(b?.targetUserId||"").slice(0,100),reason=String(b?.reason||"").trim().slice(0,80),details=String(b?.details||"").trim().slice(0,800);
+            if(!targetId||targetId===u.id)return json({error:"اختار عضوًا آخر للإبلاغ عنه."},400);
+            if(!["إساءة أو تنمر","مضايقة أو تنمر","رسائل مزعجة","سلوك غير مناسب","مخالفة أخرى"].includes(reason))return json({error:"سبب البلاغ غير صالح."},400);
+            const target=await env.DB.prepare("SELECT u.id,u.name FROM users u JOIN study_room_members m ON m.user_id=u.id WHERE m.room_id=? AND u.id=?").bind(roomId,targetId).first<any>();
+            if(!target)return json({error:"العضو غير موجود في الغرفة."},404);
+            const recent=await env.DB.prepare("SELECT COUNT(*) AS n FROM study_room_reports WHERE reporter_id=? AND created_at>?").bind(u.id,Date.now()-3600000).first<any>();
+            if(Number(recent?.n||0)>=5)return json({error:"وصلت للحد المؤقت للبلاغات. حاول لاحقًا."},429);
+            const history=await stub.fetch("https://study-room.internal/history",{headers:{"x-room-user-id":u.id}});
+            const historyData:any=await history.json().catch(()=>({messages:[]}));
+            const evidence={capturedAt:Date.now(),room:{id:room.id,title:room.title},target:{id:target.id,name:target.name},messages:(historyData.messages||[]).slice(-40).map((m:any)=>({id:m.id,userId:m.user_id,name:m.name,content:m.content,createdAt:m.created_at}))};
+            const id=randomHex(10),now=Date.now();
+            await env.DB.prepare("INSERT INTO study_room_reports(id,room_id,reporter_id,target_user_id,reason,details,status,evidence_json,created_at,updated_at) VALUES(?,?,?,?,?,?,'open',?,?,?)").bind(id,roomId,u.id,targetId,reason,details,JSON.stringify(evidence),now,now).run();
+            const excerpt=evidence.messages.slice(-8).map((m:any)=>"• "+String(m.name)+": "+String(m.content).slice(0,180)).join("\n");
+            ctx.waitUntil(notifyOwnerTelegram(env,"🚨 بلاغ غرفة مذاكرة جديد\n\n🆔 "+id+"\n🏠 الغرفة: "+room.title+"\n👤 المبلّغ: "+u.name+"\n👤 العضو المُبلّغ عنه: "+target.name+"\n📂 السبب: "+reason+"\n📝 التفاصيل: "+(details||"لا توجد") +"\n\n📎 مقتطفات الدليل (آخر الرسائل وقت البلاغ):\n"+(excerpt||"لا توجد رسائل نصية محفوظة."),{inline_keyboard:[[{text:"🔎 قيد المراجعة",callback_data:"srr:in_review:"+id},{text:"✅ تم التعامل",callback_data:"srr:resolved:"+id}],[{text:"🚫 رفض البلاغ",callback_data:"srr:rejected:"+id}]]}));
+            return json({ok:true,message:"وصل البلاغ للإدارة مع حفظ مقتطفات الدردشة وقت الإبلاغ. لا يتم تسجيل الصوت."});
+          }
+          if(request.method==="POST" && !endpoint){
+            const b=await body(request),action=String(b?.action||"");
+            if(action==="join"){
+              const already=!!member;
+              if(!already && room.visibility!=="public"){
+                const code=String(b?.inviteCode||"").trim().toUpperCase();
+                if(!code||await sha256(code)!==String(room.inviteHash||""))return json({error:"كود الدعوة غير صحيح."},403);
+              }
+              if(!already){
+                const reserve=await stub.fetch("https://study-room.internal/reserve",{method:"POST",headers:{"x-room-user-id":u.id,"x-room-user-name":u.name}});
+                if(!reserve.ok){const data:any=await reserve.json().catch(()=>({}));return json({error:data.error||"الغرفة مكتملة."},reserve.status);}
+                try{await env.DB.prepare("INSERT INTO study_room_members(room_id,user_id,joined_at) VALUES(?,?,?)").bind(roomId,u.id,Date.now()).run();}
+                catch(e){await stub.fetch("https://study-room.internal/release",{method:"POST",headers:{"x-room-user-id":u.id}});throw e;}
+              }
+              return json({ok:true});
+            }
+            if(action==="leave"){
+              if(!member)return json({ok:true});
+              await stub.fetch("https://study-room.internal/release",{method:"POST",headers:{"x-room-user-id":u.id}});
+              await env.DB.prepare("DELETE FROM study_room_members WHERE room_id=? AND user_id=?").bind(roomId,u.id).run();
+              if(isOwner){
+                const next=await env.DB.prepare("SELECT user_id FROM study_room_members WHERE room_id=? ORDER BY joined_at ASC LIMIT 1").bind(roomId).first<any>();
+                if(next)await env.DB.prepare("UPDATE study_rooms SET owner_user_id=?,updated_at=? WHERE id=?").bind(next.user_id,Date.now(),roomId).run();
+                else await env.DB.prepare("UPDATE study_rooms SET status='closed',updated_at=? WHERE id=?").bind(Date.now(),roomId).run();
+              }
+              return json({ok:true});
+            }
+            if(action==="close"){
+              if(!isOwner)return json({error:"صاحب الغرفة فقط يقدر يقفلها."},403);
+              await env.DB.prepare("UPDATE study_rooms SET status='closed',updated_at=? WHERE id=?").bind(Date.now(),roomId).run();
+              await env.DB.prepare("DELETE FROM study_room_members WHERE room_id=?").bind(roomId).run();
+              await stub.fetch("https://study-room.internal/close",{method:"POST",headers:{"x-room-user-id":u.id}});
+              return json({ok:true});
+            }
+            return json({error:"طلب غير معروف."},400);
+          }
+          return json({error:"طريقة الطلب غير مدعومة."},405);
         }
         if(url.pathname==="/api/community" && (request.method==="GET" || request.method==="POST")) {
           await ensureAuthSchema(env);
