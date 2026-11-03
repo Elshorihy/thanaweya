@@ -3825,6 +3825,21 @@ export default {
           }
           if(!roomId && request.method==="POST"){
             const b=await body(request),action=String(b?.action||"");
+            if(action==="joinByCode"){
+              const code=String(b?.inviteCode||"").replace(/\s+/g,"").toUpperCase().slice(0,32);
+              if(code.length<8)return json({error:"اكتب كود دعوة صحيحًا."},400);
+              const room=await env.DB.prepare("SELECT r.id,r.title,r.subject,r.description,r.visibility,r.owner_user_id AS ownerId,o.name AS ownerName,(SELECT COUNT(*) FROM study_room_members m WHERE m.room_id=r.id) AS memberCount,EXISTS(SELECT 1 FROM study_room_members mine WHERE mine.room_id=r.id AND mine.user_id=?) AS isMember FROM study_rooms r JOIN users o ON o.id=r.owner_user_id WHERE r.status='open' AND r.visibility IN ('private','hidden') AND r.invite_hash=? LIMIT 1").bind(u.id,await sha256(code)).first<any>();
+              if(!room)return json({error:"كود الدعوة غير صحيح أو أن الغرفة أُغلقت."},404);
+              const already=!!room.isMember;
+              const stub=env.STUDY_ROOM_HUB.getByName(String(room.id));
+              const reserve=await stub.fetch("https://study-room.internal/reserve",{method:"POST",headers:{"x-room-user-id":u.id,"x-room-user-name":u.name,"x-room-id":String(room.id)}});
+              if(!reserve.ok){const data:any=await reserve.json().catch(()=>({}));return json({error:data.error||"الغرفة مكتملة."},reserve.status);}
+              if(!already){
+                try{await env.DB.prepare("INSERT INTO study_room_members(room_id,user_id,joined_at) VALUES(?,?,?)").bind(room.id,u.id,Date.now()).run();}
+                catch(e){await stub.fetch("https://study-room.internal/release",{method:"POST",headers:{"x-room-user-id":u.id}});throw e;}
+              }
+              return json({ok:true,room:{...room,memberCount:Number(room.memberCount||0)+(already?0:1),isMember:true}});
+            }
             if(action==="create"){
               const title=String(b?.title||"").trim().slice(0,60),subject=String(b?.subject||"عام").trim().slice(0,50),description=String(b?.description||"").trim().slice(0,180),visibility=String(b?.visibility||"public");
               if(title.length<3)return json({error:"اسم الغرفة لازم يكون 3 أحرف على الأقل."},400);
