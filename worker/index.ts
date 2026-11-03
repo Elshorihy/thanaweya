@@ -2595,7 +2595,7 @@ export class StudyRoomHub extends DurableObject<Env> {
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
     ctx.blockConcurrencyWhile(async () => {
-      ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS members (user_id TEXT PRIMARY KEY,name TEXT NOT NULL,joined_at INTEGER NOT NULL)");
+      ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS members (user_id TEXT PRIMARY KEY,name TEXT NOT NULL,joined_at INTEGER NOT NULL,last_seen INTEGER NOT NULL)");
       ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS messages (id TEXT PRIMARY KEY,user_id TEXT NOT NULL,name TEXT NOT NULL,content TEXT NOT NULL,created_at INTEGER NOT NULL)");
       ctx.storage.sql.exec("CREATE INDEX IF NOT EXISTS idx_room_messages_created ON messages(created_at DESC)");
       ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS room_state (key TEXT PRIMARY KEY,value TEXT NOT NULL)");
@@ -2618,8 +2618,9 @@ export class StudyRoomHub extends DurableObject<Env> {
       if(!existing){
         const count=this.ctx.storage.sql.exec<{n:number}>("SELECT COUNT(*) AS n FROM members").one().n;
         if(count>=5)return Response.json({error:"الغرفة مكتملة (5 طلاب)."}, {status:409});
-        this.ctx.storage.sql.exec("INSERT INTO members(user_id,name,joined_at) VALUES(?,?,?)",userId,name,Date.now());
-      }else this.ctx.storage.sql.exec("UPDATE members SET name=? WHERE user_id=?",name,userId);
+        this.ctx.storage.sql.exec("INSERT INTO members(user_id,name,joined_at,last_seen) VALUES(?,?,?,?)",userId,name,Date.now(),Date.now());
+      }else this.ctx.storage.sql.exec("UPDATE members SET name=?,last_seen=? WHERE user_id=?",name,Date.now(),userId);
+      await this.ctx.storage.setAlarm(Date.now()+45000);
       this.broadcast({type:"presence",members:this.members()});
       return Response.json({ok:true,members:this.members()});
     }
@@ -2665,6 +2666,10 @@ export class StudyRoomHub extends DurableObject<Env> {
     const state=ws.deserializeAttachment() as {userId:string,name:string,isOwner:boolean}|null;
     if(!state?.userId||typeof message!=="string")return;
     let data:any;try{data=JSON.parse(message)}catch{return}
+    if(data?.type==="heartbeat"){
+      this.ctx.storage.sql.exec("UPDATE members SET last_seen=? WHERE user_id=?",Date.now(),state.userId);
+      return;
+    }
     if(data?.type==="chat"){
       const content=String(data.content||"").replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g,"").trim().slice(0,500);
       if(!content)return;
@@ -2713,7 +2718,18 @@ export class StudyRoomHub extends DurableObject<Env> {
       this.ctx.storage.sql.exec("DELETE FROM members WHERE user_id=?",state.userId);
       if(state.roomId)try{await this.env.DB.prepare("DELETE FROM study_room_members WHERE room_id=? AND user_id=?").bind(state.roomId,state.userId).run()}catch{}
       this.broadcast({type:"presence",members:this.members()});
+      if(this.members().length)await this.ctx.storage.setAlarm(Date.now()+45000);
+      else await this.ctx.storage.deleteAlarm();
     }
+  }
+  async alarm():Promise<void>{
+    const stale=this.ctx.storage.sql.exec<{user_id:string}>("SELECT user_id FROM members WHERE last_seen<?",Date.now()-90000).toArray();
+    for(const row of stale){
+      this.ctx.storage.sql.exec("DELETE FROM members WHERE user_id=?",row.user_id);
+      try{await this.env.DB.prepare("DELETE FROM study_room_members WHERE room_id=? AND user_id=?").bind(this.ctx.id.toString(),row.user_id).run()}catch{}
+    }
+    if(stale.length)this.broadcast({type:"presence",members:this.members()});
+    if(this.members().length)await this.ctx.storage.setAlarm(Date.now()+45000);
   }
 }
 
