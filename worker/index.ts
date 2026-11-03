@@ -3826,7 +3826,7 @@ export default {
           if(!roomId && request.method==="POST"){
             const b=await body(request),action=String(b?.action||"");
             if(action==="joinByCode"){
-              const code=String(b?.inviteCode||"").replace(/\\s+/g,"").toUpperCase().slice(0,32);
+              const code=String(b?.inviteCode||"").replace(/\s+/g,"").toUpperCase().slice(0,32);
               if(code.length<8)return json({error:"اكتب كود دعوة صحيحًا."},400);
               const room=await env.DB.prepare("SELECT r.id,r.title,r.subject,r.description,r.visibility,r.owner_user_id AS ownerId,o.name AS ownerName,(SELECT COUNT(*) FROM study_room_members m WHERE m.room_id=r.id) AS memberCount,EXISTS(SELECT 1 FROM study_room_members mine WHERE mine.room_id=r.id AND mine.user_id=?) AS isMember FROM study_rooms r JOIN users o ON o.id=r.owner_user_id WHERE r.status='open' AND r.visibility IN ('private','hidden') AND r.invite_hash=? LIMIT 1").bind(u.id,await sha256(code)).first<any>();
               if(!room)return json({error:"كود الدعوة غير صحيح أو أن الغرفة أُغلقت."},404);
