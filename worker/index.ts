@@ -3379,8 +3379,15 @@ export default {
             if(message.length<1)return json({error:"اكتب الرسالة الأول."},400);
             const id=randomHex(10),now=Date.now();
             await env.DB.prepare("INSERT INTO admin_messages(id,user_id,sender,message,created_at) VALUES(?,?,'user',?,?)").bind(id,u.id,message,now).run();
-            ctx.waitUntil(notifyOwnerTelegram(env,"💬 رسالة جديدة من طالب\n\n👤 "+u.name+" ("+u.email+")\n🆔 user_id: "+u.id+"\n\n"+message,{inline_keyboard:[[{text:"↩️ الرد على الطالب",callback_data:"bridge_message_reply:"+u.id}]]}));
-            return json({ok:true});
+            // Deliver synchronously so Telegram failures are visible instead of silently swallowed.
+            try {
+              if(!env.TELEGRAM_BOT_TOKEN || !env.TELEGRAM_CHAT_ID) throw new Error("إعدادات Telegram غير مكتملة على السيرفر.");
+              await telegramCall(env,"sendMessage",{chat_id:env.TELEGRAM_CHAT_ID,text:"💬 رسالة جديدة من طالب\n\n👤 "+u.name+" ("+u.email+")\n🆔 user_id: "+u.id+"\n\n"+message,reply_markup:{inline_keyboard:[[{text:"↩️ الرد على الطالب",callback_data:"bridge_message_reply:"+u.id}]]}});
+              return json({ok:true,delivered:true});
+            } catch(e) {
+              console.error("Bridge message Telegram delivery failed",e);
+              return json({ok:false,saved:true,delivered:false,id,error:"تم حفظ رسالتك في الموقع، لكن تعذر إرسال تنبيه للإدارة عبر تيليجرام. الرسالة لم تضِع؛ افتح لوحة تيليجرام ثم 💬 رسائل الموقع.",detail:e instanceof Error?e.message:"Telegram delivery failed"},502);
+            }
           }
           if(url.pathname==="/api/bridge/polls" && request.method==="GET"){
             const rows=await env.DB.prepare("SELECT id,question,options_json,expires_at,created_at FROM site_polls WHERE active=1 AND (expires_at IS NULL OR expires_at>?) ORDER BY created_at DESC LIMIT 10").bind(Date.now()).all<any>();
