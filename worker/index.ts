@@ -1,3 +1,4 @@
+import {handleStudyRooms} from "./studyRooms";
 import {sendNotification,type PushSubscription as WebPushSubscription} from "web-push-neo";
 
 interface Env {
@@ -2549,6 +2550,7 @@ export default {
     if(url.pathname.startsWith("/api/")) {
       try {
         if(request.method==="OPTIONS") return new Response(null,{status:204,headers:{"access-control-allow-origin":"*","access-control-allow-methods":"GET,POST,PUT,DELETE,OPTIONS","access-control-allow-headers":"content-type, accept","cache-control":"no-store"}});
+        if(url.pathname==="/api/study-rooms") { const roomUser=await userFrom(request,env); if(!roomUser) return json({error:"يجب تسجيل الدخول"},401); const roomResponse=await handleStudyRooms(request,env,roomUser); if(roomResponse) return roomResponse; }
         if(url.pathname==="/api/client-error" && request.method==="POST"){
           await ensureClientErrors(env);
           const b=await body(request);
