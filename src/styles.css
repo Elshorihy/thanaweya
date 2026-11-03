@@ -1637,3 +1637,21 @@ body:has(.app)::before {
 @media(max-width:1100px){.studyRoomLayout{grid-template-columns:minmax(0,1fr) 270px}}
 @media(max-width:760px){.studyRoomsHero{padding:20px;border-radius:21px}.studyRoomsHeroIcon{width:52px;height:52px}.studyRoomLayout{grid-template-columns:1fr}.studyRoomSidebar{grid-template-columns:1fr}.studyRoomHeader{padding:17px}.studyRoomHeader h2{font-size:21px}.studyRoomHeaderActions{flex-wrap:wrap}.studyRoomHeaderActions button{min-width:0}.studyRoomVoice{align-items:flex-start}.studyRoomVoiceCopy{flex-basis:calc(100% - 55px)}.studyRoomSoundButton,.studyRoomVoice>.micEnabled,.studyRoomVoice>.micDisabled{flex:1;justify-content:center}.studyRoomMemberTasks{margin-right:42px;margin-left:0}.studyRoomTimer strong{font-size:35px}}
 @media(prefers-reduced-motion:reduce){.studyRoomCard,.studyRoomsHero>.studyRoomsCreate,.studyRoomJoin{transition:none}.studyRoomCard:hover,.studyRoomsHero>.studyRoomsCreate:hover,.studyRoomJoin:not(:disabled):hover{transform:none}}
+
+
+/* Study rooms: visible moderation controls and a clear focus timer */
+.studyRoomMemberActions{display:flex;align-items:center;gap:6px;margin-right:auto;flex-wrap:wrap}
+.studyRoomMemberActions button{display:inline-flex;align-items:center;justify-content:center;gap:5px;padding:6px 8px;border-radius:9px;font-size:10px;white-space:nowrap}
+.studyRoomMemberActions .studyRoomReportButton{color:#ff9eae;border:1px solid rgba(251,113,133,.35);background:rgba(251,113,133,.09)}
+.studyRoomMemberActions .studyRoomMuteButton{color:#f6c66b;border:1px solid rgba(246,198,107,.32);background:rgba(246,198,107,.08)}
+.studyRoomTimer{position:relative;overflow:hidden;min-height:150px;padding:20px 22px;border-radius:22px;border:1px solid rgba(139,124,255,.3);background:radial-gradient(ellipse at 12% 50%,rgba(112,92,255,.24),transparent 48%),linear-gradient(120deg,#111a32,#151b35 62%,#102b36);box-shadow:0 14px 36px rgba(5,8,25,.22)}
+.studyRoomTimer:after{content:"";position:absolute;width:190px;height:190px;border:1px solid rgba(190,180,255,.12);border-radius:50%;left:-55px;top:-72px;box-shadow:0 0 0 16px rgba(190,180,255,.025),0 0 0 34px rgba(190,180,255,.02);pointer-events:none}
+.studyRoomTimerDial{position:relative;z-index:1;display:grid;gap:3px}
+.studyRoomTimerDial strong{font-size:clamp(38px,5vw,54px);font-weight:900;letter-spacing:2px;line-height:1.1;color:#f5f2ff;text-shadow:0 0 26px rgba(164,147,255,.28)}
+.studyRoomTimerDial i{font-style:normal;font-size:9px;letter-spacing:2.4px;color:#a9a0ff;font-weight:800;margin-top:5px}
+.studyRoomTimer.isRunning{border-color:rgba(74,222,161,.42);background:radial-gradient(ellipse at 12% 50%,rgba(74,222,161,.2),transparent 48%),linear-gradient(120deg,#102b2a,#142c37 62%,#102b36)}
+.studyRoomTimer.isRunning .studyRoomTimerDial i{color:#75e2b3}
+.studyRoomTimerControls{position:relative;z-index:1}
+.studyRoomTimerControls button{border-radius:11px;padding:10px 15px;font-weight:800}
+.studyRoomTimerControls select{border-radius:11px;min-height:40px}
+@media(max-width:760px){.studyRoomMemberActions{margin-right:0;width:100%;padding:0 0 8px 43px}.studyRoomMemberActions button{flex:1}.studyRoomTimer{gap:15px}.studyRoomTimerControls{display:flex;width:100%}}
