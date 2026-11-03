@@ -3855,7 +3855,7 @@ export default {
             const b=await body(request),action=String(b?.action||"");
             if(action==="join"){
               const already=!!member;
-              if(!already && room.visibility!=="public"){
+              if(!already && room.visibility!=="public" && !isOwner){
                 const code=String(b?.inviteCode||"").trim().toUpperCase();
                 if(!code||await sha256(code)!==String(room.inviteHash||""))return json({error:"كود الدعوة غير صحيح."},403);
               }
