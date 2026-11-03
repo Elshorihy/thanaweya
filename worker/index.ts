@@ -2951,7 +2951,7 @@ export default {
           const owner=await env.DB.prepare("SELECT id,email,name,role FROM users WHERE id='owner-hamza' AND role='owner'").first<any>();
           if(!owner) return json({error:"حساب المالك غير موجود في قاعدة البيانات."},503);
           await ensureLoginAudit(env);
-          await env.DB.prepare("DELETE FROM admin_sessions WHERE user_id=?").bind(String(owner.id)).run();
+          // Keep existing owner admin sessions active on other devices.
           const token=randomHex(32),tokenHash=await sha256(token),expires=Date.now()+SESSION_DAYS*86400000,now=Date.now();
           await env.DB.prepare("INSERT INTO admin_sessions(id,user_id,token_hash,expires_at,created_at) VALUES(?,?,?,?,?)").bind(randomHex(16),String(owner.id),tokenHash,expires,now).run();
           await recordLogin(env,owner,request,"admin");
