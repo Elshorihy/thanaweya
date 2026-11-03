@@ -2614,6 +2614,8 @@ export class StudyRoomHub extends DurableObject<Env> {
     const url=new URL(request.url),action=url.pathname.replace(/^\//,""),userId=String(request.headers.get("x-room-user-id")||""),name=String(request.headers.get("x-room-user-name")||"طالب");
     if(!userId)return new Response("Unauthorized",{status:401});
     if(action==="reserve"){
+      const roomKey=String(request.headers.get("x-room-id")||"");
+      if(roomKey)await this.ctx.storage.put("roomId",roomKey);
       const existing=this.ctx.storage.sql.exec<{user_id:string}>("SELECT user_id FROM members WHERE user_id=?",userId).toArray()[0];
       if(!existing){
         const count=this.ctx.storage.sql.exec<{n:number}>("SELECT COUNT(*) AS n FROM members").one().n;
@@ -2726,7 +2728,7 @@ export class StudyRoomHub extends DurableObject<Env> {
     const stale=this.ctx.storage.sql.exec<{user_id:string}>("SELECT user_id FROM members WHERE last_seen<?",Date.now()-90000).toArray();
     for(const row of stale){
       this.ctx.storage.sql.exec("DELETE FROM members WHERE user_id=?",row.user_id);
-      try{await this.env.DB.prepare("DELETE FROM study_room_members WHERE room_id=? AND user_id=?").bind(this.ctx.id.toString(),row.user_id).run()}catch{}
+      try{const roomId=await this.ctx.storage.get<string>("roomId");if(roomId)await this.env.DB.prepare("DELETE FROM study_room_members WHERE room_id=? AND user_id=?").bind(roomId,row.user_id).run()}catch{}
     }
     if(stale.length)this.broadcast({type:"presence",members:this.members()});
     if(this.members().length)await this.ctx.storage.setAlarm(Date.now()+45000);
@@ -3800,7 +3802,7 @@ export default {
               if(Number(owned?.n||0)>=3)return json({error:"يمكنك إنشاء 3 غرف مفتوحة بحد أقصى."},429);
               const id=randomHex(16),inviteCode=visibility==="public"?"":randomHex(4).toUpperCase(),now=Date.now();
               const stub=env.STUDY_ROOM_HUB.getByName(id);
-              const reserve=await stub.fetch("https://study-room.internal/reserve",{method:"POST",headers:{"x-room-user-id":u.id,"x-room-user-name":u.name}});
+              const reserve=await stub.fetch("https://study-room.internal/reserve",{method:"POST",headers:{"x-room-user-id":u.id,"x-room-user-name":u.name,"x-room-id":id}});
               if(!reserve.ok)return json({error:"تعذر تجهيز الغرفة. حاول مرة أخرى."},503);
               try{
                 await env.DB.batch([
@@ -3855,7 +3857,7 @@ export default {
                 const code=String(b?.inviteCode||"").trim().toUpperCase();
                 if(!code||await sha256(code)!==String(room.inviteHash||""))return json({error:"كود الدعوة غير صحيح."},403);
               }
-              const reserve=await stub.fetch("https://study-room.internal/reserve",{method:"POST",headers:{"x-room-user-id":u.id,"x-room-user-name":u.name}});
+              const reserve=await stub.fetch("https://study-room.internal/reserve",{method:"POST",headers:{"x-room-user-id":u.id,"x-room-user-name":u.name,"x-room-id":roomId}});
               if(!reserve.ok){const data:any=await reserve.json().catch(()=>({}));return json({error:data.error||"الغرفة مكتملة."},reserve.status);}
               if(!already){
                 try{await env.DB.prepare("INSERT INTO study_room_members(room_id,user_id,joined_at) VALUES(?,?,?)").bind(roomId,u.id,Date.now()).run();}
