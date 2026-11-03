@@ -18,7 +18,7 @@ export default function StudyRooms({auth,notify}:{auth:Auth;notify:(message:stri
  const [tasks,setTasks]=useState<StudyTask[]>([]),[taskDraft,setTaskDraft]=useState(''),[tasksLoading,setTasksLoading]=useState(false),[voiceStatus,setVoiceStatus]=useState('الصوت غير مفعّل'),[turnConfigured,setTurnConfigured]=useState(false);
  const [reportTarget,setReportTarget]=useState<Member|null>(null),[reportReason,setReportReason]=useState(reasons[0]),[reportDetails,setReportDetails]=useState('');
  const [socketState,setSocketState]=useState<'connecting'|'connected'|'offline'>('offline'),[micOn,setMicOn]=useState(false),[voiceBusy,setVoiceBusy]=useState(false),[micMembers,setMicMembers]=useState<Record<string,boolean>>({}),[mutedMembers,setMutedMembers]=useState<Record<string,boolean>>({});
- const wsRef=useRef<WebSocket|null>(null),makingOfferRef=useRef<Map<string,boolean>>(new Map()),leavingRef=useRef(false),reconnectRef=useRef<number|null>(null),retryRef=useRef(0),inviteRef=useRef(''),roomRef=useRef<Room|null>(null),localStreamRef=useRef<MediaStream|null>(null),peersRef=useRef<Map<string,RTCPeerConnection>>(new Map()),audioRef=useRef<Map<string,HTMLAudioElement>>(new Map()),pendingCandidatesRef=useRef<Map<string,RTCIceCandidateInit[]>>(new Map()),audioUnlockedRef=useRef(false),micStateRef=useRef(false),membersRef=useRef<Member[]>([]),heartbeatRef=useRef<number|null>(null),iceServersRef=useRef<RTCIceServer[]>([{urls:'stun:stun.l.google.com:19302'}]);
+ const wsRef=useRef<WebSocket|null>(null),makingOfferRef=useRef<Map<string,boolean>>(new Map()),leavingRef=useRef(false),reconnectRef=useRef<number|null>(null),retryRef=useRef(0),inviteRef=useRef(''),roomRef=useRef<Room|null>(null),localStreamRef=useRef<MediaStream|null>(null),peersRef=useRef<Map<string,RTCPeerConnection>>(new Map()),audioRef=useRef<Map<string,HTMLAudioElement>>(new Map()),pendingCandidatesRef=useRef<Map<string,RTCIceCandidateInit[]>>(new Map()),ignoreOfferRef=useRef<Map<string,boolean>>(new Map()),settingRemoteAnswerRef=useRef<Map<string,boolean>>(new Map()),pendingSignalsRef=useRef<Array<{target:string;payload:unknown}>>([]),audioUnlockedRef=useRef(false),micStateRef=useRef(false),membersRef=useRef<Member[]>([]),heartbeatRef=useRef<number|null>(null),iceServersRef=useRef<RTCIceServer[]>([{urls:'stun:stun.l.google.com:19302'}]);
  const api=async(path:string,method='GET',data?:Record<string,unknown>)=>{const controller=new AbortController(),timeout=window.setTimeout(()=>controller.abort(),15000);let r:Response;try{r=await fetch(path,{method,credentials:'same-origin',cache:'no-store',signal:controller.signal,headers:method==='GET'?undefined:{'content-type':'application/json'},body:data?JSON.stringify(data):undefined})}catch(e){if(e instanceof Error&&e.name==='AbortError')throw new Error('الاتصال بالخادم استغرق وقتًا طويلًا. افحص اتصال الإنترنت وحاول مجددًا.');throw new Error('تعذر الوصول لخادم الغرف. تأكد من اتصال الإنترنت ثم اضغط إعادة المحاولة.')}finally{window.clearTimeout(timeout)}const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.error||'تعذر تحميل بيانات الغرف (HTTP '+r.status+').');return j};
  const loadRooms=useCallback(async()=>{setLoading(true);try{let lastError:unknown=null;for(let attempt=0;attempt<2;attempt++){try{const j=await api('/api/study-rooms');setRooms(j.rooms||[]);return}catch(e){lastError=e;if(attempt===0)await new Promise(resolve=>window.setTimeout(resolve,700))}}notify(lastError instanceof Error?lastError.message:'تعذر تحميل الغرف')}finally{setLoading(false)}},[]);
  useEffect(()=>{void loadRooms()},[loadRooms]);
@@ -33,7 +33,7 @@ export default function StudyRooms({auth,notify}:{auth:Auth;notify:(message:stri
  const send=(value:unknown)=>{const ws=wsRef.current;if(ws?.readyState===WebSocket.OPEN)ws.send(JSON.stringify(value))};
  const closePeers=()=>{for(const pc of peersRef.current.values())try{pc.close()}catch{}peersRef.current.clear();for(const audio of audioRef.current.values()){audio.pause();audio.srcObject=null}audioRef.current.clear()};
  const stopLocalAudio=()=>{localStreamRef.current?.getTracks().forEach(t=>t.stop());localStreamRef.current=null;closePeers();setMicOn(false);micStateRef.current=false;send({type:'mic',enabled:false})};
- const sendSignal=(target:string,payload:unknown)=>send({type:'signal',target,payload});
+ const sendSignal=(target:string,payload:unknown)=>{const ws=wsRef.current;if(ws?.readyState===WebSocket.OPEN)ws.send(JSON.stringify({type:'signal',target,payload}));else if(pendingSignalsRef.current.length<100)pendingSignalsRef.current.push({target,payload})};
  const getPeer=(peerId:string)=>{
   let pc=peersRef.current.get(peerId);if(pc){if(localStreamRef.current)localStreamRef.current.getTracks().forEach(track=>{if(!pc!.getSenders().some(sender=>sender.track===track))pc!.addTrack(track,localStreamRef.current!)});return pc;}
   pc=new RTCPeerConnection({iceServers:iceServersRef.current,iceCandidatePoolSize:2});
@@ -43,7 +43,7 @@ export default function StudyRooms({auth,notify}:{auth:Auth;notify:(message:stri
   pc.ontrack=e=>{let audio=audioRef.current.get(peerId);if(!audio){audio=new Audio();audio.autoplay=true;audio.volume=1;audio.muted=false;audio.setAttribute('autoplay','');audio.setAttribute('playsinline','');audio.style.position='fixed';audio.style.width='1px';audio.style.height='1px';audio.style.opacity='0';audio.style.pointerEvents='none';audio.style.bottom='0';document.body.appendChild(audio);audioRef.current.set(peerId,audio)}const stream=e.streams?.[0]||new MediaStream([e.track]);audio.srcObject=stream;audio.onloadedmetadata=()=>{if(audioUnlockedRef.current)void audio!.play().then(()=>setVoiceStatus('متصل بالصوت')).catch(()=>setVoiceStatus('اضغط «تفعيل سماع الصوت» للسماح بالتشغيل'))};if(audioUnlockedRef.current)void audio.play().then(()=>setVoiceStatus('متصل بالصوت')).catch(()=>setVoiceStatus('اضغط «تفعيل سماع الصوت» للسماح بالتشغيل'));else setVoiceStatus('وصل صوت عضو — اضغط «تفعيل سماع الصوت» للاستماع')};
   pc.oniceconnectionstatechange=()=>{const state=pc?.iceConnectionState;if(state==='checking')setVoiceStatus('جارٍ اختبار الاتصال المباشر عبر STUN...');else if(state==='connected'||state==='completed')setVoiceStatus('تم إنشاء اتصال مباشر عبر STUN.');else if(state==='disconnected')setVoiceStatus('انقطع الاتصال المباشر مؤقتًا؛ جارٍ انتظار عودته...');else if(state==='failed')setVoiceStatus('فشل الاتصال المباشر عبر STUN. قد تمنع الشبكة اتصال الصوت بين الجهازين؛ جرّب شبكة أخرى.');else if(state==='closed')setVoiceStatus('انتهى اتصال الصوت.')};
   pc.onconnectionstatechange=()=>{if(pc?.connectionState==='connecting')setVoiceStatus('جارٍ إنشاء اتصال الصوت المباشر...');if(pc?.connectionState==='failed')setVoiceStatus('فشل اتصال الصوت المباشر. هذا الوضع لا يستخدم TURN؛ جرّب شبكة مختلفة للتأكد هل المشكلة من الشبكة.');if(pc&&(pc.connectionState==='failed'||pc.connectionState==='closed')){pc.close();peersRef.current.delete(peerId);const a=audioRef.current.get(peerId);if(a){a.pause();a.srcObject=null;audioRef.current.delete(peerId)}}};
-  pc.onnegotiationneeded=async()=>{try{if(pc!.signalingState!=='stable')return;makingOfferRef.current.set(peerId,true);await pc!.setLocalDescription();sendSignal(peerId,{description:pc!.localDescription})}catch{}finally{makingOfferRef.current.set(peerId,false)}};
+  pc.onnegotiationneeded=async()=>{try{if(pc!.signalingState!=='stable')return;makingOfferRef.current.set(peerId,true);await pc!.setLocalDescription();sendSignal(peerId,{description:pc!.localDescription})}catch(error){console.error('[StudyRooms] Failed to create/send WebRTC offer',peerId,error);setVoiceStatus('تعذر إنشاء عرض الاتصال الصوتي؛ راجع حالة الاتصال وحاول إعادة فتح المايك.')}finally{makingOfferRef.current.set(peerId,false)}};
   return pc;
  };
  const handleSignal=async(from:string,payload:any)=>{
@@ -52,16 +52,30 @@ export default function StudyRooms({auth,notify}:{auth:Auth;notify:(message:stri
    if(payload?.description){
     const description=payload.description;
     const polite=auth.id.localeCompare(from)>0;
-    const offerCollision=description.type==='offer'&&(makingOfferRef.current.get(from)===true||pc.signalingState!=='stable');
-    if(offerCollision&&!polite)return;
-    if(offerCollision&&polite){try{await pc.setLocalDescription({type:'rollback'})}catch{}}
+    const readyForOffer=!makingOfferRef.current.get(from)&&(pc.signalingState==='stable'||settingRemoteAnswerRef.current.get(from)===true);
+    const offerCollision=description.type==='offer'&&!readyForOffer;
+    const ignoreOffer=!polite&&offerCollision;
+    ignoreOfferRef.current.set(from,ignoreOffer);
+    if(ignoreOffer)return;
+    if(offerCollision&&polite)await pc.setLocalDescription({type:'rollback'});
+    settingRemoteAnswerRef.current.set(from,description.type==='answer');
     await pc.setRemoteDescription(description);
+    settingRemoteAnswerRef.current.set(from,false);
     if(description.type==='offer'){await pc.setLocalDescription();sendSignal(from,{description:pc.localDescription})}
-   }else if(payload?.candidate){if(pc.remoteDescription){try{await pc.addIceCandidate(payload.candidate)}catch{}}else{const queue=pendingCandidatesRef.current.get(from)||[];queue.push(payload.candidate);pendingCandidatesRef.current.set(from,queue)}}
-   if(payload?.description&&pc.remoteDescription){const queued=pendingCandidatesRef.current.get(from)||[];pendingCandidatesRef.current.delete(from);for(const candidate of queued){try{await pc.addIceCandidate(candidate)}catch{}}}
-  }catch{}
+    const queued=pendingCandidatesRef.current.get(from)||[];
+    pendingCandidatesRef.current.delete(from);
+    for(const candidate of queued){try{await pc.addIceCandidate(candidate)}catch(error){if(!ignoreOfferRef.current.get(from))console.warn('[StudyRooms] Could not apply queued ICE candidate',from,error)}}
+   }else if(payload?.candidate){
+    if(ignoreOfferRef.current.get(from))return;
+    if(pc.remoteDescription){try{await pc.addIceCandidate(payload.candidate)}catch(error){console.warn('[StudyRooms] Could not apply ICE candidate',from,error)}}else{const queue=pendingCandidatesRef.current.get(from)||[];queue.push(payload.candidate);pendingCandidatesRef.current.set(from,queue)}
+   }
+  }catch(error){
+   settingRemoteAnswerRef.current.set(from,false);
+   console.error('[StudyRooms] WebRTC signaling failed',from,{signalingState:pc.signalingState,connectionState:pc.connectionState,iceConnectionState:pc.iceConnectionState},error);
+   setVoiceStatus('تعذر تبادل بيانات الاتصال بين الجهازين؛ أعد إغلاق المايك وفتحه، ولو استمرت المشكلة سنحتاج تشخيص الشبكة.');
+  }
  };
- const applyPresence=(next:Member[])=>{
+const applyPresence=(next:Member[])=>{
   setMembers(next||[]);
   const ids=new Set((next||[]).map(x=>x.user_id));
   for(const [id,pc] of peersRef.current){if(!ids.has(id)){pc.close();peersRef.current.delete(id);const a=audioRef.current.get(id);if(a){a.pause();a.srcObject=null;audioRef.current.delete(id)}}}
@@ -71,7 +85,7 @@ export default function StudyRooms({auth,notify}:{auth:Auth;notify:(message:stri
   const protocol=location.protocol==='https:'?'wss:':'ws:';
   const ws=new WebSocket(protocol+'//'+location.host+'/api/study-rooms/'+encodeURIComponent(room.id)+'/live');
   wsRef.current=ws;setSocketState('connecting');
-  ws.onopen=()=>{retryRef.current=0;setSocketState('connected');if(heartbeatRef.current!==null)window.clearInterval(heartbeatRef.current);heartbeatRef.current=window.setInterval(()=>send({type:'heartbeat'}),25000);if(micStateRef.current)send({type:'mic',enabled:true})};
+  ws.onopen=()=>{retryRef.current=0;setSocketState('connected');if(heartbeatRef.current!==null)window.clearInterval(heartbeatRef.current);heartbeatRef.current=window.setInterval(()=>send({type:'heartbeat'}),25000);const queuedSignals=pendingSignalsRef.current.splice(0);for(const item of queuedSignals)ws.send(JSON.stringify({type:'signal',target:item.target,payload:item.payload}));if(micStateRef.current)send({type:'mic',enabled:true})};
   ws.onmessage=event=>{let data:any;try{data=JSON.parse(String(event.data))}catch{return}
    if(data.type==='hello'){applyPresence(data.members||[]);setMessages(data.messages||[]);setTimer(data.timer||emptyTimer)}
    else if(data.type==='presence')applyPresence(data.members||[]);
