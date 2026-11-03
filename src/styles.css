@@ -1657,3 +1657,31 @@ body:has(.app)::before {
 @media(max-width:760px){.studyRoomMemberActions{margin-right:0;width:100%;padding:0 0 8px 43px}.studyRoomMemberActions button{flex:1}.studyRoomTimer{gap:15px}.studyRoomTimerControls{display:flex;width:100%}}
 
 .studyRoomTurnWarning{display:block;margin-top:5px;color:#f2c879!important;font-size:10px!important;line-height:1.7}
+
+
+/* Keep native date controls visible and stable in the study-plan form on mobile browsers. */
+.formgrid input[type="date"],
+input[type="date"] {
+  display: block;
+  visibility: visible;
+  opacity: 1;
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid var(--border2);
+  border-radius: 10px;
+  background: var(--input);
+  color: var(--text);
+  color-scheme: dark;
+  font: inherit;
+  line-height: 1.4;
+  -webkit-appearance: auto;
+  appearance: auto;
+}
+body.light .formgrid input[type="date"],
+body.light input[type="date"] {
+  color-scheme: light;
+}
