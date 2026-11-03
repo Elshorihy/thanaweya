@@ -3741,7 +3741,6 @@ export default {
             const owner=await env.DB.prepare("SELECT id,email,name FROM users WHERE id='owner-hamza'").first<any>();
             if(owner){
               await ensureLoginAudit(env);
-              await env.DB.prepare("DELETE FROM sessions WHERE user_id=?").bind(String(owner.id)).run();
               const token=await createSession(owner.id,env);
               await recordLogin(env,owner,request,"site");
               return json({user:{id:owner.id,email:owner.email,name:owner.name,phone:null,role:"owner",verified:true}},200,{"set-cookie":sessionCookie(token)},request);
@@ -3757,9 +3756,8 @@ export default {
             await env.DB.prepare("INSERT INTO user_phones(user_id,phone,updated_at) VALUES(?,?,?) ON CONFLICT(user_id) DO UPDATE SET phone=excluded.phone,updated_at=excluded.updated_at").bind(u.id,phone,Date.now()).run();
           }
           const phoneRow=await env.DB.prepare("SELECT phone FROM user_phones WHERE user_id=?").bind(u.id).first<any>();
-          // Enforce one active site session per account: a new login invalidates the previous device.
+          // Allow the same account to stay signed in on multiple devices.
           await ensureLoginAudit(env);
-          await env.DB.prepare("DELETE FROM sessions WHERE user_id=?").bind(String(u.id)).run();
           const token=await createSession(u.id,env);
           await recordLogin(env,u,request,"site");
           return json({user:{id:u.id,email:u.email,name:u.name,phone:phoneRow?.phone||null,role:u.role||"user",verified:Number(u.verified||0)===1}},200,{"set-cookie":sessionCookie(token)},request);
