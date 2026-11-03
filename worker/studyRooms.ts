@@ -47,6 +47,7 @@ export async function handleStudyRooms(request: Request, env: RoomEnv, user: Roo
     if(Number(target.is_locked))return fail("الغرفة مقفولة حاليًا",403);
     const exists=await db.prepare("SELECT 1 FROM study_room_members WHERE room_id=? AND user_id=?").bind(target.id,user.id).first();
     if(exists){ await db.prepare("UPDATE study_room_members SET last_seen=? WHERE room_id=? AND user_id=?").bind(now,target.id,user.id).run(); }
+    if(exists){ await db.prepare("UPDATE study_room_members SET last_seen=? WHERE room_id=? AND user_id=?").bind(now,target.id,user.id).run(); }
     if(!exists){
       const count=await db.prepare("SELECT COUNT(*) n FROM study_room_members WHERE room_id=? AND last_seen>?").bind(target.id,now-45000).first<any>();
       if(Number(count?.n||0)>=5)return fail("الغرفة مكتملة (5 طلاب)",409);
