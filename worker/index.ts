@@ -2737,7 +2737,8 @@ export class StudyRoomHub extends DurableObject<Env> {
       server.serializeAttachment({userId,name,isOwner:request.headers.get("x-room-is-owner")==="1",isModerator:request.headers.get("x-room-is-moderator")==="1",roomId:String(request.headers.get("x-room-id")||""),joinedAt:Date.now()});
       const timerRow=this.ctx.storage.sql.exec<{value:string}>("SELECT value FROM room_state WHERE key='timer'").toArray()[0];
       const messages=this.ctx.storage.sql.exec<{id:string,user_id:string,name:string,content:string,created_at:number}>("SELECT id,user_id,name,content,created_at FROM messages ORDER BY created_at DESC LIMIT 60").toArray().reverse();
-      server.send(JSON.stringify({type:"hello",members:this.members(),messages,timer:timerRow?JSON.parse(timerRow.value):{running:false,duration:0,startedAt:0,endsAt:0}}));
+      const chatLockRow=this.ctx.storage.sql.exec<{value:string}>("SELECT value FROM room_state WHERE key='chat_locked'").toArray()[0];
+      server.send(JSON.stringify({type:"hello",members:this.members(),messages,timer:timerRow?JSON.parse(timerRow.value):{running:false,duration:0,startedAt:0,endsAt:0},chatLocked:chatLockRow?.value==="1"}));
       const mutedUsers=this.ctx.storage.sql.exec<{user_id:string}>("SELECT user_id FROM mic_mutes").toArray().map(row=>row.user_id);
       server.send(JSON.stringify({type:"hello_muted",mutedUsers}));
       this.broadcast({type:"presence",members:this.members()});
@@ -2755,6 +2756,9 @@ export class StudyRoomHub extends DurableObject<Env> {
       return;
     }
     if(data?.type==="chat"){
+      const lockRow=this.ctx.storage.sql.exec<{value:string}>("SELECT value FROM room_state WHERE key='chat_locked'").toArray()[0];
+      const chatLocked=lockRow?.value==="1";
+      if(chatLocked&&!state.isOwner&&!state.isModerator){try{ws.send(JSON.stringify({type:"notice",message:"الشات متوقف مؤقتًا للتركيز. انتظر فتحه من المالك أو المشرف."}))}catch{};return;}
       const content=String(data.content||"").replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g,"").trim().slice(0,500);
       if(!content)return;
       const recent=this.ctx.storage.sql.exec<{n:number}>("SELECT COUNT(*) AS n FROM messages WHERE user_id=? AND created_at>?",state.userId,Date.now()-10000).one().n;
@@ -2785,12 +2789,22 @@ export class StudyRoomHub extends DurableObject<Env> {
       }
       return;
     }
+    if(data?.type==="chat_lock"){
+      if(!state.isOwner&&!state.isModerator)return;
+      const locked=!!data.locked;
+      this.ctx.storage.sql.exec("INSERT INTO room_state(key,value) VALUES('chat_locked',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",locked?"1":"0");
+      this.broadcast({type:"chat_lock",locked});
+      return;
+    }
     if(data?.type==="owner_mute"){
       if(!state.isOwner&&!state.isModerator)return;
       const target=String(data.target||"").slice(0,100),muted=!!data.muted;
       if(!target||target===state.userId)return;
       const exists=this.ctx.storage.sql.exec<{user_id:string}>("SELECT user_id FROM members WHERE user_id=?",target).toArray()[0];
       if(!exists)return;
+      const targetSocket=this.ctx.getWebSockets().find(peer=>(peer.deserializeAttachment() as any)?.userId===target);
+      const targetState=targetSocket?.deserializeAttachment() as {isOwner?:boolean;isModerator?:boolean}|null;
+      if(state.isModerator&&!state.isOwner&&(targetState?.isOwner||targetState?.isModerator))return;
       if(muted)this.ctx.storage.sql.exec("INSERT INTO mic_mutes(user_id,muted_at) VALUES(?,?) ON CONFLICT(user_id) DO UPDATE SET muted_at=excluded.muted_at",target,Date.now());
       else this.ctx.storage.sql.exec("DELETE FROM mic_mutes WHERE user_id=?",target);
       this.broadcast({type:"mic_forced",userId:target,muted});
