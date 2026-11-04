@@ -2630,7 +2630,7 @@ export class StudyRoomHub extends DurableObject<Env> {
     return this.ctx.storage.sql.exec<any>("SELECT m.user_id,m.name,m.joined_at,COALESCE(t.seconds,0) AS saved_seconds,m.study_started_at FROM members m LEFT JOIN study_totals t ON t.user_id=m.user_id ORDER BY m.joined_at ASC").toArray().map((m:any)=>{
       const active=Number(m.study_started_at||0),until=timer?.running?Math.min(now,Number(timer.endsAt||now)):0;
       const live=active&&until>active?Math.floor((until-active)/1000):0;
-      return {user_id:m.user_id,name:m.name,joined_at:m.joined_at,studySeconds:Number(m.saved_seconds||0)+live};
+      return {user_id:m.user_id,name:m.name,joined_at:m.joined_at,studySeconds:Number(m.saved_seconds||0),studyStartedAt:active||null};
     });
   }
   private settleMember(userId:string,now=Date.now()){
