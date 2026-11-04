@@ -2624,9 +2624,6 @@ export class StudyRoomHub extends DurableObject<Env> {
     });
   }
   private members(){
-    const timerRow=this.ctx.storage.sql.exec<{value:string}>("SELECT value FROM room_state WHERE key='timer'").toArray()[0];
-    let timer:any=null;try{timer=timerRow?JSON.parse(timerRow.value):null}catch{}
-    const now=Date.now();
     return this.ctx.storage.sql.exec<any>("SELECT m.user_id,m.name,m.joined_at,COALESCE(t.seconds,0) AS saved_seconds,m.study_started_at FROM members m LEFT JOIN study_totals t ON t.user_id=m.user_id ORDER BY m.joined_at ASC").toArray().map((m:any)=>{
       const active=Number(m.study_started_at||0);
       return {user_id:m.user_id,name:m.name,joined_at:m.joined_at,studySeconds:Number(m.saved_seconds||0),studyStartedAt:active||null};
