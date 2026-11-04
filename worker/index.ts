@@ -84,18 +84,22 @@ async function ensureSchema(env:Env){
   await schemaReady;
 }
 let authSchemaReady:Promise<void>|null=null;
+let studyRoomSchemaReady:Promise<void>|null=null;
 async function ensureStudyRoomSchema(env:Env){
-  await ensureAuthSchema(env);
-  await env.DB.prepare("CREATE TABLE IF NOT EXISTS study_rooms (id TEXT PRIMARY KEY,title TEXT NOT NULL,subject TEXT NOT NULL DEFAULT 'عام',description TEXT NOT NULL DEFAULT '',visibility TEXT NOT NULL DEFAULT 'public',invite_hash TEXT,owner_user_id TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'open',created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL,FOREIGN KEY(owner_user_id) REFERENCES users(id) ON DELETE CASCADE)").run();
-  await env.DB.prepare("CREATE TABLE IF NOT EXISTS study_room_members (room_id TEXT NOT NULL,user_id TEXT NOT NULL,joined_at INTEGER NOT NULL,PRIMARY KEY(room_id,user_id),FOREIGN KEY(room_id) REFERENCES study_rooms(id) ON DELETE CASCADE,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE)").run();
-  await env.DB.prepare("CREATE TABLE IF NOT EXISTS study_room_moderators (room_id TEXT NOT NULL,user_id TEXT NOT NULL,created_by TEXT NOT NULL,created_at INTEGER NOT NULL,PRIMARY KEY(room_id,user_id),FOREIGN KEY(room_id) REFERENCES study_rooms(id) ON DELETE CASCADE,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE)").run();
-  await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_study_room_moderators_room ON study_room_moderators(room_id,user_id)").run();
-  await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_study_rooms_open ON study_rooms(status,visibility,created_at DESC)").run();
-  await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_study_room_members_user ON study_room_members(user_id,joined_at DESC)").run();
-  await env.DB.prepare("CREATE TABLE IF NOT EXISTS study_room_reports (id TEXT PRIMARY KEY,room_id TEXT NOT NULL,reporter_id TEXT NOT NULL,target_user_id TEXT NOT NULL,reason TEXT NOT NULL,details TEXT NOT NULL DEFAULT '',status TEXT NOT NULL DEFAULT 'open',evidence_json TEXT NOT NULL DEFAULT '{}',created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL,FOREIGN KEY(room_id) REFERENCES study_rooms(id) ON DELETE CASCADE,FOREIGN KEY(reporter_id) REFERENCES users(id) ON DELETE CASCADE,FOREIGN KEY(target_user_id) REFERENCES users(id) ON DELETE CASCADE)").run();
-  await env.DB.prepare("CREATE TABLE IF NOT EXISTS study_room_tasks (id TEXT PRIMARY KEY,room_id TEXT NOT NULL,user_id TEXT NOT NULL,title TEXT NOT NULL,completed INTEGER NOT NULL DEFAULT 0,created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL,FOREIGN KEY(room_id) REFERENCES study_rooms(id) ON DELETE CASCADE,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE)").run();
-  await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_study_room_tasks_room_user ON study_room_tasks(room_id,user_id,created_at)").run();
-  await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_study_room_reports_status ON study_room_reports(status,created_at DESC)").run();
+  if(!studyRoomSchemaReady) studyRoomSchemaReady=(async()=>{
+    await ensureAuthSchema(env);
+      await env.DB.prepare("CREATE TABLE IF NOT EXISTS study_rooms (id TEXT PRIMARY KEY,title TEXT NOT NULL,subject TEXT NOT NULL DEFAULT 'عام',description TEXT NOT NULL DEFAULT '',visibility TEXT NOT NULL DEFAULT 'public',invite_hash TEXT,owner_user_id TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'open',created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL,FOREIGN KEY(owner_user_id) REFERENCES users(id) ON DELETE CASCADE)").run();
+      await env.DB.prepare("CREATE TABLE IF NOT EXISTS study_room_members (room_id TEXT NOT NULL,user_id TEXT NOT NULL,joined_at INTEGER NOT NULL,PRIMARY KEY(room_id,user_id),FOREIGN KEY(room_id) REFERENCES study_rooms(id) ON DELETE CASCADE,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE)").run();
+      await env.DB.prepare("CREATE TABLE IF NOT EXISTS study_room_moderators (room_id TEXT NOT NULL,user_id TEXT NOT NULL,created_by TEXT NOT NULL,created_at INTEGER NOT NULL,PRIMARY KEY(room_id,user_id),FOREIGN KEY(room_id) REFERENCES study_rooms(id) ON DELETE CASCADE,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE)").run();
+      await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_study_room_moderators_room ON study_room_moderators(room_id,user_id)").run();
+      await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_study_rooms_open ON study_rooms(status,visibility,created_at DESC)").run();
+      await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_study_room_members_user ON study_room_members(user_id,joined_at DESC)").run();
+      await env.DB.prepare("CREATE TABLE IF NOT EXISTS study_room_reports (id TEXT PRIMARY KEY,room_id TEXT NOT NULL,reporter_id TEXT NOT NULL,target_user_id TEXT NOT NULL,reason TEXT NOT NULL,details TEXT NOT NULL DEFAULT '',status TEXT NOT NULL DEFAULT 'open',evidence_json TEXT NOT NULL DEFAULT '{}',created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL,FOREIGN KEY(room_id) REFERENCES study_rooms(id) ON DELETE CASCADE,FOREIGN KEY(reporter_id) REFERENCES users(id) ON DELETE CASCADE,FOREIGN KEY(target_user_id) REFERENCES users(id) ON DELETE CASCADE)").run();
+      await env.DB.prepare("CREATE TABLE IF NOT EXISTS study_room_tasks (id TEXT PRIMARY KEY,room_id TEXT NOT NULL,user_id TEXT NOT NULL,title TEXT NOT NULL,completed INTEGER NOT NULL DEFAULT 0,created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL,FOREIGN KEY(room_id) REFERENCES study_rooms(id) ON DELETE CASCADE,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE)").run();
+      await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_study_room_tasks_room_user ON study_room_tasks(room_id,user_id,created_at)").run();
+      await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_study_room_reports_status ON study_room_reports(status,created_at DESC)").run();
+  })().catch(e=>{studyRoomSchemaReady=null;throw e});
+  await studyRoomSchemaReady;
 }
 async function closeStudyRoomIfUnstaffed(env:Env,roomId:string){
   const room=await env.DB.prepare("SELECT owner_user_id FROM study_rooms WHERE id=? AND status='open'").bind(roomId).first<any>();
