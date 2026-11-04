@@ -145,7 +145,7 @@ const applyPresence=(next:Member[])=>{
   if(!activeRoom)return;
   let cancelled=false;leavingRef.current=false;
   (async()=>{try{const [j,ice]=await Promise.all([api('/api/study-rooms/'+encodeURIComponent(activeRoom.id)+'/messages'),api('/api/study-rooms/'+encodeURIComponent(activeRoom.id)+'/ice')]);if(!cancelled){setMessages(j.messages||[]);applyPresence(j.members||[]);setModerators(j.moderatorIds||[]);if(j.ownerId)setActiveRoom(old=>old?({...old,ownerId:j.ownerId}):old);iceServersRef.current=Array.isArray(ice.iceServers)&&ice.iceServers.length?ice.iceServers:iceServersRef.current;setTurnConfigured(!!ice.turnConfigured);void loadTasks(activeRoom.id)}}catch(e){if(!cancelled)notify(e instanceof Error?e.message:'تعذر تحميل رسائل الغرفة')}if(!cancelled)connectSocket(activeRoom)})();
-  return()=>{cancelled=true;leavingRef.current=true;if(reconnectRef.current!==null)window.clearTimeout(reconnectRef.current);if(heartbeatRef.current!==null){window.clearInterval(heartbeatRef.current);heartbeatRef.current=null}stopLocalAudio();const ws=wsRef.current;wsRef.current=null;try{ws?.close()}catch{};void api('/api/study-rooms/'+encodeURIComponent(activeRoom.id),'POST',{action:'leave'}).catch(()=>{})};
+  return()=>{cancelled=true;leavingRef.current=true;if(reconnectRef.current!==null)window.clearTimeout(reconnectRef.current);if(heartbeatRef.current!==null){window.clearInterval(heartbeatRef.current);heartbeatRef.current=null}stopLocalAudio();const ws=wsRef.current;wsRef.current=null;try{ws?.close()}catch{}};
  },[activeRoom?.id]);
  const createRoom=async()=>{
   if(title.trim().length<3){notify('اكتب اسمًا واضحًا للغرفة');return}
