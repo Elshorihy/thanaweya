@@ -2843,16 +2843,15 @@ export class StudyRoomHub extends DurableObject<Env> {
     }
   }
   async webSocketClose(ws:WebSocket):Promise<void>{
-    const state=ws.deserializeAttachment() as {userId?:string,roomId?:string}|null;
+    const state=ws.deserializeAttachment() as {userId?:string}|null;
     if(!state?.userId)return;
     const stillConnected=this.ctx.getWebSockets().some(peer=>peer!==ws&&(peer.deserializeAttachment() as {userId?:string}|null)?.userId===state.userId);
     if(!stillConnected){
-      this.settleMember(state.userId);
-      this.ctx.storage.sql.exec("DELETE FROM members WHERE user_id=?",state.userId);
-      if(state.roomId)try{await this.env.DB.prepare("DELETE FROM study_room_members WHERE room_id=? AND user_id=?").bind(state.roomId,state.userId).run();await closeStudyRoomIfUnstaffed(this.env,state.roomId)}catch{}
-      this.broadcast({type:"presence",members:this.members()});
+      // A dropped socket is not an explicit room leave. Keep the seat and study
+      // membership during the existing 3-minute heartbeat grace period so the
+      // student can navigate away and return without being removed immediately.
+      this.ctx.storage.sql.exec("UPDATE members SET last_seen=? WHERE user_id=?",Date.now(),state.userId);
       if(this.members().length)await this.ctx.storage.setAlarm(Date.now()+45000);
-      else await this.ctx.storage.deleteAlarm();
     }
   }
   async alarm():Promise<void>{
