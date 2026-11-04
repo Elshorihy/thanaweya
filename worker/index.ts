@@ -2630,7 +2630,7 @@ export class StudyRoomHub extends DurableObject<Env> {
     });
   }
   private settleMember(userId:string,now=Date.now()){
-    const row=this.ctx.storage.sql.exec<{study_started_at:number|null}>("SELECT study_started_at FROM members WHERE user_id=?",userId).toArray()[0];
+    const row=this.ctx.storage.sql.exec<{study_started_at:number|null,last_seen:number}>("SELECT study_started_at,last_seen FROM members WHERE user_id=?",userId).toArray()[0];
     const started=Number(row?.study_started_at||0);if(!started)return;
     const timerRow=this.ctx.storage.sql.exec<{value:string}>("SELECT value FROM room_state WHERE key='timer'").toArray()[0];
     let timer:any=null;try{timer=timerRow?JSON.parse(timerRow.value):null}catch{}
@@ -2826,9 +2826,9 @@ export class StudyRoomHub extends DurableObject<Env> {
   }
   async alarm():Promise<void>{
     await this.finishTimerIfExpired();
-    const stale=this.ctx.storage.sql.exec<{user_id:string}>("SELECT user_id FROM members WHERE last_seen<?",Date.now()-180000).toArray();
+    const stale=this.ctx.storage.sql.exec<{user_id:string,last_seen:number}>("SELECT user_id,last_seen FROM members WHERE last_seen<?",Date.now()-180000).toArray();
     for(const row of stale){
-      this.settleMember(row.user_id);
+      this.settleMember(row.user_id,Number(row.last_seen||Date.now()));
       this.ctx.storage.sql.exec("DELETE FROM members WHERE user_id=?",row.user_id);
       try{const roomId=await this.ctx.storage.get<string>("roomId");if(roomId)await this.env.DB.prepare("DELETE FROM study_room_members WHERE room_id=? AND user_id=?").bind(roomId,row.user_id).run()}catch{}
     }
