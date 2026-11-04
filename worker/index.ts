@@ -2652,7 +2652,7 @@ export class StudyRoomHub extends DurableObject<Env> {
     let timer:any;try{timer=JSON.parse(row.value)}catch{return}
     if(!timer?.running||Number(timer.endsAt)>Date.now())return;
     const now=Number(timer.endsAt)||Date.now();this.settleAllMembers(now);
-    const ended={...timer,running:false};
+    const ended={...timer,running:false,duration:0};
     this.ctx.storage.sql.exec("INSERT INTO room_state(key,value) VALUES('timer',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",JSON.stringify(ended));
     this.broadcast({type:"timer",timer:ended});this.broadcast({type:"presence",members:this.members()});
   }
@@ -2716,6 +2716,7 @@ export class StudyRoomHub extends DurableObject<Env> {
       return Response.json({ok:true});
     }
     if(action==="close"){
+      this.settleAllMembers();
       for(const ws of this.ctx.getWebSockets())try{ws.send(JSON.stringify({type:"room_closed"}));ws.close(1000,"room closed")}catch{}
       this.ctx.storage.sql.exec("DELETE FROM members");
       await this.ctx.storage.deleteAlarm();
@@ -2727,6 +2728,7 @@ export class StudyRoomHub extends DurableObject<Env> {
       return Response.json({messages,members:this.members()});
     }
     if(action==="websocket"){
+      await this.finishTimerIfExpired();
       if(request.headers.get("Upgrade")!=="websocket")return new Response("Expected websocket",{status:426});
       const member=this.ctx.storage.sql.exec<{user_id:string}>("SELECT user_id FROM members WHERE user_id=?",userId).toArray()[0];
       if(!member)return new Response("Join the room first",{status:403});
