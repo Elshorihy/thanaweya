@@ -2625,12 +2625,13 @@ export class StudyRoomHub extends DurableObject<Env> {
       ctx.storage.sql.exec("CREATE INDEX IF NOT EXISTS idx_room_messages_created ON messages(created_at DESC)");
       ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS room_state (key TEXT PRIMARY KEY,value TEXT NOT NULL)");
       ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS mic_mutes (user_id TEXT PRIMARY KEY,muted_at INTEGER NOT NULL)");
+      ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS network_quality (user_id TEXT PRIMARY KEY,quality TEXT NOT NULL,latency_ms INTEGER NOT NULL,updated_at INTEGER NOT NULL)");
     });
   }
   private members(){
-    return this.ctx.storage.sql.exec<any>("SELECT m.user_id,m.name,m.joined_at,COALESCE(t.seconds,0) AS saved_seconds,m.study_started_at FROM members m LEFT JOIN study_totals t ON t.user_id=m.user_id ORDER BY m.joined_at ASC").toArray().map((m:any)=>{
+    return this.ctx.storage.sql.exec<any>("SELECT m.user_id,m.name,m.joined_at,COALESCE(t.seconds,0) AS saved_seconds,m.study_started_at,COALESCE(q.quality,'unknown') AS connection_quality,q.latency_ms FROM members m LEFT JOIN study_totals t ON t.user_id=m.user_id LEFT JOIN network_quality q ON q.user_id=m.user_id ORDER BY m.joined_at ASC").toArray().map((m:any)=>{
       const active=Number(m.study_started_at||0);
-      return {user_id:m.user_id,name:m.name,joined_at:m.joined_at,studySeconds:Number(m.saved_seconds||0),studyStartedAt:active||null};
+      return {user_id:m.user_id,name:m.name,joined_at:m.joined_at,studySeconds:Number(m.saved_seconds||0),studyStartedAt:active||null,connectionQuality:m.connection_quality,latencyMs:m.latency_ms===null?null:Number(m.latency_ms)};
     });
   }
   private settleMember(userId:string,now=Date.now()){
@@ -2754,6 +2755,18 @@ export class StudyRoomHub extends DurableObject<Env> {
     const state=ws.deserializeAttachment() as {userId:string,name:string,isOwner:boolean}|null;
     if(!state?.userId||typeof message!=="string")return;
     let data:any;try{data=JSON.parse(message)}catch{return}
+    if(data?.type==="ping"){
+      const sentAt=Number(data.sentAt)||0;
+      if(sentAt>0)try{ws.send(JSON.stringify({type:"pong",sentAt}))}catch{}
+      return;
+    }
+    if(data?.type==="network_quality"){
+      const quality=["good","fair","weak","unknown"].includes(String(data.quality))?String(data.quality):"unknown";
+      const latency=Math.max(0,Math.min(60000,Math.floor(Number(data.latencyMs)||0))),now=Date.now();
+      this.ctx.storage.sql.exec("INSERT INTO network_quality(user_id,quality,latency_ms,updated_at) VALUES(?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET quality=excluded.quality,latency_ms=excluded.latency_ms,updated_at=excluded.updated_at",state.userId,quality,latency,now);
+      this.broadcast({type:"presence",members:this.members()});
+      return;
+    }
     if(data?.type==="heartbeat"){
       this.ctx.storage.sql.exec("UPDATE members SET last_seen=? WHERE user_id=?",Date.now(),state.userId);
       await this.finishTimerIfExpired();
