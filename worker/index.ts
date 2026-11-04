@@ -2614,14 +2614,48 @@ export class StudyRoomHub extends DurableObject<Env> {
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
     ctx.blockConcurrencyWhile(async () => {
-      ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS members (user_id TEXT PRIMARY KEY,name TEXT NOT NULL,joined_at INTEGER NOT NULL,last_seen INTEGER NOT NULL)");
+      ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS members (user_id TEXT PRIMARY KEY,name TEXT NOT NULL,joined_at INTEGER NOT NULL,last_seen INTEGER NOT NULL,study_started_at INTEGER)");
+      try{ctx.storage.sql.exec("ALTER TABLE members ADD COLUMN study_started_at INTEGER")}catch{}
+      ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS study_totals (user_id TEXT PRIMARY KEY,seconds INTEGER NOT NULL DEFAULT 0)");
       ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS messages (id TEXT PRIMARY KEY,user_id TEXT NOT NULL,name TEXT NOT NULL,content TEXT NOT NULL,created_at INTEGER NOT NULL)");
       ctx.storage.sql.exec("CREATE INDEX IF NOT EXISTS idx_room_messages_created ON messages(created_at DESC)");
       ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS room_state (key TEXT PRIMARY KEY,value TEXT NOT NULL)");
       ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS mic_mutes (user_id TEXT PRIMARY KEY,muted_at INTEGER NOT NULL)");
     });
   }
-  private members(){return this.ctx.storage.sql.exec<{user_id:string,name:string,joined_at:number}>("SELECT user_id,name,joined_at FROM members ORDER BY joined_at ASC").toArray();}
+  private members(){
+    const timerRow=this.ctx.storage.sql.exec<{value:string}>("SELECT value FROM room_state WHERE key='timer'").toArray()[0];
+    let timer:any=null;try{timer=timerRow?JSON.parse(timerRow.value):null}catch{}
+    const now=Date.now();
+    return this.ctx.storage.sql.exec<any>("SELECT m.user_id,m.name,m.joined_at,COALESCE(t.seconds,0) AS saved_seconds,m.study_started_at FROM members m LEFT JOIN study_totals t ON t.user_id=m.user_id ORDER BY m.joined_at ASC").toArray().map((m:any)=>{
+      const active=Number(m.study_started_at||0),until=timer?.running?Math.min(now,Number(timer.endsAt||now)):0;
+      const live=active&&until>active?Math.floor((until-active)/1000):0;
+      return {user_id:m.user_id,name:m.name,joined_at:m.joined_at,studySeconds:Number(m.saved_seconds||0)+live};
+    });
+  }
+  private settleMember(userId:string,now=Date.now()){
+    const row=this.ctx.storage.sql.exec<{study_started_at:number|null}>("SELECT study_started_at FROM members WHERE user_id=?",userId).toArray()[0];
+    const started=Number(row?.study_started_at||0);if(!started)return;
+    const timerRow=this.ctx.storage.sql.exec<{value:string}>("SELECT value FROM room_state WHERE key='timer'").toArray()[0];
+    let timer:any=null;try{timer=timerRow?JSON.parse(timerRow.value):null}catch{}
+    const until=timer?.endsAt?Math.min(now,Number(timer.endsAt)):now;
+    const seconds=Math.max(0,Math.floor((until-started)/1000));
+    if(seconds)this.ctx.storage.sql.exec("INSERT INTO study_totals(user_id,seconds) VALUES(?,?) ON CONFLICT(user_id) DO UPDATE SET seconds=seconds+excluded.seconds",userId,seconds);
+    this.ctx.storage.sql.exec("UPDATE members SET study_started_at=NULL WHERE user_id=?",userId);
+  }
+  private settleAllMembers(now=Date.now()){
+    const rows=this.ctx.storage.sql.exec<{user_id:string}>("SELECT user_id FROM members WHERE study_started_at IS NOT NULL").toArray();
+    for(const row of rows)this.settleMember(row.user_id,now);
+  }
+  private async finishTimerIfExpired(){
+    const row=this.ctx.storage.sql.exec<{value:string}>("SELECT value FROM room_state WHERE key='timer'").toArray()[0];if(!row)return;
+    let timer:any;try{timer=JSON.parse(row.value)}catch{return}
+    if(!timer?.running||Number(timer.endsAt)>Date.now())return;
+    const now=Number(timer.endsAt)||Date.now();this.settleAllMembers(now);
+    const ended={...timer,running:false};
+    this.ctx.storage.sql.exec("INSERT INTO room_state(key,value) VALUES('timer',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",JSON.stringify(ended));
+    this.broadcast({type:"timer",timer:ended});this.broadcast({type:"presence",members:this.members()});
+  }
   private broadcast(payload:unknown,except?:string){
     const data=JSON.stringify(payload);
     for(const ws of this.ctx.getWebSockets()){
@@ -2637,12 +2671,14 @@ export class StudyRoomHub extends DurableObject<Env> {
       const roomKey=String(request.headers.get("x-room-id")||"");
       if(roomKey)await this.ctx.storage.put("roomId",roomKey);
       const existing=this.ctx.storage.sql.exec<{user_id:string}>("SELECT user_id FROM members WHERE user_id=?",userId).toArray()[0];
+      const now=Date.now();
+      const timerRow=this.ctx.storage.sql.exec<{value:string}>("SELECT value FROM room_state WHERE key='timer'").toArray()[0];let activeTimer:any=null;try{activeTimer=timerRow?JSON.parse(timerRow.value):null}catch{}
       if(!existing){
         const count=this.ctx.storage.sql.exec<{n:number}>("SELECT COUNT(*) AS n FROM members").one().n;
         if(count>=5)return Response.json({error:"الغرفة مكتملة (5 طلاب)."}, {status:409});
-        this.ctx.storage.sql.exec("INSERT INTO members(user_id,name,joined_at,last_seen) VALUES(?,?,?,?)",userId,name,Date.now(),Date.now());
-      }else this.ctx.storage.sql.exec("UPDATE members SET name=?,last_seen=? WHERE user_id=?",name,Date.now(),userId);
-      await this.ctx.storage.setAlarm(Date.now()+60000);
+        this.ctx.storage.sql.exec("INSERT INTO members(user_id,name,joined_at,last_seen,study_started_at) VALUES(?,?,?,?,?)",userId,name,now,now,activeTimer?.running&&Number(activeTimer.endsAt)>now?now:null);
+      }else this.ctx.storage.sql.exec("UPDATE members SET name=?,last_seen=?,study_started_at=CASE WHEN ?=1 AND study_started_at IS NULL THEN ? ELSE study_started_at END WHERE user_id=?",name,now,activeTimer?.running&&Number(activeTimer.endsAt)>now?1:0,now,userId);
+      const alarmAt=activeTimer?.running?Math.min(now+45000,Number(activeTimer.endsAt)):now+45000;await this.ctx.storage.setAlarm(alarmAt);
       this.broadcast({type:"presence",members:this.members()});
       return Response.json({ok:true,members:this.members()});
     }
@@ -2655,6 +2691,7 @@ export class StudyRoomHub extends DurableObject<Env> {
       return Response.json({ok:true});
     }
     if(action==="release"){
+      this.settleMember(userId);
       this.ctx.storage.sql.exec("DELETE FROM members WHERE user_id=?",userId);
       for(const ws of this.ctx.getWebSockets()){
         const state=ws.deserializeAttachment() as {userId?:string}|null;
@@ -2716,6 +2753,7 @@ export class StudyRoomHub extends DurableObject<Env> {
     let data:any;try{data=JSON.parse(message)}catch{return}
     if(data?.type==="heartbeat"){
       this.ctx.storage.sql.exec("UPDATE members SET last_seen=? WHERE user_id=?",Date.now(),state.userId);
+      await this.finishTimerIfExpired();
       return;
     }
     if(data?.type==="chat"){
@@ -2734,14 +2772,18 @@ export class StudyRoomHub extends DurableObject<Env> {
       if(!state.isOwner&&!state.isModerator)return;
       const action=String(data.action||"");
       if(action==="start"){
-        const duration=Math.max(5,Math.min(180,Number(data.duration)||25));
-        const timer={running:true,duration,startedAt:Date.now(),endsAt:Date.now()+duration*60000};
+        const duration=Math.max(10,Math.min(180,Math.floor(Number(data.duration)||25)));
+        const now=Date.now();
+        const timer={running:true,duration,startedAt:now,endsAt:now+duration*60000};
+        this.ctx.storage.sql.exec("UPDATE members SET study_started_at=? WHERE study_started_at IS NULL",now);
         this.ctx.storage.sql.exec("INSERT INTO room_state(key,value) VALUES('timer',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",JSON.stringify(timer));
-        this.broadcast({type:"timer",timer});
+        await this.ctx.storage.setAlarm(Math.min(now+45000,timer.endsAt));
+        this.broadcast({type:"timer",timer});this.broadcast({type:"presence",members:this.members()});
       }else if(action==="pause"||action==="stop"){
+        this.settleAllMembers();
         const timer={running:false,duration:0,startedAt:0,endsAt:0};
         this.ctx.storage.sql.exec("INSERT INTO room_state(key,value) VALUES('timer',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",JSON.stringify(timer));
-        this.broadcast({type:"timer",timer});
+        this.broadcast({type:"timer",timer});this.broadcast({type:"presence",members:this.members()});
       }
       return;
     }
@@ -2776,6 +2818,7 @@ export class StudyRoomHub extends DurableObject<Env> {
     if(!state?.userId)return;
     const stillConnected=this.ctx.getWebSockets().some(peer=>peer!==ws&&(peer.deserializeAttachment() as {userId?:string}|null)?.userId===state.userId);
     if(!stillConnected){
+      this.settleMember(state.userId);
       this.ctx.storage.sql.exec("DELETE FROM members WHERE user_id=?",state.userId);
       if(state.roomId)try{await this.env.DB.prepare("DELETE FROM study_room_members WHERE room_id=? AND user_id=?").bind(state.roomId,state.userId).run();await closeStudyRoomIfUnstaffed(this.env,state.roomId)}catch{}
       this.broadcast({type:"presence",members:this.members()});
@@ -2784,13 +2827,18 @@ export class StudyRoomHub extends DurableObject<Env> {
     }
   }
   async alarm():Promise<void>{
+    await this.finishTimerIfExpired();
     const stale=this.ctx.storage.sql.exec<{user_id:string}>("SELECT user_id FROM members WHERE last_seen<?",Date.now()-180000).toArray();
     for(const row of stale){
+      this.settleMember(row.user_id);
       this.ctx.storage.sql.exec("DELETE FROM members WHERE user_id=?",row.user_id);
       try{const roomId=await this.ctx.storage.get<string>("roomId");if(roomId)await this.env.DB.prepare("DELETE FROM study_room_members WHERE room_id=? AND user_id=?").bind(roomId,row.user_id).run()}catch{}
     }
     if(stale.length){this.broadcast({type:"presence",members:this.members()});const roomId=await this.ctx.storage.get<string>("roomId");if(roomId)await closeStudyRoomIfUnstaffed(this.env,roomId)}
-    if(this.members().length)await this.ctx.storage.setAlarm(Date.now()+45000);
+    if(this.members().length){
+      const timerRow=this.ctx.storage.sql.exec<{value:string}>("SELECT value FROM room_state WHERE key='timer'").toArray()[0];let timer:any=null;try{timer=timerRow?JSON.parse(timerRow.value):null}catch{}
+      await this.ctx.storage.setAlarm(timer?.running?Math.min(Date.now()+45000,Number(timer.endsAt)||Date.now()+45000):Date.now()+45000);
+    }
   }
 }
 
