@@ -1,4 +1,5 @@
 import React,{useCallback,useEffect,useRef,useState} from 'react';
+import {Capacitor} from '@capacitor/core';
 import {Users,Plus,Lock,EyeOff,Globe2,Timer,Play,Pause,Send,Flag,LogOut,X,Mic,MicOff,ShieldCheck,Crown,RefreshCw,DoorOpen,MessageCircle,Volume2,AlertTriangle,ListTodo,CheckCircle2,Trash2,Headphones} from 'lucide-react';
 
 type Auth={id:string;name:string};
@@ -118,7 +119,8 @@ const applyPresence=(next:Member[])=>{
  };
  const connectSocket=useCallback((room:Room)=>{
   const protocol=location.protocol==='https:'?'wss:':'ws:';
-  const ws=new WebSocket(protocol+'//'+location.host+'/api/study-rooms/'+encodeURIComponent(room.id)+'/live');
+  const socketBase=Capacitor.isNativePlatform()?'wss://thanaweya.sheenomatp.workers.dev':protocol+'//'+location.host;
+  const ws=new WebSocket(socketBase+'/api/study-rooms/'+encodeURIComponent(room.id)+'/live');
   wsRef.current=ws;setSocketState('connecting');
   ws.onopen=()=>{retryRef.current=0;setSocketState('connected');if(heartbeatRef.current!==null)window.clearInterval(heartbeatRef.current);heartbeatRef.current=window.setInterval(()=>send({type:'heartbeat'}),25000);if(qualityIntervalRef.current!==null)window.clearInterval(qualityIntervalRef.current);const measure=()=>{const sentAt=Date.now();send({type:'ping',sentAt});if(qualityTimeoutRef.current!==null)window.clearTimeout(qualityTimeoutRef.current);qualityTimeoutRef.current=window.setTimeout(()=>{if(lastQualityRef.current!=='weak'){lastQualityRef.current='weak';send({type:'network_quality',quality:'weak',latencyMs:5000})}},5000)};measure();qualityIntervalRef.current=window.setInterval(measure,10000);const queuedSignals=pendingSignalsRef.current.splice(0);for(const item of queuedSignals)ws.send(JSON.stringify({type:'signal',target:item.target,payload:item.payload}));if(micStateRef.current)send({type:'mic',enabled:true})};
   ws.onmessage=event=>{let data:any;try{data=JSON.parse(String(event.data))}catch{return}
