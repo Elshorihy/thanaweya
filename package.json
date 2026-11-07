@@ -23,8 +23,8 @@
     "lucide-react": "latest",
     "web-push-neo": "0.1.2",
     "jspdf": "^3.0.3",
-    "@capacitor/core": "^8.6.0",
-    "@capacitor/android": "^8.6.0"
+    "@capacitor/core": "^8.5.1",
+    "@capacitor/android": "^8.5.1"
   },
   "overrides": {
     "source-map-js": "1.2.1"
@@ -32,6 +32,6 @@
   "devDependencies": {
     "@types/react": "latest",
     "@types/react-dom": "latest",
-    "@capacitor/cli": "^8.6.0"
+    "@capacitor/cli": "^8.5.1"
   }
 }
