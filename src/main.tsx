@@ -29,7 +29,7 @@ if (Capacitor.isNativePlatform()) {
     if (input instanceof Request) {
       const requestUrl = new URL(input.url);
       if (requestUrl.pathname.startsWith('/api/')) {
-        return nativeFetch(new Request(new URL(requestUrl.pathname + requestUrl.search, apiOrigin), input), {...init, credentials: 'include'});
+        return nativeFetch(new Request(new URL(requestUrl.pathname + requestUrl.search, apiOrigin), input as RequestInit), {...init, credentials: 'include'});
       }
     }
     return nativeFetch(input, init);
