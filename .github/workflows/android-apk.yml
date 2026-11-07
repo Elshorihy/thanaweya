@@ -2,7 +2,7 @@ name: Build Thanaweya Android APK
 
 on:
   push:
-    branches: [mobile-app]
+    branches: [mobile-app, mobile-premium-ui]
     paths:
       - '.github/workflows/android-apk.yml'
       - 'package.json'
