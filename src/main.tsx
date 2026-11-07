@@ -21,15 +21,15 @@ if (Capacitor.isNativePlatform()) {
   const apiOrigin = 'https://thanaweya.sheenomatp.workers.dev';
   window.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
     if (typeof input === 'string' && input.startsWith('/api/')) {
-      return nativeFetch(apiOrigin + input, init);
+      return nativeFetch(apiOrigin + input, {...init, credentials: 'include'});
     }
     if (input instanceof URL && input.pathname.startsWith('/api/')) {
-      return nativeFetch(new URL(input.pathname + input.search, apiOrigin), init);
+      return nativeFetch(new URL(input.pathname + input.search, apiOrigin), {...init, credentials: 'include'});
     }
     if (input instanceof Request) {
       const requestUrl = new URL(input.url);
       if (requestUrl.pathname.startsWith('/api/')) {
-        return nativeFetch(new Request(new URL(requestUrl.pathname + requestUrl.search, apiOrigin), input), init);
+        return nativeFetch(new Request(new URL(requestUrl.pathname + requestUrl.search, apiOrigin), input), {...init, credentials: 'include'});
       }
     }
     return nativeFetch(input, init);
