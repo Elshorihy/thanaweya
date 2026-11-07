@@ -45,13 +45,13 @@ source = source.replace(
   'import com.getcapacitor.BridgeActivity;\nimport android.os.Bundle;\nimport android.webkit.CookieManager;'
 );
 source = source.replace(
-  /public class MainActivity extends BridgeActivity\\s*\\{\\s*\\}/,
-  'public class MainActivity extends BridgeActivity {\\n' +
-  '    @Override\\n' +
-  '    public void onCreate(Bundle savedInstanceState) {\\n' +
-  '        super.onCreate(savedInstanceState);\\n' +
-  '        ' + statement + '\\n' +
-  '    }\\n' +
+  /public class MainActivity extends BridgeActivity\s*\{\s*\}/,
+  'public class MainActivity extends BridgeActivity {\n' +
+  '    @Override\n' +
+  '    public void onCreate(Bundle savedInstanceState) {\n' +
+  '        super.onCreate(savedInstanceState);\n' +
+  '        ' + statement + '\n' +
+  '    }\n' +
   '}'
 );
 if (!source.includes(statement)) {
