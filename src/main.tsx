@@ -20,6 +20,8 @@ if (Capacitor.isNativePlatform()) {
   const nativeFetch = window.fetch.bind(window);
   const apiOrigin = 'https://thanaweya.sheenomatp.workers.dev';
   (window as any).__THANAWeya_NATIVE_API__ = apiOrigin;
+  // Keep an unwrapped fetch for a direct, same-origin-independent connectivity diagnostic.
+  (window as any).__THANAWeya_NATIVE_FETCH__ = nativeFetch;
   window.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
     if (typeof input === 'string' && input.startsWith('/api/')) {
       return nativeFetch(apiOrigin + input, {...init, credentials: 'include'});
