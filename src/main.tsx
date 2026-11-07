@@ -19,6 +19,7 @@ import {authMe,authLogin,authLogout,authRegisterStart,authRegisterVerify,authFor
 if (Capacitor.isNativePlatform()) {
   const nativeFetch = window.fetch.bind(window);
   const apiOrigin = 'https://thanaweya.sheenomatp.workers.dev';
+  (window as any).__THANAWeya_NATIVE_API__ = apiOrigin;
   window.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
     if (typeof input === 'string' && input.startsWith('/api/')) {
       return nativeFetch(apiOrigin + input, {...init, credentials: 'include'});
