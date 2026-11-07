@@ -3017,11 +3017,7 @@ export default {
         }
         if(request.method==="OPTIONS" && url.pathname.startsWith("/api/")){
           return new Response(null,{status:204,headers:{
-            "access-control-allow-origin":"https://thanaweya.sheenomatp.workers.dev",
-            "access-control-allow-credentials":"true",
-            "access-control-allow-methods":"GET,POST,PUT,DELETE,OPTIONS",
-            "access-control-allow-headers":"content-type",
-            "access-control-max-age":"86400",
+            ...corsHeaders(request),
             "cache-control":"no-store"
           }});
         }
