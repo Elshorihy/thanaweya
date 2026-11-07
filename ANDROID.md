@@ -27,7 +27,9 @@ Then build the APK from Android Studio.
 
 The native WebView uses the secure `https://localhost` origin. The native API bridge sends existing `/api/*` requests to the current Cloudflare Worker. The Worker CORS allow-list includes this Capacitor origin and keeps the existing HttpOnly, Secure, SameSite=None account cookie.
 
-**Important release gate:** Android WebView third-party cookie acceptance must be enabled in the generated `MainActivity` (using `CookieManager.setAcceptThirdPartyCookies(webView, true)`) and tested on a real Android device. Do not publish an APK until login, logout, account restoration, and cross-device data sync have been verified. The native package is not considered offline-complete; only locally cached app assets and explicitly cached content can work offline.
+**Native session setup:** `npm run cap:add:android` runs a small patcher after generating the Android project. It enables third-party cookies in the generated `MainActivity` so the existing HttpOnly session cookie can be sent to the Worker. The script stops rather than editing an unexpected MainActivity template.
+
+**Release gates:** the Worker CORS/WebSocket changes in this branch must be deployed to the existing Cloudflare Worker before the native app can use the shared account API. Do not publish an APK until login, logout, account restoration, study-room WebSocket connectivity, and cross-device data sync have been verified on a real Android device. The native package is not considered offline-complete; only locally cached app assets and explicitly cached content can work offline.
 
 ## Mobile navigation
 
