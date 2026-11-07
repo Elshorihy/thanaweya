@@ -1685,3 +1685,27 @@ body.light .formgrid input[type="date"],
 body.light input[type="date"] {
   color-scheme: light;
 }
+
+
+/* Native-first mobile layout: five stable destinations and Android safe-area support. */
+@media(max-width:560px){
+  html,body,#root{min-height:100%;overscroll-behavior-y:contain}
+  body{padding:0; -webkit-tap-highlight-color:transparent}
+  .app{min-height:100dvh;min-height:100vh}
+  .appMain{padding:10px 13px calc(88px + env(safe-area-inset-bottom))}
+  .appMain>header{top:max(6px,env(safe-area-inset-top));min-height:56px;gap:8px;padding:7px 9px;border:1px solid rgba(150,165,205,.13);box-shadow:0 8px 28px rgba(0,0,0,.16)}
+  .mobileMenu{width:38px;height:38px;flex:0 0 38px;align-items:center;justify-content:center;border-radius:12px}
+  .search{min-width:0;flex:1}
+  .search input{min-width:0;font-size:13px}
+  .bottomNav{height:calc(68px + env(safe-area-inset-bottom));padding:6px 8px calc(6px + env(safe-area-inset-bottom));display:grid;grid-template-columns:repeat(5,minmax(0,1fr));align-items:center;gap:5px;overflow:hidden;justify-content:stretch;border-top:1px solid rgba(150,165,205,.18);box-shadow:0 -10px 30px rgba(0,0,0,.18)}
+  .bottomNav button{width:100%;min-width:0;min-height:54px;flex:none;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:5px 2px;border-radius:14px;font-size:10px;line-height:1.15}
+  .bottomNav button svg{width:19px;height:19px;flex:0 0 auto}
+  .bottomNav button span{display:block;max-width:100%;font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .bottomNav button.active{background:linear-gradient(145deg,rgba(139,124,255,.2),rgba(139,124,255,.07));box-shadow:inset 0 0 0 1px rgba(160,145,255,.16)}
+  .appMain>header .headActions{gap:3px}
+  .appMain>header .headActions button{min-width:34px;min-height:36px;padding:7px;border-radius:10px}
+  .appMain>header .headActions button.installAppBtn{font-size:10px;min-width:0}
+  .card,.stat,.hero,.title{scroll-margin-top:76px}
+  button,a,input,select,textarea{touch-action:manipulation}
+}
+@supports(height:100dvh){.app{min-height:100dvh}}
