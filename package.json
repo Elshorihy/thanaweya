@@ -12,7 +12,7 @@
     "cap:sync": "npm run build && cap sync android",
     "cap:open": "cap open android",
     "cap:doctor": "cap doctor",
-    "cap:add:android": "cap add android"
+    "cap:add:android": "cap add android && node scripts/patch-android.mjs"
   },
   "dependencies": {
     "@vitejs/plugin-react": "latest",
