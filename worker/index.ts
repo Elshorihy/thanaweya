@@ -137,14 +137,29 @@ const COOKIE = "thanaweya_session";
 const ADMIN_COOKIE = "thanaweya_admin_session";
 const SESSION_DAYS = 30;
 
-function json(data: unknown, status=200, headers: Record<string,string>={}, request?:Request) {
+const APP_CORS_ORIGINS = new Set([
+  "https://thanaweya.sheenomatp.workers.dev",
+  "https://localhost",
+  "capacitor://localhost"
+]);
+function corsHeaders(request?:Request):Record<string,string> {
   const origin=request?.headers.get("Origin")||"";
-  const allowed=origin==="https://thanaweya.sheenomatp.workers.dev" ? origin : "";
+  if(!APP_CORS_ORIGINS.has(origin)) return {};
+  return {
+    "access-control-allow-origin":origin,
+    "access-control-allow-credentials":"true",
+    "access-control-allow-methods":"GET,POST,PUT,DELETE,OPTIONS",
+    "access-control-allow-headers":"content-type, accept",
+    "access-control-max-age":"86400",
+    "vary":"Origin"
+  };
+}
+function jsonResponse(data: unknown, status=200, headers: Record<string,string>={}, request?:Request) {
   return new Response(JSON.stringify(data), {status, headers: {
     "content-type":"application/json; charset=utf-8",
     "cache-control":"no-store, no-cache, must-revalidate",
     "pragma":"no-cache",
-    ...(allowed?{"access-control-allow-origin":allowed,"access-control-allow-credentials":"true","vary":"Origin"}:{}),
+    ...corsHeaders(request),
     ...headers
   }});
 }
@@ -2872,10 +2887,11 @@ export class StudyRoomHub extends DurableObject<Env> {
 
 export default {
   async fetch(request:Request,env:Env,ctx:ExecutionContext):Promise<Response> {
+    const json=(data:unknown,status=200,headers:Record<string,string>={})=>jsonResponse(data,status,headers,request);
     const url=new URL(request.url);
     if(url.pathname.startsWith("/api/")) {
       try {
-        if(request.method==="OPTIONS") return new Response(null,{status:204,headers:{"access-control-allow-origin":"*","access-control-allow-methods":"GET,POST,PUT,DELETE,OPTIONS","access-control-allow-headers":"content-type, accept","cache-control":"no-store"}});
+        if(request.method==="OPTIONS") return new Response(null,{status:204,headers:{...corsHeaders(request),"cache-control":"no-store"}});
         if(url.pathname==="/api/client-error" && request.method==="POST"){
           await ensureClientErrors(env);
           const b=await body(request);
@@ -3001,11 +3017,7 @@ export default {
         }
         if(request.method==="OPTIONS" && url.pathname.startsWith("/api/")){
           return new Response(null,{status:204,headers:{
-            "access-control-allow-origin":"https://thanaweya.sheenomatp.workers.dev",
-            "access-control-allow-credentials":"true",
-            "access-control-allow-methods":"GET,POST,PUT,DELETE,OPTIONS",
-            "access-control-allow-headers":"content-type",
-            "access-control-max-age":"86400",
+            ...corsHeaders(request),
             "cache-control":"no-store"
           }});
         }

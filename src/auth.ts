@@ -23,6 +23,20 @@ async function req(path:string,options:RequestInit={}) {
         throw new Error('الخادم اتأخر في الرد. حاول مرة أخرى بعد قليل.');
       }
       if(attempt===0 && e instanceof TypeError){await new Promise(resolve=>setTimeout(resolve,500));continue;}
+      if(e instanceof TypeError){
+        const nativeInfo=(window as any).__THANAWeya_NATIVE_API__;
+        const origin=window.location.origin;
+        const target=typeof nativeInfo==='string'?nativeInfo:'relative API URL';
+        let connectivity='غير متاح';
+        const directFetch=(window as any).__THANAWeya_NATIVE_FETCH__;
+        if(typeof directFetch==='function' && typeof nativeInfo==='string'){
+          try{
+            const probe=await directFetch(nativeInfo+'/api/health',{method:'GET',mode:'cors',credentials:'include',cache:'no-store'});
+            connectivity='HTTP '+probe.status;
+          }catch(probeError){connectivity='فشل ('+String(probeError instanceof Error?probeError.message:probeError)+')';}
+        }
+        throw new Error('تعذر الاتصال بالخادم من التطبيق. origin='+origin+' | API='+target+' | فحص الاتصال='+connectivity+' | السبب: '+String(e.message||e));
+      }
       throw e;
     }finally{
       window.clearTimeout(timeout);
