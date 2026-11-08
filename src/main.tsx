@@ -3,6 +3,7 @@ import {createRoot} from 'react-dom/client';
 import type {LucideIcon} from 'lucide-react';
 import {Users,Home,BookOpen,CalendarDays,CheckSquare,Brain,Timer,BarChart3,Trophy,Bell,Settings,Plus,Search,Trash2,Play,Pause,RotateCcw,Download,Upload,Sun,Moon,Globe2,AlertCircle,X,Save,FileQuestion,NotebookPen,Calendar,AlertTriangle,Check,RefreshCw,ChevronLeft,ChevronRight,Smartphone,Clock,UserRound,Filter,Pencil,Zap,Gift,Palette,Sparkles,Lock,CheckCircle2,Gamepad2} from 'lucide-react';
 import './styles.css';
+import './mobile-premium.css';
 import {Capacitor} from '@capacitor/core';
 import PublicLanding from './PublicLanding';
 import MotionExperience from './MotionExperience';

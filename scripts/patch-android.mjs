@@ -1,12 +1,65 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { execFileSync } from 'node:child_process';
 
-const root = path.resolve('android/app/src/main/java');
-if (!fs.existsSync(root)) {
-  console.error('Android MainActivity not found. Run this script after cap add android.');
+const androidRes = path.resolve('android/app/src/main/res');
+const sourceIcon = path.resolve('public/icons/thanaweya-palestine-192.jpg');
+if (!fs.existsSync(androidRes)) {
+  console.error('Android resources not found. Run this script after cap add android.');
+  process.exit(1);
+}
+if (!fs.existsSync(sourceIcon)) {
+  console.error('The colorful Thanaweya logo was not found at ' + sourceIcon);
   process.exit(1);
 }
 
+const densities = { mdpi: 48, hdpi: 72, xhdpi: 96, xxhdpi: 144, xxxhdpi: 192 };
+for (const [density, size] of Object.entries(densities)) {
+  const dir = path.join(androidRes, 'mipmap-' + density);
+  fs.mkdirSync(dir, { recursive: true });
+  for (const name of ['ic_launcher', 'ic_launcher_round']) {
+    execFileSync('convert', [
+      sourceIcon, '-resize', Math.round(size * 0.82) + 'x' + Math.round(size * 0.82),
+      '-gravity', 'center', '-background', '#07182f', '-extent', size + 'x' + size,
+      '-strip', path.join(dir, name + '.png')
+    ]);
+  }
+}
+
+const adaptiveDir = path.join(androidRes, 'mipmap-anydpi-v26');
+fs.mkdirSync(adaptiveDir, { recursive: true });
+const xxxDir = path.join(androidRes, 'mipmap-xxxhdpi');
+execFileSync('convert', [
+  sourceIcon, '-resize', '288x288', '-gravity', 'center',
+  '-background', 'none', '-extent', '432x432', '-strip',
+  path.join(xxxDir, 'ic_launcher_foreground.png')
+]);
+const valuesDir = path.join(androidRes, 'values');
+fs.mkdirSync(valuesDir, { recursive: true });
+fs.writeFileSync(path.join(valuesDir, 'launcher_colors.xml'), [
+  '<?xml version="1.0" encoding="utf-8"?>',
+  '<resources><color name="launcher_background">#07182f</color></resources>',
+  ''
+].join('\n'));
+const adaptiveXml = [
+  '<?xml version="1.0" encoding="utf-8"?>',
+  '<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">',
+  '    <background android:drawable="@color/launcher_background"/>',
+  '    <foreground android:drawable="@mipmap/ic_launcher_foreground"/>',
+  '</adaptive-icon>',
+  ''
+].join('\n');
+for (const name of ['ic_launcher.xml', 'ic_launcher_round.xml']) {
+  fs.writeFileSync(path.join(adaptiveDir, name), adaptiveXml);
+}
+console.log('Generated padded full-color Thanaweya icons with a navy adaptive background.');
+
+
+const javaRoot = path.resolve('android/app/src/main/java');
+if (!fs.existsSync(javaRoot)) {
+  console.error('Android MainActivity source not found.');
+  process.exit(1);
+}
 function findMainActivity(dir) {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const full = path.join(dir, entry.name);
@@ -19,44 +72,36 @@ function findMainActivity(dir) {
   }
   return null;
 }
-
-const file = findMainActivity(root);
+const file = findMainActivity(javaRoot);
 if (!file) {
   console.error('Expected Capacitor MainActivity.java was not generated.');
   process.exit(1);
 }
-
 let source = fs.readFileSync(file, 'utf8');
 const statement = 'CookieManager.getInstance().setAcceptThirdPartyCookies(getBridge().getWebView(), true);';
-if (source.includes(statement)) {
-  console.log('Third-party cookies are already enabled.');
-  process.exit(0);
-}
-if (!source.includes('extends BridgeActivity')) {
-  console.error('Unexpected MainActivity template; refusing to modify it automatically.');
-  process.exit(1);
-}
-if (!source.includes('import com.getcapacitor.BridgeActivity;')) {
-  console.error('BridgeActivity import was not found; refusing to modify the generated file.');
-  process.exit(1);
-}
-source = source.replace(
-  'import com.getcapacitor.BridgeActivity;',
-  'import com.getcapacitor.BridgeActivity;\nimport android.os.Bundle;\nimport android.webkit.CookieManager;'
-);
-source = source.replace(
-  /public class MainActivity extends BridgeActivity\s*\{\s*\}/,
-  'public class MainActivity extends BridgeActivity {\n' +
-  '    @Override\n' +
-  '    public void onCreate(Bundle savedInstanceState) {\n' +
-  '        super.onCreate(savedInstanceState);\n' +
-  '        ' + statement + '\n' +
-  '    }\n' +
-  '}'
-);
 if (!source.includes(statement)) {
-  console.error('Could not safely patch MainActivity; no file changes were written.');
-  process.exit(1);
+  if (!source.includes('extends BridgeActivity') || !source.includes('import com.getcapacitor.BridgeActivity;')) {
+    console.error('Unexpected MainActivity template; refusing to modify it automatically.');
+    process.exit(1);
+  }
+  source = source.replace(
+    'import com.getcapacitor.BridgeActivity;',
+    'import com.getcapacitor.BridgeActivity;\nimport android.os.Bundle;\nimport android.webkit.CookieManager;'
+  );
+  source = source.replace(
+    /public class MainActivity extends BridgeActivity\s*\{\s*\}/,
+    'public class MainActivity extends BridgeActivity {\n' +
+    '    @Override\n' +
+    '    public void onCreate(Bundle savedInstanceState) {\n' +
+    '        super.onCreate(savedInstanceState);\n' +
+    '        ' + statement + '\n' +
+    '    }\n' +
+    '}'
+  );
+  if (!source.includes(statement)) {
+    console.error('Could not safely patch MainActivity; no file changes were written.');
+    process.exit(1);
+  }
+  fs.writeFileSync(file, source);
 }
-fs.writeFileSync(file, source);
-console.log('Enabled third-party WebView cookies for the existing HttpOnly login session.');
+console.log('Third-party WebView cookies are enabled for the existing HttpOnly login session.');

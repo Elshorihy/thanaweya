@@ -2,7 +2,7 @@ name: Build Thanaweya Android APK
 
 on:
   push:
-    branches: [mobile-app]
+    branches: [mobile-app, mobile-premium-ui]
     paths:
       - '.github/workflows/android-apk.yml'
       - 'package.json'
@@ -34,6 +34,9 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
+
+      - name: Install ImageMagick for launcher icon generation
+        run: sudo apt-get update && sudo apt-get install -y imagemagick
 
       - name: Set up Java 21
         uses: actions/setup-java@v4
