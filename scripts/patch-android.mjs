@@ -4,7 +4,6 @@ import { execFileSync } from 'node:child_process';
 
 const androidRes = path.resolve('android/app/src/main/res');
 const sourceIcon = path.resolve('public/icons/thanaweya-palestine-192.jpg');
-
 if (!fs.existsSync(androidRes)) {
   console.error('Android resources not found. Run this script after cap add android.');
   process.exit(1);
@@ -14,36 +13,34 @@ if (!fs.existsSync(sourceIcon)) {
   process.exit(1);
 }
 
-// Generate real Android launcher assets from the existing full-color logo.
 const densities = { mdpi: 48, hdpi: 72, xhdpi: 96, xxhdpi: 144, xxxhdpi: 192 };
 for (const [density, size] of Object.entries(densities)) {
   const dir = path.join(androidRes, 'mipmap-' + density);
   fs.mkdirSync(dir, { recursive: true });
   for (const name of ['ic_launcher', 'ic_launcher_round']) {
-    const output = path.join(dir, name + '.png');
     execFileSync('convert', [
       sourceIcon, '-resize', size + 'x' + size + '^',
       '-gravity', 'center', '-extent', size + 'x' + size,
-      '-strip', output
+      '-strip', path.join(dir, name + '.png')
     ]);
   }
 }
 
-// Android 8+ adaptive launcher icons use the same colorful logo as foreground.
 const adaptiveDir = path.join(androidRes, 'mipmap-anydpi-v26');
 fs.mkdirSync(adaptiveDir, { recursive: true });
-const adaptiveIcon = (label) => `<?xml version="1.0" encoding="utf-8"?>
-<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
-    <background android:drawable="@android:color/white"/>
-    <foreground android:drawable="@mipmap/ic_launcher"/>
-</adaptive-icon>
-`;
+const adaptiveXml = [
+  '<?xml version="1.0" encoding="utf-8"?>',
+  '<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">',
+  '    <background android:drawable="@android:color/white"/>',
+  '    <foreground android:drawable="@mipmap/ic_launcher"/>',
+  '</adaptive-icon>',
+  ''
+].join('\n');
 for (const name of ['ic_launcher.xml', 'ic_launcher_round.xml']) {
-  fs.writeFileSync(path.join(adaptiveDir, name), adaptiveIcon(name));
+  fs.writeFileSync(path.join(adaptiveDir, name), adaptiveXml);
 }
 console.log('Generated full-color Thanaweya launcher icons for all Android densities.');
 
-// Preserve the existing third-party cookie patch for the login session.
 const javaRoot = path.resolve('android/app/src/main/java');
 if (!fs.existsSync(javaRoot)) {
   console.error('Android MainActivity source not found.');
@@ -75,16 +72,16 @@ if (!source.includes(statement)) {
   }
   source = source.replace(
     'import com.getcapacitor.BridgeActivity;',
-    'import com.getcapacitor.BridgeActivity;\\nimport android.os.Bundle;\\nimport android.webkit.CookieManager;'
+    'import com.getcapacitor.BridgeActivity;\nimport android.os.Bundle;\nimport android.webkit.CookieManager;'
   );
   source = source.replace(
-    /public class MainActivity extends BridgeActivity\\s*\\{\\s*\\}/,
-    'public class MainActivity extends BridgeActivity {\\n' +
-    '    @Override\\n' +
-    '    public void onCreate(Bundle savedInstanceState) {\\n' +
-    '        super.onCreate(savedInstanceState);\\n' +
-    '        ' + statement + '\\n' +
-    '    }\\n' +
+    /public class MainActivity extends BridgeActivity\s*\{\s*\}/,
+    'public class MainActivity extends BridgeActivity {\n' +
+    '    @Override\n' +
+    '    public void onCreate(Bundle savedInstanceState) {\n' +
+    '        super.onCreate(savedInstanceState);\n' +
+    '        ' + statement + '\n' +
+    '    }\n' +
     '}'
   );
   if (!source.includes(statement)) {
