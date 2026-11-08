@@ -19,8 +19,8 @@ for (const [density, size] of Object.entries(densities)) {
   fs.mkdirSync(dir, { recursive: true });
   for (const name of ['ic_launcher', 'ic_launcher_round']) {
     execFileSync('convert', [
-      sourceIcon, '-resize', size + 'x' + size + '^',
-      '-gravity', 'center', '-extent', size + 'x' + size,
+      sourceIcon, '-resize', Math.round(size * 0.82) + 'x' + Math.round(size * 0.82),
+      '-gravity', 'center', '-background', '#07182f', '-extent', size + 'x' + size,
       '-strip', path.join(dir, name + '.png')
     ]);
   }
@@ -28,18 +28,32 @@ for (const [density, size] of Object.entries(densities)) {
 
 const adaptiveDir = path.join(androidRes, 'mipmap-anydpi-v26');
 fs.mkdirSync(adaptiveDir, { recursive: true });
+const xxxDir = path.join(androidRes, 'mipmap-xxxhdpi');
+execFileSync('convert', [
+  sourceIcon, '-resize', '288x288', '-gravity', 'center',
+  '-background', 'none', '-extent', '432x432', '-strip',
+  path.join(xxxDir, 'ic_launcher_foreground.png')
+]);
+const valuesDir = path.join(androidRes, 'values');
+fs.mkdirSync(valuesDir, { recursive: true });
+fs.writeFileSync(path.join(valuesDir, 'launcher_colors.xml'), [
+  '<?xml version="1.0" encoding="utf-8"?>',
+  '<resources><color name="launcher_background">#07182f</color></resources>',
+  ''
+].join('\\n'));
 const adaptiveXml = [
   '<?xml version="1.0" encoding="utf-8"?>',
   '<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">',
-  '    <background android:drawable="@android:color/white"/>',
-  '    <foreground android:drawable="@mipmap/ic_launcher"/>',
+  '    <background android:drawable="@color/launcher_background"/>',
+  '    <foreground android:drawable="@mipmap/ic_launcher_foreground"/>',
   '</adaptive-icon>',
   ''
-].join('\n');
+].join('\\n');
 for (const name of ['ic_launcher.xml', 'ic_launcher_round.xml']) {
   fs.writeFileSync(path.join(adaptiveDir, name), adaptiveXml);
 }
-console.log('Generated full-color Thanaweya launcher icons for all Android densities.');
+console.log('Generated padded full-color Thanaweya icons with a navy adaptive background.');
+
 
 const javaRoot = path.resolve('android/app/src/main/java');
 if (!fs.existsSync(javaRoot)) {
