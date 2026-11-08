@@ -40,7 +40,7 @@ fs.writeFileSync(path.join(valuesDir, 'launcher_colors.xml'), [
   '<?xml version="1.0" encoding="utf-8"?>',
   '<resources><color name="launcher_background">#07182f</color></resources>',
   ''
-].join('\\n'));
+].join('\n'));
 const adaptiveXml = [
   '<?xml version="1.0" encoding="utf-8"?>',
   '<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">',
@@ -48,7 +48,7 @@ const adaptiveXml = [
   '    <foreground android:drawable="@mipmap/ic_launcher_foreground"/>',
   '</adaptive-icon>',
   ''
-].join('\\n');
+].join('\n');
 for (const name of ['ic_launcher.xml', 'ic_launcher_round.xml']) {
   fs.writeFileSync(path.join(adaptiveDir, name), adaptiveXml);
 }
