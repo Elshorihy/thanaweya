@@ -3989,8 +3989,13 @@ export default {
           }
           if(endpoint==="ice" && request.method==="GET"){
             if(!member)return json({error:"انضم للغرفة أولًا."},403);
-            // Free direct connectivity only: never attach TURN credentials or paid relay services.
+            // STUN always; optional TURN relay (e.g. Metered) via STUDY_TURN_* secrets for networks that block direct connections.
             const iceServers:any[]=[{urls:"stun:stun.l.google.com:19302"}];
+            const turnUrls=(env.STUDY_TURN_URLS||"").split(",").map((u:string)=>u.trim()).filter(Boolean);
+            if(turnUrls.length&&env.STUDY_TURN_USERNAME&&env.STUDY_TURN_CREDENTIAL){
+              iceServers.push({urls:turnUrls,username:env.STUDY_TURN_USERNAME,credential:env.STUDY_TURN_CREDENTIAL});
+              return json({iceServers,turnConfigured:true,transportMode:"stun+turn"});
+            }
             return json({iceServers,turnConfigured:false,transportMode:"stun-only"});
           }
           if(endpoint==="tasks" && request.method==="GET"){
