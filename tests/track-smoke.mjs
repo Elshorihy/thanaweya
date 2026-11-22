@@ -38,7 +38,10 @@ try{
  for(const width of [320,390,1440]){
   const c=await boot(base,{width});await c.page.locator('.trackSetup select').waitFor();await c.page.locator('.trackSetup select').selectOption('علمي رياضة');assert.equal(await c.page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);await c.page.screenshot({path:path.join(shots,`thanaweya-track-gate-${width}.png`)});await c.context.close();checks++;
  }
- for(const legacy of ['علمى رياضه','custom old value']){
+ for(const legacy of ['علمي رياضة','علمى رياضه']){
+  const c=await boot({...base,profile:{...base.profile,section:legacy}});await c.page.locator('.curriculumStarter').waitFor();await c.page.waitForFunction(()=>JSON.parse(localStorage.getItem('thanaweya-os-v3')).curriculumTrack==='علمي رياضة');assert.equal(await c.page.locator('.trackSetup').count(),0);assert.equal((await c.stored()).profile.section,legacy);assert.equal((await c.stored()).lessons.length,160);await c.context.close();checks++;
+ }
+ for(const legacy of ['custom old value']){
   const c=await boot({...base,profile:{...base.profile,section:legacy}});await c.page.locator('.trackSetup select').waitFor();assert.equal((await c.stored()).profile.section,legacy);await c.page.reload();await c.page.locator('.trackSetup select').waitFor();await c.context.close();checks++;
  }
  {
@@ -49,13 +52,13 @@ try{
   const c=await boot(original);await confirm(c,'علمي رياضة');const saved=await c.stored();assert.deepEqual(saved.lessons.find(l=>l.id==='saved'),original.lessons[0]);assert.deepEqual(saved.tasks,original.tasks);assert.ok(saved.subjects.some(s=>s.id==='custom'));await c.page.locator('.curriculumStarter').evaluate(el=>el.scrollIntoView({block:'center'}));await c.page.locator('.curriculumStarter').screenshot({path:path.join(shots,'thanaweya-curriculum-auto.png')});await c.context.close();checks++;
  }
  {
-  const c=await boot(base,{delay:1400,cloud:{...base,subjects:[{id:'cloud-custom',name:'Cloud saved',color:'#888',priority:'medium'}]}});await c.page.locator('.trackSetup [role=status]').waitFor();assert.equal(await c.page.locator('.trackSetup select').count(),0);await confirm(c,'أدبي');assert.ok((await c.stored()).subjects.some(s=>s.id==='cloud-custom'));await c.context.close();checks++;
+  const c=await boot(base,{delay:1400,cloud:{...base,subjects:[{id:'cloud-custom',name:'Cloud saved',color:'#888',priority:'medium'}]}});await c.page.locator('.trackSync [role=status]').waitFor();assert.equal(await c.page.locator('.trackSetup select').count(),0);await confirm(c,'أدبي');assert.ok((await c.stored()).subjects.some(s=>s.id==='cloud-custom'));await c.context.close();checks++;
  }
  {
-  const c=await boot(base,{fail:true});await c.page.locator('.trackSetup button').waitFor();assert.equal(await c.page.locator('.trackSetup select').count(),0);assert.equal(await c.page.locator('.appMain').count(),0);assert.match(await c.page.locator('.trackSetup').innerText(),/حاول تاني/);await c.context.close();checks++;
+  const c=await boot(base,{fail:true});await c.page.locator('.trackSync button').waitFor();assert.equal(await c.page.locator('.trackSetup select').count(),0);assert.equal(await c.page.locator('.appMain').count(),0);assert.match(await c.page.locator('.trackSync').innerText(),/حاول تاني/);await c.context.close();checks++;
  }
  {
-  const c=await boot({...base,onboarded:false,onboardStep:3,xp:1});await confirm(c,'علمي رياضة');await c.page.locator('.oncard select').waitFor();assert.equal((await c.stored()).lessons.length,160);assert.equal(await c.page.locator('.oncard select').inputValue(),'علمي رياضة');await c.page.locator('.oncard select').selectOption('علمي علوم');await c.page.waitForFunction(()=>JSON.parse(localStorage.getItem('thanaweya-os-v3')).curriculumTrack==='علمي علوم');assert.ok((await c.stored()).subjects.some(s=>s.name==='الأحياء'));await c.context.close();checks++;
+  const c=await boot({...base,onboarded:false,onboardStep:3,xp:1});await c.page.locator('.oncard select').waitFor();assert.equal(await c.page.locator('.trackSetup').count(),0);assert.equal((await c.stored()).curriculumTrack,undefined);await c.page.locator('.oncard select').selectOption('علمي رياضة');await c.page.waitForFunction(()=>JSON.parse(localStorage.getItem('thanaweya-os-v3')).curriculumTrack==='علمي رياضة');assert.equal((await c.stored()).lessons.length,160);assert.equal(await c.page.locator('.oncard select').inputValue(),'علمي رياضة');await c.page.locator('.oncard select').selectOption('علمي علوم');await c.page.waitForFunction(()=>JSON.parse(localStorage.getItem('thanaweya-os-v3')).curriculumTrack==='علمي علوم');assert.ok((await c.stored()).subjects.some(s=>s.name==='الأحياء'));await c.context.close();checks++;
  }
  {
   const c=await boot(base,{role:'parent'});await c.page.getByRole('heading',{name:'متابعة الأبناء',exact:true}).waitFor();assert.equal(await c.page.locator('.trackSetup').count(),0);await c.context.close();checks++;
