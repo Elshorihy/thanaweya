@@ -68,3 +68,29 @@ test('merges missing topics into existing subjects without changing completed le
  assert.equal(seed.lessons.length,first.lessons.length-1);
  assert.equal(seed.lessons.some(l=>l.id===saved.id),false);assert.equal(JSON.stringify(saved),input);
 });
+
+test('all three tracks have their own current core subjects without cross-track leakage',()=>{
+ const ids=track=>CURRICULUM[track].subjects.map(s=>s.id).sort();
+ assert.deepEqual(ids('علمي علوم'),['arabic','biology','chemistry','english','physics']);
+ assert.deepEqual(ids('أدبي'),['arabic','english','geography','history','statistics']);
+ assert.deepEqual(ids('علمي رياضة'),['applied-math','arabic','chemistry','english','physics','pure-math']);
+ for(const t of TRACKS)assert.ok(!ids(t).some(id=>['geology','philosophy','psychology'].includes(id)));
+});
+test('new biology and literary books have verified usable entries rather than empty placeholders',()=>{
+ const science=CURRICULUM['علمي علوم'].subjects.find(s=>s.id==='biology');
+ assert.equal(science.units.length,7);assert.equal(science.units.flatMap(u=>u.lessons).length,48);
+ assert.ok(science.units.some(u=>u.name==='الأحياء وعلوم الأرض'));
+ const literary=CURRICULUM['أدبي'].subjects;
+ for(const [id,count] of [['history',25],['geography',14],['statistics',15]])assert.equal(literary.find(s=>s.id===id).units.flatMap(u=>u.lessons).length,count);
+ assert.equal(buildCurriculumSeed('علمي علوم',[]).lessons.length,173);
+ assert.equal(buildCurriculumSeed('أدبي',[]).lessons.length,88);
+});
+test('changing tracks keeps completed existing work and adds only the other track subjects',()=>{
+ const original=buildCurriculumSeed('علمي علوم',[]);original.lessons[0].status='completed';
+ const before=JSON.stringify(original);
+ const add=buildCurriculumSeed('أدبي',original.subjects,original.units,original.lessons);
+ assert.deepEqual(add.subjects.map(s=>s.name),['التاريخ','الجغرافيا','الإحصاء']);
+ assert.equal(JSON.stringify(original),before);
+ const merged={subjects:[...original.subjects,...add.subjects],units:[...original.units,...add.units],lessons:[...original.lessons,...add.lessons]};
+ assert.deepEqual(buildCurriculumSeed('علمي علوم',merged.subjects,merged.units,merged.lessons),{subjects:[],units:[],lessons:[]});
+});
