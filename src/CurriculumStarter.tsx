@@ -5,7 +5,7 @@ export default function CurriculumStarter({section, language}: {section: string;
   const track = resolveTrack(section);
   const en = language === 'en';
   return <section className="card curriculumStarter" aria-labelledby="curriculumStarterTitle">
-    <h2 id="curriculumStarterTitle">{en ? 'Ready curriculum' : 'منهج جاهز'} {CURRICULUM_YEAR}</h2>
+    <h2 id="curriculumStarterTitle">{en ? 'Ready curriculum' : 'منهج جاهز'} <bdi dir="ltr">{CURRICULUM_YEAR}</bdi></h2>
     {!track ? <p>{en ? 'Choose your track in Profile settings first.' : 'اختار شعبتك من إعدادات الملف الشخصي الأول.'}</p> : <>
       <p translate="no">{track}</p>
       <p>{en ? 'Partial seed from verified books. Science entries are study-topic splits, not official lesson numbering. Missing books and finer lesson splits are not included.' : CURRICULUM[track].note}</p>
