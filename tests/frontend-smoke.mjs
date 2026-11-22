@@ -41,12 +41,12 @@ for(const section of sections){
  const context=await browser.newContext({viewport:{width:1440,height:1000},reducedMotion:'reduce'});
  await context.addInitScript(({section})=>{
   localStorage.setItem('thanaweya_page',section);localStorage.setItem('thanaweya_owner','ui-test');
-  localStorage.setItem('thanaweya-os-v3',JSON.stringify({onboarded:true,settings:{language:'en'},profile:{name:'Demo student'}}));
+  localStorage.setItem('thanaweya-os-v3',JSON.stringify({onboarded:true,curriculumTrack:'علمي رياضة',settings:{language:'en'},profile:{name:'Demo student',section:'علمي رياضة'}}));
  },{section});
  await mock(context,fixture);const page=await context.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));
  await page.goto(base);await page.locator('.appMain').waitFor();
  // Wait for the language observer to settle after API-backed screen mounting.
- await page.waitForFunction(()=>document.querySelector('.appMain')&&!/[\u0621-\u064a]/u.test(document.querySelector('.appMain').innerText));
+ await page.waitForFunction(()=>{const root=document.querySelector('.appMain');if(!root)return false;const w=document.createTreeWalker(root,NodeFilter.SHOW_TEXT);while(w.nextNode())if(/[\u0621-\u064a]/u.test(w.currentNode.nodeValue)&&!w.currentNode.parentElement.closest('[translate="no"]'))return false;return true});
  const arabic=await page.locator('.appMain').evaluate(el=>{
   const w=document.createTreeWalker(el,NodeFilter.SHOW_TEXT),found=[];
   while(w.nextNode())if(/[\u0621-\u064a]/u.test(w.currentNode.nodeValue)&&!w.currentNode.parentElement.closest('[translate="no"]'))found.push(w.currentNode.nodeValue);
@@ -68,7 +68,7 @@ for(const section of sections){
 }
 for(const width of [320,390]){
  const context=await browser.newContext({viewport:{width,height:844},reducedMotion:'reduce'});
- await context.addInitScript(()=>{localStorage.setItem('thanaweya_page','home');localStorage.setItem('thanaweya_owner','ui-test');localStorage.setItem('thanaweya-os-v3',JSON.stringify({onboarded:true,settings:{language:'en'},profile:{name:'Demo student'}}))});
+ await context.addInitScript(()=>{localStorage.setItem('thanaweya_page','home');localStorage.setItem('thanaweya_owner','ui-test');localStorage.setItem('thanaweya-os-v3',JSON.stringify({onboarded:true,curriculumTrack:'علمي رياضة',settings:{language:'en'},profile:{name:'Demo student',section:'علمي رياضة'}}))});
  await mock(context,fixture);const page=await context.newPage();await page.goto(base);await page.waitForFunction(()=>document.querySelector('.homeGreeting')?.textContent.includes('Welcome'));
  assert.equal(await page.locator('.app').evaluate(el=>getComputedStyle(el).direction),'ltr');
  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
