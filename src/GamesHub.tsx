@@ -3,7 +3,7 @@ import { Gamepad2, Play, RotateCcw, Trophy, ArrowRight, ArrowLeft, Sparkles } fr
 import './games.css';
 
 type Rock = { x: number; y: number; r: number; speed: number };
-export default function GamesHub() {
+export default function GamesHub({language='ar'}:{language?:'ar'|'en'}) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const frameRef = useRef(0);
   const keysRef = useRef({ left: false, right: false });
@@ -72,7 +72,7 @@ export default function GamesHub() {
     setScore(0); setOver(false); setRunning(true);
   };
   const hold = (side: 'left'|'right', value: boolean) => { keysRef.current[side] = value; };
-  return <section className="gamesHub" dir="rtl">
+  return <section className="gamesHub" dir={language==='en'?'ltr':'rtl'}>
     <div className="gamesHero">
       <div className="gamesHeroCopy"><span className="gamesEyebrow"><Gamepad2 size={15}/> THANOWEYA ARCADE</span><h1>وقت اللعب 🎮</h1><p>استراحة صغيرة تفصل بيها دماغك وترجع للمذاكرة بطاقة أحسن. العب، سجّل رقمك القياسي، وارجع كمل.</p><div className="gamesHeroStats"><span><Sparkles size={16}/> ألعاب خفيفة</span><span><Trophy size={16}/> أفضل نتيجة: {best}</span></div></div>
       <div className="gamesOrb" aria-hidden="true"><span>✦</span><i>🎮</i></div>
@@ -87,4 +87,4 @@ export default function GamesHub() {
     <div className="gamesComingSoon"><span>✨</span><div><strong>المزيد جاي في الطريق</strong><p>هنضيف ألعاب تانية وتحديات بأعلى نتيجة، مع الحفاظ على إن القسم خفيف وسريع على الموبايل والتابلت.</p></div></div>
     <p className="gamesReminder">💡 خُدها استراحة قصيرة، وبعدها ارجع لهدفك الأساسي: إنك تخلص اللي وراك.</p>
   </section>;
-}
+        }
