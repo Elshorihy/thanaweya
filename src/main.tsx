@@ -448,10 +448,10 @@ function createPersonalStudySchedule(){
 }
  function addReadyCurriculum(){
   const track=resolveTrack(s.profile.section);if(!track)return;
-  const seed=buildCurriculumSeed(track,s.subjects);
-  if(!seed.subjects.length){notify(s.settings.language==='en'?'These subjects already exist. No changes made.':'المواد دي موجودة بالفعل. مفيش بيانات اتغيرت.');return}
+  const seed=buildCurriculumSeed(track,s.subjects,s.units,s.lessons);
+  if(!seed.subjects.length&&!seed.units.length&&!seed.lessons.length){notify(s.settings.language==='en'?'This curriculum already exists. No changes made.':'المنهج ده موجود بالفعل. مفيش بيانات اتغيرت.');return}
   update({subjects:[...s.subjects,...seed.subjects],units:[...s.units,...seed.units],lessons:[...s.lessons,...seed.lessons]});
-  notify(s.settings.language==='en'?'Missing subjects added. Your progress is unchanged.':'تمت إضافة المواد الناقصة من غير تغيير تقدمك.');
+  notify(s.settings.language==='en'?'Missing curriculum entries added. Your progress is unchanged.':'تمت إضافة عناصر المنهج الناقصة من غير تغيير تقدمك.');
  }
  function importCurriculum(file:File){
   const r=new FileReader();
