@@ -46,7 +46,7 @@ for(const section of sections){
  await mock(context,fixture);const page=await context.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));
  await page.goto(base);await page.locator('.appMain').waitFor();
  // Wait for the language observer to settle after API-backed screen mounting.
- await page.waitForTimeout(180);
+ await page.waitForFunction(()=>document.querySelector('.appMain')&&!/[\u0621-\u064a]/u.test(document.querySelector('.appMain').innerText));
  const arabic=await page.locator('.appMain').evaluate(el=>{
   const w=document.createTreeWalker(el,NodeFilter.SHOW_TEXT),found=[];
   while(w.nextNode())if(/[\u0621-\u064a]/u.test(w.currentNode.nodeValue)&&!w.currentNode.parentElement.closest('[translate="no"]'))found.push(w.currentNode.nodeValue);
@@ -73,6 +73,7 @@ for(const width of [320,390]){
  assert.equal(await page.locator('.app').evaluate(el=>getComputedStyle(el).direction),'ltr');
  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
  assert.doesNotMatch(await page.locator('.progressInsight').innerText(),/[\u0621-\u064a]/u);
+ await page.evaluate(async()=>{for(let frame=0;frame<30;frame++){await new Promise(requestAnimationFrame);if(/[\u0621-\u064a]/u.test(document.querySelector('.progressInsight').innerText+document.querySelector('.homeGreeting').innerText))throw Error('Arabic copy flashed in English mode')}});
  const support=await page.locator('.supportLauncher').boundingBox();const nav=await page.locator('.bottomNav').boundingBox();assert.ok(support.y+support.height<nav.y);
  await context.close();checked++;
 }
