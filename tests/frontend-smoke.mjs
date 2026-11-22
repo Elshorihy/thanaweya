@@ -66,5 +66,15 @@ for(const section of sections){
  }
  await context.close();checked++;
 }
+for(const width of [320,390]){
+ const context=await browser.newContext({viewport:{width,height:844},reducedMotion:'reduce'});
+ await context.addInitScript(()=>{localStorage.setItem('thanaweya_page','home');localStorage.setItem('thanaweya_owner','ui-test');localStorage.setItem('thanaweya-os-v3',JSON.stringify({onboarded:true,settings:{language:'en'},profile:{name:'Demo student'}}))});
+ await mock(context,fixture);const page=await context.newPage();await page.goto(base);await page.waitForFunction(()=>document.querySelector('.homeGreeting')?.textContent.includes('Welcome'));
+ assert.equal(await page.locator('.app').evaluate(el=>getComputedStyle(el).direction),'ltr');
+ assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
+ assert.doesNotMatch(await page.locator('.progressInsight').innerText(),/[\u0621-\u064a]/u);
+ const support=await page.locator('.supportLauncher').boundingBox();const nav=await page.locator('.bottomNav').boundingBox();assert.ok(support.y+support.height<nav.y);
+ await context.close();checked++;
+}
 console.log(`${checked} frontend smoke scenarios passed. API calls were mocked; no real account was created or changed.`);
 await browser.close();
