@@ -276,7 +276,7 @@ function App(){
  },[s,auth?.id]);
 
  useEffect(()=>{try{localStorage.setItem('thanaweya_page',page)}catch{}},[page]);
- useEffect(()=>{
+ useLayoutEffect(()=>{
  document.documentElement.dir=s.settings.language==='ar'?'rtl':'ltr';
  document.documentElement.lang=s.settings.language;
  const applyTheme=()=>{const light=s.settings.theme==='light'||(s.settings.theme==='system'&&window.matchMedia?.('(prefers-color-scheme: light)').matches);document.body.className=light?'light':'';document.body.dataset.modTheme=s.settings.modsTheme||'default';document.body.dataset.layout=s.settings.layout==='classic'?'classic':'current'};
@@ -285,22 +285,14 @@ function App(){
  const onThemeChange=()=>{if(s.settings.theme==='system')applyTheme()};
  media?.addEventListener?.('change',onThemeChange);
  let observer:MutationObserver|null=null;
- let timer:number|undefined;
- let scheduled=false;
  const run=()=>{
-   if(scheduled)return;
-   scheduled=true;
-   timer=window.setTimeout(()=>{
-     scheduled=false;
-     observer?.disconnect();
-     applyEnglish(document.body,s.settings.language==='en');
-     observer?.observe(document.body,{subtree:true,childList:true,characterData:true,attributes:true,attributeFilter:['placeholder','aria-label','title','alt']});
-   },80);
+   observer?.disconnect();
+   applyEnglish(document.body,s.settings.language==='en');
+   observer?.observe(document.body,{subtree:true,childList:true,characterData:true,attributes:true,attributeFilter:['placeholder','aria-label','title','alt']});
  };
  observer=new MutationObserver(run);
- observer.observe(document.body,{subtree:true,childList:true,characterData:true,attributes:true,attributeFilter:['placeholder','aria-label','title','alt']});
  run();
- return()=>{if(timer)window.clearTimeout(timer);observer?.disconnect();media?.removeEventListener?.('change',onThemeChange)};
+ return()=>{observer?.disconnect();media?.removeEventListener?.('change',onThemeChange)};
 },[s.settings.language,s.settings.theme,s.settings.layout]);
  useEffect(()=>{if('serviceWorker'in navigator)navigator.serviceWorker.register('/sw.js?v=21',{updateViaCache:'none'}).catch(()=>{});const h=(e:any)=>{e.preventDefault();setInstallEvent(e)};window.addEventListener('beforeinstallprompt',h);const installed=()=>setInstallEvent(null);window.addEventListener('appinstalled',installed);return()=>{window.removeEventListener('beforeinstallprompt',h);window.removeEventListener('appinstalled',installed)}},[]);
 async function syncPushSubscription(){
