@@ -8,9 +8,9 @@ export default function CurriculumStarter({section, onAdd, language}: {section: 
     <h2 id="curriculumStarterTitle">{en ? 'Ready curriculum' : 'منهج جاهز'} {CURRICULUM_YEAR}</h2>
     {!track ? <p>{en ? 'Choose your track in Profile settings first.' : 'اختار شعبتك من إعدادات الملف الشخصي الأول.'}</p> : <>
       <p translate="no">{track}</p>
-      <p>{en ? 'Partial seed: math lessons, Arabic contents, science chapters and English term-1 units. Missing books and finer lesson splits are not included.' : CURRICULUM[track].note}</p>
-      <p>{en ? 'Adds missing subjects only. Existing subjects, lessons and progress stay unchanged. Science chapters and English units are added as empty units so you can split them into your own lessons. The 45-minute default is editable, not a ministry estimate.' : 'هنضيف المواد الناقصة بس، من غير تغيير دروسك أو تقدمك. أبواب العلوم ووحدات الإنجليزي هتتضاف كوحدات فاضية، قسمها لدروسك بنفسك. الـ٤٥ دقيقة وقت افتراضي قابل للتعديل، مش تقدير من الوزارة.'}</p>
-      <button className="primary" onClick={onAdd}>{en ? 'Add missing subjects' : 'إضافة المواد الناقصة'}</button>
+      <p>{en ? 'Partial seed from verified books. Science entries are study-topic splits, not official lesson numbering. Missing books and finer lesson splits are not included.' : CURRICULUM[track].note}</p>
+      <p>{en ? 'Adds missing subjects, units and lessons only. Existing subjects, lessons and progress stay unchanged. English units are added without lessons so you can split them to match your classes. The 45-minute default is editable, not a ministry estimate.' : 'هنضيف المواد والوحدات والدروس الناقصة بس، من غير تغيير دروسك أو تقدمك. تقسيم العلوم موضوعات للمذاكرة، مش ترقيم حصص رسمي. وحدات الإنجليزي فاضية عشان تقسمها لدروسك. الـ٤٥ دقيقة وقت افتراضي قابل للتعديل، مش تقدير من الوزارة.'}</p>
+      <button className="primary" onClick={onAdd}>{en ? 'Add ready curriculum' : 'إضافة المنهج الجاهز'}</button>
       <details><summary>{en ? 'Books and coverage' : 'الكتب وحدود التغطية'}</summary>
         <ul>{CURRICULUM[track].subjects.map(subject => <li key={subject.id}>
           <a translate="no" href={subject.sourceUrl} target="_blank" rel="noopener noreferrer">{subject.name} ↗</a>
