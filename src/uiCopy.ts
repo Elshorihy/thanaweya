@@ -1,5 +1,8 @@
 // Public and account-entry copy. Keep complete phrases here, not fragments of words.
 export const UI_COPY: Record<string, string> = {
+  'اختار الشعبة': 'Choose your track', 'اختار الشعبة أولًا.': 'Choose your track first.',
+  'علمي علوم': 'Science', 'علمي رياضة': 'Mathematics', 'أدبي': 'Literary',
+  'من صفحة المنهج تقدر تضيف المواد الجاهزة لشعبتك أو تدخل دروسك بنفسك، وبعدها توزع المهام وتراجع.': 'On the Curriculum page, add ready subjects for your track or enter your own lessons, then plan tasks and reviews.',
   'التنقل': 'Main navigation',
   'ثانوية': 'Thanaweya',
   'مساحتك عشان توصل لهدفك': 'Your space to reach your goals',
@@ -264,4 +267,4 @@ export function applyEnglish(root:HTMLElement,enabled:boolean){
   }
   if(enabled)englishOriginalAttrs.set(el,saved);else englishOriginalAttrs.delete(el);
  });
-}
+  }
