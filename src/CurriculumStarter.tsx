@@ -1,7 +1,7 @@
 import {CURRICULUM, CURRICULUM_YEAR} from './data/curriculum';
 import {resolveTrack} from './data/tracks';
 
-export default function CurriculumStarter({section, onAdd, language}: {section: string; onAdd: () => void; language: 'ar' | 'en'}) {
+export default function CurriculumStarter({section, language}: {section: string; language: 'ar' | 'en'}) {
   const track = resolveTrack(section);
   const en = language === 'en';
   return <section className="card curriculumStarter" aria-labelledby="curriculumStarterTitle">
@@ -10,7 +10,7 @@ export default function CurriculumStarter({section, onAdd, language}: {section: 
       <p translate="no">{track}</p>
       <p>{en ? 'Partial seed from verified books. Science entries are study-topic splits, not official lesson numbering. Missing books and finer lesson splits are not included.' : CURRICULUM[track].note}</p>
       <p>{en ? 'Adds missing subjects, units and lessons only. Existing subjects, lessons and progress stay unchanged. English units are added without lessons so you can split them to match your classes. The 45-minute default is editable, not a ministry estimate.' : 'هنضيف المواد والوحدات والدروس الناقصة بس، من غير تغيير دروسك أو تقدمك. تقسيم العلوم موضوعات للمذاكرة، مش ترقيم حصص رسمي. وحدات الإنجليزي فاضية عشان تقسمها لدروسك. الـ٤٥ دقيقة وقت افتراضي قابل للتعديل، مش تقدير من الوزارة.'}</p>
-      <button className="primary" onClick={onAdd}>{en ? 'Add ready curriculum' : 'إضافة المنهج الجاهز'}</button>
+      <p>{en ? 'Your curriculum is added automatically when you confirm or change your track.' : 'المنهج بينزل تلقائي لما تأكد أو تغير شعبتك.'}</p>
       <details><summary>{en ? 'Books and coverage' : 'الكتب وحدود التغطية'}</summary>
         <ul>{CURRICULUM[track].subjects.map(subject => <li key={subject.id}>
           <a translate="no" href={subject.sourceUrl} target="_blank" rel="noopener noreferrer">{subject.name} ↗</a>
