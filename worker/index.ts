@@ -24,16 +24,18 @@ interface Env {
   GEMINI_MODEL?: string;
 }
 
-let schemaReady:Promise<void>|null=null;
-let pageViewsReady:Promise<void>|null=null;
+// Cache only completed initialization, never request-owned pending promises.
+// Concurrent cold requests may repeat idempotent DDL, but cannot inherit a
+// promise whose creating request has ended. Failed initialization stays retryable.
+const schemaReady=new WeakSet<D1Database>();
+const pageViewsReady=new WeakSet<D1Database>();
 async function ensurePageViews(env:Env){
-  if(!pageViewsReady) pageViewsReady=(async()=>{
+  if(pageViewsReady.has(env.DB)) return;
     await env.DB.prepare("CREATE TABLE IF NOT EXISTS site_page_views (id INTEGER PRIMARY KEY AUTOINCREMENT, day TEXT NOT NULL, created_at INTEGER NOT NULL)").run();
-  })().catch(e=>{pageViewsReady=null;throw e});
-  await pageViewsReady;
+  pageViewsReady.add(env.DB);
 }
 async function ensureSchema(env:Env){
-  if(!schemaReady) schemaReady=(async()=>{
+  if(schemaReady.has(env.DB)) return;
     await env.DB.prepare("CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY,email TEXT NOT NULL UNIQUE,name TEXT NOT NULL,password_hash TEXT NOT NULL,password_salt TEXT NOT NULL,phone TEXT,email_verified_at INTEGER,role TEXT NOT NULL DEFAULT 'user',verified INTEGER NOT NULL DEFAULT 0,created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL)").run();
     try { await env.DB.prepare("ALTER TABLE users ADD COLUMN email_verified_at INTEGER").run(); } catch {}
     try { await env.DB.prepare("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'user'").run(); } catch {}
@@ -80,13 +82,12 @@ async function ensureSchema(env:Env){
     await env.DB.prepare("CREATE TABLE IF NOT EXISTS verification_requests (id TEXT PRIMARY KEY,user_id TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'pending',transfer_phone TEXT NOT NULL,receipt_file_id TEXT NOT NULL,telegram_message_id TEXT,created_at INTEGER NOT NULL,reviewed_at INTEGER,reviewed_by TEXT,rejection_reason TEXT,payment_reference TEXT,subscription_id TEXT,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE)").run();
     await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_verification_requests_status ON verification_requests(status,created_at)").run();
     await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_verification_requests_user ON verification_requests(user_id,created_at)").run();
-  })().catch(e=>{schemaReady=null;throw e});
-  await schemaReady;
+  schemaReady.add(env.DB);
 }
-let authSchemaReady:Promise<void>|null=null;
-let studyRoomSchemaReady:Promise<void>|null=null;
+const authSchemaReady=new WeakSet<D1Database>();
+const studyRoomSchemaReady=new WeakSet<D1Database>();
 async function ensureStudyRoomSchema(env:Env){
-  if(!studyRoomSchemaReady) studyRoomSchemaReady=(async()=>{
+  if(studyRoomSchemaReady.has(env.DB)) return;
     await ensureAuthSchema(env);
       await env.DB.prepare("CREATE TABLE IF NOT EXISTS study_rooms (id TEXT PRIMARY KEY,title TEXT NOT NULL,subject TEXT NOT NULL DEFAULT 'عام',description TEXT NOT NULL DEFAULT '',visibility TEXT NOT NULL DEFAULT 'public',invite_hash TEXT,owner_user_id TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'open',created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL,FOREIGN KEY(owner_user_id) REFERENCES users(id) ON DELETE CASCADE)").run();
       await env.DB.prepare("CREATE TABLE IF NOT EXISTS study_room_members (room_id TEXT NOT NULL,user_id TEXT NOT NULL,joined_at INTEGER NOT NULL,PRIMARY KEY(room_id,user_id),FOREIGN KEY(room_id) REFERENCES study_rooms(id) ON DELETE CASCADE,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE)").run();
@@ -98,8 +99,7 @@ async function ensureStudyRoomSchema(env:Env){
       await env.DB.prepare("CREATE TABLE IF NOT EXISTS study_room_tasks (id TEXT PRIMARY KEY,room_id TEXT NOT NULL,user_id TEXT NOT NULL,title TEXT NOT NULL,completed INTEGER NOT NULL DEFAULT 0,created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL,FOREIGN KEY(room_id) REFERENCES study_rooms(id) ON DELETE CASCADE,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE)").run();
       await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_study_room_tasks_room_user ON study_room_tasks(room_id,user_id,created_at)").run();
       await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_study_room_reports_status ON study_room_reports(status,created_at DESC)").run();
-  })().catch(e=>{studyRoomSchemaReady=null;throw e});
-  await studyRoomSchemaReady;
+  studyRoomSchemaReady.add(env.DB);
 }
 async function closeStudyRoomIfUnstaffed(env:Env,roomId:string){
   const room=await env.DB.prepare("SELECT owner_user_id FROM study_rooms WHERE id=? AND status='open'").bind(roomId).first<any>();
@@ -114,7 +114,7 @@ async function closeStudyRoomIfUnstaffed(env:Env,roomId:string){
   await stub.fetch("https://study-room.internal/close",{method:"POST",headers:{"x-room-user-id":"system"}});
 }
 async function ensureAuthSchema(env:Env){
-  if(!authSchemaReady) authSchemaReady=(async()=>{
+  if(authSchemaReady.has(env.DB)) return;
     await env.DB.prepare("CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY,email TEXT NOT NULL UNIQUE,name TEXT NOT NULL,password_hash TEXT NOT NULL,password_salt TEXT NOT NULL,phone TEXT,email_verified_at INTEGER,role TEXT NOT NULL DEFAULT 'user',verified INTEGER NOT NULL DEFAULT 0,created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL)").run();
     try { await env.DB.prepare("ALTER TABLE users ADD COLUMN email_verified_at INTEGER").run(); } catch {}
     try { await env.DB.prepare("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'user'").run(); } catch {}
@@ -130,8 +130,7 @@ async function ensureAuthSchema(env:Env){
     await env.DB.prepare("CREATE TABLE IF NOT EXISTS auth_codes (id TEXT PRIMARY KEY,email TEXT NOT NULL,type TEXT NOT NULL,code_hash TEXT NOT NULL,payload_json TEXT,expires_at INTEGER NOT NULL,attempts INTEGER NOT NULL DEFAULT 0,created_at INTEGER NOT NULL)").run();
     await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_auth_codes_lookup ON auth_codes(email,type,expires_at)").run();
     await env.DB.prepare("CREATE TABLE IF NOT EXISTS user_data (user_id TEXT PRIMARY KEY,data_json TEXT NOT NULL DEFAULT '{}',updated_at INTEGER NOT NULL,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE)").run();
-  })().catch(e=>{authSchemaReady=null;throw e});
-  await authSchemaReady;
+  authSchemaReady.add(env.DB);
 }
 const COOKIE = "thanaweya_session";
 const ADMIN_COOKIE = "thanaweya_admin_session";
@@ -957,9 +956,9 @@ async function sendTelegramBridgeAnalysis(env:Env,chatId:string){
   const txt=["🧠 تحليل تشغيلي لثانوية — آخر 24 ساعة","","🎫 البلاغات:",reportText,"","🧾 آخر إجراءات الإدارة:",activityText,"","📱 رسائل واتساب الفاشلة: "+(failed?Number(failed.n||0):"غير متاح"),"","⚠️ التحليل مبني على السجلات المتاحة فقط؛ لا يدّعي اختبار اتصال كل خدمات البريد والذكاء الاصطناعي. لا يتم تعديل الموقع تلقائيًا."].join("\n");
   await telegramCall(env,"sendMessage",{chat_id:chatId,text:txt,reply_markup:{inline_keyboard:[[ {text:"🎫 البلاغات المفتوحة",callback_data:"bridge_reports"} ],[ {text:"🩺 التشخيص العميق",callback_data:"dash_diagnostics"} ]] }});
 }
-let adminToolsReady:Promise<void>|null=null;
+const adminToolsReady=new WeakSet<D1Database>();
 async function ensureAdminTools(env:Env){
-  if(!adminToolsReady) adminToolsReady=(async()=>{
+  if(adminToolsReady.has(env.DB)) return;
     await env.DB.prepare("CREATE TABLE IF NOT EXISTS admin_settings (key TEXT PRIMARY KEY,value TEXT NOT NULL,updated_at INTEGER NOT NULL)").run();
     await env.DB.prepare("CREATE TABLE IF NOT EXISTS admin_activity (id INTEGER PRIMARY KEY AUTOINCREMENT,chat_id TEXT NOT NULL,action TEXT NOT NULL,target TEXT,message TEXT,created_at INTEGER NOT NULL)").run();
     await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_admin_activity_created ON admin_activity(created_at)").run();
@@ -968,8 +967,7 @@ async function ensureAdminTools(env:Env){
     await env.DB.prepare("CREATE TABLE IF NOT EXISTS telegram_daily_missions (day TEXT NOT NULL,chat_id TEXT NOT NULL,mission_key TEXT NOT NULL,completed_at INTEGER,PRIMARY KEY(day,chat_id,mission_key))").run();
     await env.DB.prepare("CREATE TABLE IF NOT EXISTS user_activity (user_id TEXT PRIMARY KEY,last_seen INTEGER NOT NULL,last_path TEXT NOT NULL,last_method TEXT NOT NULL,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE)").run();
     await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_user_activity_seen ON user_activity(last_seen)").run();
-  })().catch(e=>{adminToolsReady=null;throw e});
-  await adminToolsReady;
+  adminToolsReady.add(env.DB);
 }
 async function adminLog(env:Env,chatId:string,action:string,target="",message=""){
   await ensureAdminTools(env);
