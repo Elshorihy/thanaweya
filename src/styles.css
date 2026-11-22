@@ -1713,3 +1713,6 @@ body.light input[type="date"] {
 .lang-en nav button,.lang-en .oncard label,.lang-en .aiHistoryList button,
 .lang-en .table th,.lang-en .table td,.lang-en .mobileNavGrid button,
 .lang-en .competitionOptions button{text-align:start}
+
+/* Keep support clear of the mobile bottom navigation. */
+@media(max-width:900px){.app .supportLauncher{left:auto!important;right:14px;bottom:calc(96px + env(safe-area-inset-bottom))!important;max-width:calc(100vw - 28px)}.app .supportPanel{bottom:calc(154px + env(safe-area-inset-bottom))!important;max-height:calc(100dvh - 180px)!important}}
