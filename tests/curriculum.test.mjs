@@ -21,7 +21,7 @@ test('seed has stable unique IDs and complete parent references', () => {
     assert.ok(seed.lessons.every(l => seed.units.some(u => u.id === l.unitId)));
     assert.deepEqual(seed, buildCurriculumSeed(track, []));
     assert.ok(seed.lessons.every(l => l.status === 'not_started'));
-    assert.deepEqual(buildCurriculumSeed(track, seed.subjects), {subjects: [], units: [], lessons: []});
+    assert.deepEqual(buildCurriculumSeed(track, seed.subjects, seed.units, seed.lessons), {subjects: [], units: [], lessons: []});
   }
 });
 test('existing custom subjects are untouched and name-matched imports are skipped', () => {
@@ -43,11 +43,28 @@ test('coverage limits and official source links remain explicit', () => {
   assert.equal(subjects.find(s => s.id === 'physics').units.length, 8);
   assert.equal(subjects.find(s => s.id === 'pure-math').units.flatMap(u => u.lessons).length, 23);
   assert.equal(subjects.find(s => s.id === 'applied-math').units.flatMap(u => u.lessons).length, 12);
-  assert.ok(subjects.find(s => s.id === 'chemistry').units.every(u => u.granularity === 'chapter'));
+  assert.ok(subjects.find(s => s.id === 'chemistry').units.every(u => u.granularity === 'topic'));
 });
 
-test('chapter-sized entries do not become misleading 45-minute lessons', () => {
+test('English units do not become misleading single lessons', () => {
   const seed = buildCurriculumSeed('علمي رياضة', []);
-  assert.equal(seed.lessons.some(l => /moe-2026-2027-(chemistry|physics|english)-/.test(l.id)), false);
+  assert.equal(seed.lessons.some(l => /moe-2026-2027-(english)-/.test(l.id)), false);
   assert.ok(seed.units.some(u => u.name.includes('قانون أوم')));
+});
+
+test('science topic splits carry source PDF page anchors', () => {
+  for(const subject of CURRICULUM['علمي رياضة'].subjects.filter(s => ['chemistry','physics'].includes(s.id))) {
+    assert.ok(subject.units.every(u => u.granularity === 'topic' && u.lessons.length > 0));
+    assert.ok(subject.units.flatMap(u => u.lessons).every(l => Number.isInteger(l.pdfPage) && l.pdfPage > 0));
+  }
+});
+
+test('merges missing topics into existing subjects without changing completed lessons', () => {
+ const first=buildCurriculumSeed('علمي رياضة', []);
+ const saved={...first.lessons[0],status:'completed',estimatedMinutes:90};
+ const input=JSON.stringify(saved);
+ const seed=buildCurriculumSeed('علمي رياضة',first.subjects,first.units,[saved]);
+ assert.equal(seed.subjects.length,0);assert.equal(seed.units.length,0);
+ assert.equal(seed.lessons.length,first.lessons.length-1);
+ assert.equal(seed.lessons.some(l=>l.id===saved.id),false);assert.equal(JSON.stringify(saved),input);
 });
